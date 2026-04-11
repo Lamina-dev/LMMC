@@ -1,0 +1,3 @@
+[submodule "LAMMP"]
+	path = LAMMP
+	url = https://github.com/Lamina-dev/LAMMP.git
