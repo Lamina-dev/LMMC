@@ -1,0 +1,49 @@
+/build*/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+compile_commands.json
+Testing/
+install_manifest.txt
+
+# Visual Studio generated files
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.vcxproj.*.user
+*.VC.db
+*.VC.opendb
+*.opensdf
+*.sdf
+*.ipch
+*.pdb
+*.idb
+*.ilk
+*.obj
+*.tlog
+*.recipe
+*.lastbuildstate
+
+# Binary outputs
+*.exe
+*.dll
+*.lib
+*.a
+*.so
+*.dylib
+
+# Test and benchmark output
+*.log
+
+# OS/editor temp files
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+*.swo
+
+discribe.txt

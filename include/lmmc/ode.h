@@ -1,0 +1,94 @@
+#ifndef LMMC_ODE_H
+#define LMMC_ODE_H
+
+#include <stddef.h>
+#include "lmmc/numeric.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef lmmc_status_t (*lmmc_ode_rhs_t)(
+    double t,
+    const double* y,
+    double* y_prime,
+    size_t dim,
+    void* user_data
+);
+
+typedef enum {
+    LMMC_ODE_FAILURE_NONE = 0,
+    LMMC_ODE_FAILURE_INVALID_DIMENSION = 1,
+    LMMC_ODE_FAILURE_INVALID_STEP = 2,
+    LMMC_ODE_FAILURE_MAX_STEPS = 3,
+    LMMC_ODE_FAILURE_NUMERICAL_ISSUE = 4,
+    LMMC_ODE_FAILURE_RHS_EVAL_FAILED = 5,
+    LMMC_ODE_FAILURE_TOLERANCE_INCONSISTENT = 6
+} lmmc_ode_failure_t;
+
+typedef struct {
+    double initial_step;
+    double min_step;
+    double max_step;
+    double abs_tol;
+    double rel_tol;
+    size_t max_steps;
+    double adaptive_step_beta;
+    int verbose;
+} lmmc_ode_config_t;
+
+typedef struct {
+    int converged;
+    size_t num_steps;
+    size_t num_rhs_evals;
+    double final_t;
+    lmmc_ode_failure_t failure_reason;
+} lmmc_ode_result_t;
+
+const char* lmmc_ode_failure_string(lmmc_ode_failure_t reason);
+
+lmmc_status_t lmmc_ode_default_config(
+    double t_start,
+    double t_end,
+    size_t problem_dim,
+    lmmc_ode_config_t* out_cfg
+);
+
+lmmc_status_t lmmc_ode_euler_solve(
+    lmmc_ode_rhs_t rhs,
+    void* user_data,
+    size_t dim,
+    double t_start,
+    double t_end,
+    double* y,
+    const lmmc_ode_config_t* cfg,
+    lmmc_ode_result_t* out_result
+);
+
+lmmc_status_t lmmc_ode_rk4_solve(
+    lmmc_ode_rhs_t rhs,
+    void* user_data,
+    size_t dim,
+    double t_start,
+    double t_end,
+    double* y,
+    const lmmc_ode_config_t* cfg,
+    lmmc_ode_result_t* out_result
+);
+
+lmmc_status_t lmmc_ode_rk45_solve(
+    lmmc_ode_rhs_t rhs,
+    void* user_data,
+    size_t dim,
+    double t_start,
+    double t_end,
+    double* y,
+    const lmmc_ode_config_t* cfg,
+    lmmc_ode_result_t* out_result
+);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
