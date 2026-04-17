@@ -31,6 +31,7 @@ ctest --test-dir build -C Release --output-on-failure
 - [x] ODE solve
 - [x] statistics
 - [x] 3d tensor
+- [x] FFT
 
 - [ ] sample prog
 - [ ] benchmark
@@ -38,5 +39,6 @@ ctest --test-dir build -C Release --output-on-failure
 - [ ] preconditioner & iterative solver performance(assmbly?)
 - [ ] large sparse and boundary condition testing
 - [ ] parallelization(may not?)
+
 
 due to lazy reason, the source code didnt conatin any comments, maybe i will use copilot to add some...
