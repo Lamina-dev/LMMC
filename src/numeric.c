@@ -1,9 +1,8 @@
 #include <math.h>
 #include <string.h>
+#include <float.h>
 #include "memory_bridge.h"
 #include "lmmc/numeric.h"
-
-#define LMMC_PI_D 3.14159265358979323846
 
 static double lmmc_absd(double x) {
     return x < 0.0 ? -x : x;
@@ -68,6 +67,143 @@ static void lmmc_complex_mul(double ar, double ai, double br, double bi, double*
     *out_i = ar * bi + ai * br;
 }
 
+lmmc_status_t lmmc_inf(double* out_inf) {
+    if (out_inf == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+#ifdef INFINITY
+    *out_inf = INFINITY;
+#else
+    *out_inf = HUGE_VAL;
+#endif
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_nan(double* out_nan) {
+    if (out_nan == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+#ifdef NAN
+    *out_nan = NAN;
+#else
+    *out_nan = (0.0 / 0.0);
+#endif
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_eps(double* out_eps) {
+    if (out_eps == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_eps = DBL_EPSILON;
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_isnan(double x, int* out_isnan) {
+    if (out_isnan == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_isnan = isnan(x) ? 1 : 0;
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_isinf(double x, int* out_isinf) {
+    if (out_isinf == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_isinf = isinf(x) ? 1 : 0;
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_isfinite(double x, int* out_isfinite) {
+    if (out_isfinite == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_isfinite = isfinite(x) ? 1 : 0;
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_signbit(double x, int* out_signbit) {
+    if (out_signbit == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_signbit = signbit(x) ? 1 : 0;
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_atan2(double y, double x, double* out_res) {
+    if (out_res == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_res = atan2(y, x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_sincos(double x, double* out_sin, double* out_cos) {
+    if (out_sin == NULL || out_cos == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+#if (defined(_GNU_SOURCE) || defined(__GNUC__) || defined(__clang__)) && !defined(_MSC_VER)
+    sincos(x, out_sin, out_cos);
+#else
+    *out_sin = sin(x);
+    *out_cos = cos(x);
+#endif
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_hypot(double x, double y, double* out_res) {
+    if (out_res == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_res = hypot(x, y);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_exp2(double x, double* out_res) {
+    if (out_res == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_res = exp2(x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_log2(double x, double* out_res) {
+    if (out_res == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_res = log2(x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_expm1(double x, double* out_res) {
+    if (out_res == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_res = expm1(x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_log1p(double x, double* out_res) {
+    if (out_res == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_res = log1p(x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_modf(double x, double* out_iptr, double* out_frac) {
+    if (out_iptr == NULL || out_frac == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_frac = modf(x, out_iptr);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_fmod(double x, double y, double* out_res) {
+    if (out_res == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_res = fmod(x, y);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_ldexp(double x, int exp, double* out_res) {
+    if (out_res == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_res = ldexp(x, exp);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_nextafter(double x, double y, double* out_res) {
+    if (out_res == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_res = nextafter(x, y);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_approx_eq(double a, double b, double epsilon, int* out_equal) {
+    if (out_equal == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (isnan(a) || isnan(b)) {
+        *out_equal = 0;
+        return LMMC_STATUS_OK;
+    }
+    if (isinf(a) || isinf(b)) {
+        *out_equal = (a == b) ? 1 : 0;
+        return LMMC_STATUS_OK;
+    }
+    double diff = a - b;
+    if (diff < 0) diff = -diff;
+    *out_equal = (diff <= epsilon) ? 1 : 0;
+    return LMMC_STATUS_OK;
+}
+
 lmmc_status_t lmmc_fft_radix4_next_size(size_t n, size_t* out_nfft) {
     size_t nfft = 1;
 
@@ -110,7 +246,7 @@ static lmmc_status_t lmmc_fft_radix4_core(double* real, double* imag, size_t n, 
     while (len <= n) {
         size_t group = len;
         size_t quarter = group / 4;
-        double angle_step = (inverse ? 2.0 : -2.0) * LMMC_PI_D / (double)group;
+        double angle_step = (inverse ? 2.0 : -2.0) * LMMC_PI / (double)group;
 
         for (i = 0; i < n; i += group) {
             size_t j = 0;
