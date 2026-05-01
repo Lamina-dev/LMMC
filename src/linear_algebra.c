@@ -120,6 +120,80 @@ lmmc_status_t lmmc_lu_solve(const lmmc_mat_t* lu, const size_t* pivots, const lm
     return LMMC_STATUS_OK;
 }
 
+lmmc_status_t lmmc_cholesky_decompose_inplace(lmmc_mat_t* a) {
+    size_t n = 0;
+    size_t i = 0;
+    size_t j = 0;
+    size_t k = 0;
+
+    if (a == NULL || a->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->rows != a->cols) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    n = a->rows;
+    for (i = 0; i < n; ++i) {
+        for (j = 0; j <= i; ++j) {
+            double sum = a->data[i * a->stride + j];
+            for (k = 0; k < j; ++k) {
+                sum -= a->data[i * a->stride + k] * a->data[j * a->stride + k];
+            }
+
+            if (i == j) {
+                if (sum <= 0.0) {
+                    return LMMC_STATUS_NUMERICAL_FAILURE; // Matrix is not positive definite
+                }
+                a->data[i * a->stride + i] = sqrt(sum);
+            } else {
+                a->data[i * a->stride + j] = sum / a->data[j * a->stride + j];
+            }
+        }
+        // Zero out the upper triangle for L
+        for (j = i + 1; j < n; ++j) {
+            a->data[i * a->stride + j] = 0.0;
+        }
+    }
+
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_cholesky_solve(const lmmc_mat_t* l, const lmmc_vec_t* b, lmmc_vec_t* x) {
+    size_t n = 0;
+    size_t i = 0;
+    size_t j = 0;
+
+    if (l == NULL || b == NULL || x == NULL || l->data == NULL || b->data == NULL || x->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (l->rows != l->cols || b->size != l->rows || x->size != l->rows) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    n = l->rows;
+
+    // Forward substitution: Ly = b
+    for (i = 0; i < n; ++i) {
+        double sum = b->data[i];
+        for (j = 0; j < i; ++j) {
+            sum -= l->data[i * l->stride + j] * x->data[j];
+        }
+        x->data[i] = sum / l->data[i * l->stride + i];
+    }
+
+    // Backward substitution: L^T x = y
+    for (i = n; i-- > 0;) {
+        double sum = x->data[i];
+        for (j = i + 1; j < n; ++j) {
+            sum -= l->data[j * l->stride + i] * x->data[j];
+        }
+        x->data[i] = sum / l->data[i * l->stride + i];
+    }
+
+    return LMMC_STATUS_OK;
+}
+
 lmmc_status_t lmmc_qr_decompose_inplace(lmmc_mat_t* a, double* tau, size_t tau_size) {
     size_t m = 0;
     size_t n = 0;
