@@ -25,6 +25,14 @@ typedef struct {
     int owns_data;
 } lmmc_sparse_mat_t;
 
+/* Sparse Builder for easy matrix construction (COO based) */
+typedef struct lmmc_sparse_builder_t lmmc_sparse_builder_t;
+
+lmmc_status_t lmmc_sparse_builder_create(size_t rows, size_t cols, size_t initial_capacity, lmmc_sparse_builder_t** out_builder);
+lmmc_status_t lmmc_sparse_builder_add(lmmc_sparse_builder_t* builder, size_t row, size_t col, double value);
+lmmc_status_t lmmc_sparse_builder_build(lmmc_sparse_builder_t* builder, lmmc_sparse_format_t format, lmmc_sparse_mat_t* out_sparse);
+void lmmc_sparse_builder_destroy(lmmc_sparse_builder_t* builder);
+
 lmmc_status_t lmmc_sparse_create_csr(size_t rows, size_t cols, size_t nnz, lmmc_sparse_mat_t* out_sparse);
 lmmc_status_t lmmc_sparse_create_csc(size_t rows, size_t cols, size_t nnz, lmmc_sparse_mat_t* out_sparse);
 lmmc_status_t lmmc_sparse_wrap_csr(

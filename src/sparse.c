@@ -571,3 +571,112 @@ lmmc_status_t lmmc_sparse_to_csr(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
     lmmc_free(next);
     return LMMC_STATUS_OK;
 }
+
+/* --- Sparse Builder Implementation --- */
+
+struct lmmc_sparse_builder_t {
+    size_t rows;
+    size_t cols;
+    size_t nnz;
+    size_t capacity;
+    size_t* r_idx;
+    size_t* c_idx;
+    double* vals;
+};
+
+lmmc_status_t lmmc_sparse_builder_create(size_t rows, size_t cols, size_t initial_capacity, lmmc_sparse_builder_t** out_builder) {
+    lmmc_sparse_builder_t* b = NULL;
+    if (out_builder == NULL || rows == 0 || cols == 0) return LMMC_STATUS_INVALID_ARGUMENT;
+
+    b = (lmmc_sparse_builder_t*)lmmc_alloc(sizeof(lmmc_sparse_builder_t));
+    if (b == NULL) return LMMC_STATUS_ALLOCATION_FAILED;
+
+    b->rows = rows;
+    b->cols = cols;
+    b->nnz = 0;
+    b->capacity = initial_capacity > 0 ? initial_capacity : 16;
+    
+    b->r_idx = (size_t*)lmmc_alloc(b->capacity * sizeof(size_t));
+    b->c_idx = (size_t*)lmmc_alloc(b->capacity * sizeof(size_t));
+    b->vals = (double*)lmmc_alloc(b->capacity * sizeof(double));
+
+    if (b->r_idx == NULL || b->c_idx == NULL || b->vals == NULL) {
+        lmmc_sparse_builder_destroy(b);
+        return LMMC_STATUS_ALLOCATION_FAILED;
+    }
+
+    *out_builder = b;
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_sparse_builder_add(lmmc_sparse_builder_t* b, size_t row, size_t col, double val) {
+    if (b == NULL || row >= b->rows || col >= b->cols) return LMMC_STATUS_INVALID_ARGUMENT;
+
+    if (b->nnz >= b->capacity) {
+        size_t new_cap = b->capacity * 2;
+        size_t* nr = (size_t*)realloc(b->r_idx, new_cap * sizeof(size_t));
+        size_t* nc = (size_t*)realloc(b->c_idx, new_cap * sizeof(size_t));
+        double* nv = (double*)realloc(b->vals, new_cap * sizeof(double));
+
+        if (nr == NULL || nc == NULL || nv == NULL) return LMMC_STATUS_ALLOCATION_FAILED;
+        b->r_idx = nr;
+        b->c_idx = nc;
+        b->vals = nv;
+        b->capacity = new_cap;
+    }
+
+    b->r_idx[b->nnz] = row;
+    b->c_idx[b->nnz] = col;
+    b->vals[b->nnz] = val;
+    b->nnz++;
+    return LMMC_STATUS_OK;
+}
+
+void lmmc_sparse_builder_destroy(lmmc_sparse_builder_t* b) {
+    if (b) {
+        if (b->r_idx) lmmc_free(b->r_idx);
+        if (b->c_idx) lmmc_free(b->c_idx);
+        if (b->vals) lmmc_free(b->vals);
+        lmmc_free(b);
+    }
+}
+
+lmmc_status_t lmmc_sparse_builder_build(lmmc_sparse_builder_t* b, lmmc_sparse_format_t format, lmmc_sparse_mat_t* out) {
+    lmmc_status_t st;
+    size_t i, outer_dim;
+    if (b == NULL || out == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+
+    st = (format == LMMC_SPARSE_CSR) ? lmmc_sparse_create_csr(b->rows, b->cols, b->nnz, out) 
+                                    : lmmc_sparse_create_csc(b->rows, b->cols, b->nnz, out);
+    if (st != LMMC_STATUS_OK) return st;
+
+    outer_dim = (format == LMMC_SPARSE_CSR) ? b->rows : b->cols;
+    size_t* major = (format == LMMC_SPARSE_CSR) ? b->r_idx : b->c_idx;
+    size_t* minor = (format == LMMC_SPARSE_CSR) ? b->c_idx : b->r_idx;
+
+    /* Count NNZ per row/column */
+    for (i = 0; i < b->nnz; ++i) {
+        out->row_ptr[major[i] + 1]++;
+    }
+    /* Prefix sum */
+    for (i = 0; i < outer_dim; ++i) {
+        out->row_ptr[i+1] += out->row_ptr[i];
+    }
+
+    /* Temp pointer for filling */
+    size_t* next = (size_t*)lmmc_alloc(outer_dim * sizeof(size_t));
+    if (next == NULL) {
+        lmmc_sparse_destroy(out);
+        return LMMC_STATUS_ALLOCATION_FAILED;
+    }
+    memcpy(next, out->row_ptr, outer_dim * sizeof(size_t));
+
+    for (i = 0; i < b->nnz; ++i) {
+        size_t idx = next[major[i]]++;
+        out->col_idx[idx] = minor[i];
+        out->values[idx] = b->vals[i];
+    }
+
+    lmmc_free(next);
+    return LMMC_STATUS_OK;
+}
