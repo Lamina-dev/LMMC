@@ -27,6 +27,22 @@ typedef enum {
 } lmmc_ode_failure_t;
 
 typedef struct {
+    int converged;
+    size_t num_steps;
+    size_t num_rhs_evals;
+    double final_t;
+    lmmc_ode_failure_t failure_reason;
+} lmmc_ode_result_t;
+
+typedef void (*lmmc_ode_log_callback_t)(
+    size_t step,
+    double t,
+    const double* y,
+    size_t dim,
+    void* user_data
+);
+
+typedef struct {
     double initial_step;
     double min_step;
     double max_step;
@@ -35,15 +51,9 @@ typedef struct {
     size_t max_steps;
     double adaptive_step_beta;
     int verbose;
+    lmmc_ode_log_callback_t log_cb;
+    void* log_user_data;
 } lmmc_ode_config_t;
-
-typedef struct {
-    int converged;
-    size_t num_steps;
-    size_t num_rhs_evals;
-    double final_t;
-    lmmc_ode_failure_t failure_reason;
-} lmmc_ode_result_t;
 
 const char* lmmc_ode_failure_string(lmmc_ode_failure_t reason);
 

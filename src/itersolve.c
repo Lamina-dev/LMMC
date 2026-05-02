@@ -1,5 +1,6 @@
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
 #include "memory_bridge.h"
 #include "lmmc/itersolve.h"
 
@@ -103,6 +104,14 @@ static lmmc_status_t lmmc_gmres_back_substitute(
     return LMMC_STATUS_OK;
 }
 
+static void lmmc_itersolve_do_log(const lmmc_itersolve_config_t* cfg, size_t iter, double residual_norm) {
+    if (cfg->log_cb != NULL) {
+        cfg->log_cb(iter, residual_norm, cfg->log_user_data);
+    } else if (cfg->verbose) {
+        printf("Iteration %zu: residual norm = %.10e\n", iter, residual_norm);
+    }
+}
+
 lmmc_status_t lmmc_itersolve_default_config(size_t problem_size, lmmc_itersolve_config_t* out_cfg) {
     size_t max_iter = 0;
 
@@ -124,6 +133,8 @@ lmmc_status_t lmmc_itersolve_default_config(size_t problem_size, lmmc_itersolve_
     out_cfg->max_iter = max_iter;
     out_cfg->restart = (problem_size < 30) ? problem_size : 30;
     out_cfg->verbose = 0;
+    out_cfg->log_cb = NULL;
+    out_cfg->log_user_data = NULL;
     return LMMC_STATUS_OK;
 }
 
@@ -233,6 +244,8 @@ lmmc_status_t lmmc_cg_solve(
         out_result->final_residual_norm = norm_r;
     }
 
+    lmmc_itersolve_do_log(&local_cfg, 0, norm_r);
+
     if (norm_r <= threshold) {
         converged = 1;
         iter_count = 0;
@@ -309,6 +322,8 @@ lmmc_status_t lmmc_cg_solve(
                 out_result->final_residual_norm = norm_r;
             }
 
+            lmmc_itersolve_do_log(&local_cfg, iter_count, norm_r);
+
             if (norm_r <= threshold) {
                 converged = 1;
                 break;
@@ -323,7 +338,7 @@ lmmc_status_t lmmc_cg_solve(
             if (st != LMMC_STATUS_OK) {
                 goto cleanup;
             }
-            if (fabs(rho) <= 1e-30) {
+            if (fabs(rho_new) <= 1e-30) {
                 st = LMMC_STATUS_NUMERICAL_FAILURE;
                 goto cleanup;
             }
@@ -506,6 +521,8 @@ lmmc_status_t lmmc_bicgstab_solve(
         out_result->final_residual_norm = norm_r;
     }
 
+    lmmc_itersolve_do_log(&local_cfg, 0, norm_r);
+
     if (norm_r <= threshold) {
         converged = 1;
         iter_count = 0;
@@ -605,6 +622,7 @@ lmmc_status_t lmmc_bicgstab_solve(
                 if (out_result != NULL) {
                     out_result->final_residual_norm = norm_r;
                 }
+                lmmc_itersolve_do_log(&local_cfg, iter_count, norm_r);
                 break;
             }
 
@@ -658,6 +676,8 @@ lmmc_status_t lmmc_bicgstab_solve(
             if (out_result != NULL) {
                 out_result->final_residual_norm = norm_r;
             }
+
+            lmmc_itersolve_do_log(&local_cfg, iter_count, norm_r);
 
             if (norm_r <= threshold) {
                 converged = 1;
@@ -854,6 +874,8 @@ lmmc_status_t lmmc_gmres_solve(
         out_result->final_residual_norm = norm_r;
     }
 
+    lmmc_itersolve_do_log(&local_cfg, 0, norm_r);
+
     if (norm_r <= threshold) {
         converged = 1;
         iter_count = 0;
@@ -1015,6 +1037,8 @@ lmmc_status_t lmmc_gmres_solve(
             if (out_result != NULL) {
                 out_result->final_residual_norm = norm_r;
             }
+
+            lmmc_itersolve_do_log(&local_cfg, iter_count, norm_r);
 
             st = lmmc_vec_copy(&x_trial, x);
             if (st != LMMC_STATUS_OK) {

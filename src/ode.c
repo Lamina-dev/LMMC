@@ -1,10 +1,19 @@
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
 #include "memory_bridge.h"
 #include "lmmc/ode.h"
 
 static int lmmc_is_finite_number(double v) {
     return isfinite(v) ? 1 : 0;
+}
+
+static void lmmc_ode_do_log(const lmmc_ode_config_t* cfg, size_t step, double t, const double* y, size_t dim) {
+    if (cfg->log_cb != NULL) {
+        cfg->log_cb(step, t, y, dim, cfg->log_user_data);
+    } else if (cfg->verbose) {
+        printf("Step %zu: t = %.10e, y[0] = %.10e\n", step, t, dim > 0 ? y[0] : 0.0);
+    }
 }
 
 static int lmmc_mul_overflow_size(size_t a, size_t b, size_t* out) {
@@ -126,6 +135,8 @@ lmmc_status_t lmmc_ode_default_config(
     out_cfg->max_steps = max_steps;
     out_cfg->adaptive_step_beta = 0.9;
     out_cfg->verbose = 0;
+    out_cfg->log_cb = NULL;
+    out_cfg->log_user_data = NULL;
     return LMMC_STATUS_OK;
 }
 
@@ -288,6 +299,8 @@ lmmc_status_t lmmc_ode_euler_solve(
         h = t_end - t_start;
     }
 
+    lmmc_ode_do_log(&local_cfg, 0, t, y, dim);
+
     while (t < t_end && out_result->num_steps < local_cfg.max_steps) {
         size_t i = 0;
         double rem = t_end - t;
@@ -328,6 +341,7 @@ lmmc_status_t lmmc_ode_euler_solve(
 
         out_result->num_steps += 1;
         out_result->final_t = t;
+        lmmc_ode_do_log(&local_cfg, out_result->num_steps, t, y, dim);
     }
 
     if (t >= t_end) {
@@ -403,6 +417,8 @@ lmmc_status_t lmmc_ode_rk4_solve(
         h = t_end - t_start;
     }
 
+    lmmc_ode_do_log(&local_cfg, 0, t, y, dim);
+
     while (t < t_end && out_result->num_steps < local_cfg.max_steps) {
         size_t i = 0;
         double rem = t_end - t;
@@ -470,6 +486,7 @@ lmmc_status_t lmmc_ode_rk4_solve(
 
         out_result->num_steps += 1;
         out_result->final_t = t;
+        lmmc_ode_do_log(&local_cfg, out_result->num_steps, t, y, dim);
     }
 
     if (t >= t_end) {
@@ -569,6 +586,8 @@ lmmc_status_t lmmc_ode_rk45_solve(
     if (h > (t_end - t_start)) {
         h = t_end - t_start;
     }
+
+    lmmc_ode_do_log(&local_cfg, 0, t, y, dim);
 
     while (t < t_end && out_result->num_steps < local_cfg.max_steps) {
         double rem = t_end - t;
@@ -715,6 +734,7 @@ lmmc_status_t lmmc_ode_rk45_solve(
                 out_result->num_steps += 1;
                 out_result->final_t = t;
                 accepted = 1;
+                lmmc_ode_do_log(&local_cfg, out_result->num_steps, t, y, dim);
             }
 
             if (err_norm <= 1e-16) {

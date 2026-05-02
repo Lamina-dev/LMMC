@@ -21,16 +21,6 @@ typedef enum {
 } lmmc_nonlinear_failure_t;
 
 typedef struct {
-    double abs_tol;
-    double rel_tol;
-    size_t max_iter;
-    double derivative_step;
-    double min_derivative;
-    double min_step;
-    int verbose;
-} lmmc_nonlinear_config_t;
-
-typedef struct {
     int converged;
     size_t num_iter;
     double root;
@@ -38,6 +28,25 @@ typedef struct {
     double residual_norm;
     lmmc_nonlinear_failure_t failure_reason;
 } lmmc_nonlinear_result_t;
+
+typedef void (*lmmc_nonlinear_log_callback_t)(
+    size_t iter,
+    double x,
+    double f_x,
+    void* user_data
+);
+
+typedef struct {
+    double abs_tol;
+    double rel_tol;
+    size_t max_iter;
+    double derivative_step;
+    double min_derivative;
+    double min_step;
+    int verbose;
+    lmmc_nonlinear_log_callback_t log_cb;
+    void* log_user_data;
+} lmmc_nonlinear_config_t;
 
 const char* lmmc_nonlinear_failure_string(lmmc_nonlinear_failure_t reason);
 
