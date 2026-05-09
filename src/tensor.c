@@ -1,6 +1,7 @@
 #include <math.h>
 #include <string.h>
 #include "memory_bridge.h"
+#include "lmmc/config.h"
 #include "lmmc/tensor.h"
 
 static int lmmc_mul_overflow_size(size_t a, size_t b, size_t* out) {
@@ -28,8 +29,8 @@ static lmmc_status_t lmmc_tensor_validate(const lmmc_tensor_t* tensor) {
     return LMMC_STATUS_OK;
 }
 
-static int lmmc_is_finite_number(double v) {
-    return isfinite(v) ? 1 : 0;
+static int lmmc_is_finite_number(const lmmc_real_t* v) {
+    return LMMC_REAL_IS_FINITE(v) ? 1 : 0;
 }
 
 static int lmmc_tensor_same_shape(const lmmc_tensor_t* a, const lmmc_tensor_t* b) {
@@ -78,22 +79,26 @@ static int lmmc_tensor_is_contiguous(const lmmc_tensor_t* tensor) {
 lmmc_status_t lmmc_tensor3_create(size_t dim0, size_t dim1, size_t dim2, lmmc_tensor_t* out_tensor) {
     size_t total = 0;
     size_t bytes = 0;
-    double* data = NULL;
+    lmmc_real_t* data = NULL;
 
     if (out_tensor == NULL || dim0 == 0 || dim1 == 0 || dim2 == 0) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (lmmc_mul_overflow_size(dim0, dim1, &total) ||
         lmmc_mul_overflow_size(total, dim2, &total) ||
-        lmmc_mul_overflow_size(total, sizeof(double), &bytes)) {
+        lmmc_mul_overflow_size(total, sizeof(lmmc_real_t), &bytes)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    data = (double*)lmmc_alloc(bytes);
+    data = (lmmc_real_t*)lmmc_alloc(bytes);
     if (data == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
     memset(data, 0, bytes);
+
+    for (size_t i = 0; i < total; ++i) {
+        LMMC_REAL_INIT(&data[i]);
+    }
 
     out_tensor->dim0 = dim0;
     out_tensor->dim1 = dim1;
@@ -113,7 +118,7 @@ lmmc_status_t lmmc_tensor3_wrap(
     size_t stride0,
     size_t stride1,
     size_t stride2,
-    double* data,
+    lmmc_real_t* data,
     lmmc_tensor_t* out_tensor
 ) {
     lmmc_tensor_t candidate = {0};
@@ -146,6 +151,10 @@ void lmmc_tensor_destroy(lmmc_tensor_t* tensor) {
         return;
     }
     if (tensor->owns_data && tensor->data != NULL) {
+        size_t total = tensor->dim0 * tensor->dim1 * tensor->dim2;
+        for (size_t i = 0; i < total; ++i) {
+            LMMC_REAL_CLEAR(&tensor->data[i]);
+        }
         lmmc_free(tensor->data);
     }
     tensor->dim0 = 0;
@@ -158,7 +167,7 @@ void lmmc_tensor_destroy(lmmc_tensor_t* tensor) {
     tensor->owns_data = 0;
 }
 
-lmmc_status_t lmmc_tensor_fill(lmmc_tensor_t* tensor, double value) {
+lmmc_status_t lmmc_tensor_fill(lmmc_tensor_t* tensor, lmmc_real_t value) {
     size_t i = 0;
     size_t j = 0;
     size_t k = 0;
@@ -168,368 +177,451 @@ lmmc_status_t lmmc_tensor_fill(lmmc_tensor_t* tensor, double value) {
     for (i = 0; i < tensor->dim0; ++i) {
         for (j = 0; j < tensor->dim1; ++j) {
             for (k = 0; k < tensor->dim2; ++k) {
-                tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2] = value;
+                LMMC_REAL_SET(&tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2], &value);
             }
         }
     }
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_tensor_set(lmmc_tensor_t* tensor, size_t i, size_t j, size_t k, double value) {
+lmmc_status_t lmmc_tensor_set(lmmc_tensor_t* tensor, size_t i, size_t j, size_t k, lmmc_real_t value) {
     if (lmmc_tensor_validate(tensor) != LMMC_STATUS_OK) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (i >= tensor->dim0 || j >= tensor->dim1 || k >= tensor->dim2) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2] = value;
+    LMMC_REAL_SET(&tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2], &value);
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_tensor_get(const lmmc_tensor_t* tensor, size_t i, size_t j, size_t k, double* out_value) {
+lmmc_status_t lmmc_tensor_get(const lmmc_tensor_t* tensor, size_t i, size_t j, size_t k, lmmc_real_t* out_value) {
     if (lmmc_tensor_validate(tensor) != LMMC_STATUS_OK || out_value == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (i >= tensor->dim0 || j >= tensor->dim1 || k >= tensor->dim2) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    *out_value = tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
+    LMMC_REAL_SET(out_value, &tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2]);
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_tensor_norm_fro(const lmmc_tensor_t* tensor, double* out_norm) {
+lmmc_status_t lmmc_tensor_norm_fro(const lmmc_tensor_t* tensor, lmmc_real_t* out_norm) {
     size_t i = 0;
     size_t j = 0;
     size_t k = 0;
-    double sum = 0.0;
+    lmmc_real_t sum, tmp_mul, tmp_sum;
+    LMMC_REAL_INIT(&sum);
+    LMMC_REAL_INIT(&tmp_mul);
+    LMMC_REAL_INIT(&tmp_sum);
     if (lmmc_tensor_validate(tensor) != LMMC_STATUS_OK || out_norm == NULL) {
+        LMMC_REAL_CLEAR(&sum);
+        LMMC_REAL_CLEAR(&tmp_mul);
+        LMMC_REAL_CLEAR(&tmp_sum);
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
+    LMMC_REAL_SET_D(&sum, 0.0);
+
     for (i = 0; i < tensor->dim0; ++i) {
         for (j = 0; j < tensor->dim1; ++j) {
             for (k = 0; k < tensor->dim2; ++k) {
-                double v = tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
-                sum += v * v;
+                lmmc_real_t* v = &tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
+                LMMC_REAL_MUL(&tmp_mul, v, v);
+                LMMC_REAL_ADD(&tmp_sum, &sum, &tmp_mul);
+                LMMC_REAL_SET(&sum, &tmp_sum);
             }
         }
     }
-    *out_norm = sqrt(sum);
+    LMMC_REAL_SQRT(out_norm, &sum);
+
+    LMMC_REAL_CLEAR(&sum);
+    LMMC_REAL_CLEAR(&tmp_mul);
+    LMMC_REAL_CLEAR(&tmp_sum);
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_tensor_add(const lmmc_tensor_t* a, const lmmc_tensor_t* b, lmmc_tensor_t* out_tensor) {
-    size_t i = 0;
-    size_t j = 0;
-    size_t k = 0;
+    size_t i = 0, j = 0, k = 0;
     lmmc_status_t st = lmmc_tensor_validate_binary(a, b, out_tensor);
+    lmmc_real_t vr;
+    LMMC_REAL_INIT(&vr);
+
     if (st != LMMC_STATUS_OK) {
+        LMMC_REAL_CLEAR(&vr);
         return st;
     }
 
     for (i = 0; i < a->dim0; ++i) {
         for (j = 0; j < a->dim1; ++j) {
             for (k = 0; k < a->dim2; ++k) {
-                double va = a->data[i * a->stride0 + j * a->stride1 + k * a->stride2];
-                double vb = b->data[i * b->stride0 + j * b->stride1 + k * b->stride2];
-                double vr = 0.0;
+                lmmc_real_t* va = &a->data[i * a->stride0 + j * a->stride1 + k * a->stride2];
+                lmmc_real_t* vb = &b->data[i * b->stride0 + j * b->stride1 + k * b->stride2];
                 if (!lmmc_is_finite_number(va) || !lmmc_is_finite_number(vb)) {
+                    LMMC_REAL_CLEAR(&vr);
                     return LMMC_STATUS_NUMERICAL_FAILURE;
                 }
-                vr = va + vb;
-                if (!lmmc_is_finite_number(vr)) {
+                LMMC_REAL_ADD(&vr, va, vb);
+                if (!lmmc_is_finite_number(&vr)) {
+                    LMMC_REAL_CLEAR(&vr);
                     return LMMC_STATUS_NUMERICAL_FAILURE;
                 }
-                out_tensor->data[i * out_tensor->stride0 + j * out_tensor->stride1 + k * out_tensor->stride2] = vr;
+                LMMC_REAL_SET(&out_tensor->data[i * out_tensor->stride0 + j * out_tensor->stride1 + k * out_tensor->stride2], &vr);
             }
         }
     }
+    LMMC_REAL_CLEAR(&vr);
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_tensor_sub(const lmmc_tensor_t* a, const lmmc_tensor_t* b, lmmc_tensor_t* out_tensor) {
-    size_t i = 0;
-    size_t j = 0;
-    size_t k = 0;
+    size_t i = 0, j = 0, k = 0;
     lmmc_status_t st = lmmc_tensor_validate_binary(a, b, out_tensor);
+    lmmc_real_t vr;
+    LMMC_REAL_INIT(&vr);
+
     if (st != LMMC_STATUS_OK) {
+        LMMC_REAL_CLEAR(&vr);
         return st;
     }
 
     for (i = 0; i < a->dim0; ++i) {
         for (j = 0; j < a->dim1; ++j) {
             for (k = 0; k < a->dim2; ++k) {
-                double va = a->data[i * a->stride0 + j * a->stride1 + k * a->stride2];
-                double vb = b->data[i * b->stride0 + j * b->stride1 + k * b->stride2];
-                double vr = 0.0;
+                lmmc_real_t* va = &a->data[i * a->stride0 + j * a->stride1 + k * a->stride2];
+                lmmc_real_t* vb = &b->data[i * b->stride0 + j * b->stride1 + k * b->stride2];
                 if (!lmmc_is_finite_number(va) || !lmmc_is_finite_number(vb)) {
+                    LMMC_REAL_CLEAR(&vr);
                     return LMMC_STATUS_NUMERICAL_FAILURE;
                 }
-                vr = va - vb;
-                if (!lmmc_is_finite_number(vr)) {
+                LMMC_REAL_SUB(&vr, va, vb);
+                if (!lmmc_is_finite_number(&vr)) {
+                    LMMC_REAL_CLEAR(&vr);
                     return LMMC_STATUS_NUMERICAL_FAILURE;
                 }
-                out_tensor->data[i * out_tensor->stride0 + j * out_tensor->stride1 + k * out_tensor->stride2] = vr;
+                LMMC_REAL_SET(&out_tensor->data[i * out_tensor->stride0 + j * out_tensor->stride1 + k * out_tensor->stride2], &vr);
             }
         }
     }
+    LMMC_REAL_CLEAR(&vr);
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_tensor_mul(const lmmc_tensor_t* a, const lmmc_tensor_t* b, lmmc_tensor_t* out_tensor) {
-    size_t i = 0;
-    size_t j = 0;
-    size_t k = 0;
+    size_t i = 0, j = 0, k = 0;
     lmmc_status_t st = lmmc_tensor_validate_binary(a, b, out_tensor);
+    lmmc_real_t vr;
+    LMMC_REAL_INIT(&vr);
+
     if (st != LMMC_STATUS_OK) {
+        LMMC_REAL_CLEAR(&vr);
         return st;
     }
 
     for (i = 0; i < a->dim0; ++i) {
         for (j = 0; j < a->dim1; ++j) {
             for (k = 0; k < a->dim2; ++k) {
-                double va = a->data[i * a->stride0 + j * a->stride1 + k * a->stride2];
-                double vb = b->data[i * b->stride0 + j * b->stride1 + k * b->stride2];
-                double vr = 0.0;
+                lmmc_real_t* va = &a->data[i * a->stride0 + j * a->stride1 + k * a->stride2];
+                lmmc_real_t* vb = &b->data[i * b->stride0 + j * b->stride1 + k * b->stride2];
                 if (!lmmc_is_finite_number(va) || !lmmc_is_finite_number(vb)) {
+                    LMMC_REAL_CLEAR(&vr);
                     return LMMC_STATUS_NUMERICAL_FAILURE;
                 }
-                vr = va * vb;
-                if (!lmmc_is_finite_number(vr)) {
+                LMMC_REAL_MUL(&vr, va, vb);
+                if (!lmmc_is_finite_number(&vr)) {
+                    LMMC_REAL_CLEAR(&vr);
                     return LMMC_STATUS_NUMERICAL_FAILURE;
                 }
-                out_tensor->data[i * out_tensor->stride0 + j * out_tensor->stride1 + k * out_tensor->stride2] = vr;
+                LMMC_REAL_SET(&out_tensor->data[i * out_tensor->stride0 + j * out_tensor->stride1 + k * out_tensor->stride2], &vr);
             }
         }
     }
+    LMMC_REAL_CLEAR(&vr);
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_tensor_div(const lmmc_tensor_t* a, const lmmc_tensor_t* b, lmmc_tensor_t* out_tensor) {
-    size_t i = 0;
-    size_t j = 0;
-    size_t k = 0;
+    size_t i = 0, j = 0, k = 0;
     lmmc_status_t st = lmmc_tensor_validate_binary(a, b, out_tensor);
+    lmmc_real_t vr, zero;
+    LMMC_REAL_INIT(&vr);
+    LMMC_REAL_INIT(&zero);
+
     if (st != LMMC_STATUS_OK) {
+        LMMC_REAL_CLEAR(&vr);
+        LMMC_REAL_CLEAR(&zero);
         return st;
     }
+    LMMC_REAL_SET_D(&zero, 0.0);
 
     for (i = 0; i < a->dim0; ++i) {
         for (j = 0; j < a->dim1; ++j) {
             for (k = 0; k < a->dim2; ++k) {
-                double va = a->data[i * a->stride0 + j * a->stride1 + k * a->stride2];
-                double vb = b->data[i * b->stride0 + j * b->stride1 + k * b->stride2];
-                double vr = 0.0;
-                if (!lmmc_is_finite_number(va) || !lmmc_is_finite_number(vb) || vb == 0.0) {
+                lmmc_real_t* va = &a->data[i * a->stride0 + j * a->stride1 + k * a->stride2];
+                lmmc_real_t* vb = &b->data[i * b->stride0 + j * b->stride1 + k * b->stride2];
+                if (!lmmc_is_finite_number(va) || !lmmc_is_finite_number(vb) || LMMC_REAL_CMP(vb, &zero) == 0) {
+                    LMMC_REAL_CLEAR(&vr);
+                    LMMC_REAL_CLEAR(&zero);
                     return LMMC_STATUS_NUMERICAL_FAILURE;
                 }
-                vr = va / vb;
-                if (!lmmc_is_finite_number(vr)) {
+                LMMC_REAL_DIV(&vr, va, vb);
+                if (!lmmc_is_finite_number(&vr)) {
+                    LMMC_REAL_CLEAR(&vr);
+                    LMMC_REAL_CLEAR(&zero);
                     return LMMC_STATUS_NUMERICAL_FAILURE;
                 }
-                out_tensor->data[i * out_tensor->stride0 + j * out_tensor->stride1 + k * out_tensor->stride2] = vr;
+                LMMC_REAL_SET(&out_tensor->data[i * out_tensor->stride0 + j * out_tensor->stride1 + k * out_tensor->stride2], &vr);
             }
         }
     }
+    LMMC_REAL_CLEAR(&vr);
+    LMMC_REAL_CLEAR(&zero);
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_tensor_scale(const lmmc_tensor_t* tensor, double alpha, lmmc_tensor_t* out_tensor) {
-    size_t i = 0;
-    size_t j = 0;
-    size_t k = 0;
+lmmc_status_t lmmc_tensor_scale(const lmmc_tensor_t* tensor, lmmc_real_t alpha, lmmc_tensor_t* out_tensor) {
+    size_t i = 0, j = 0, k = 0;
+    lmmc_real_t vr;
+    LMMC_REAL_INIT(&vr);
     if (lmmc_tensor_validate(tensor) != LMMC_STATUS_OK || lmmc_tensor_validate(out_tensor) != LMMC_STATUS_OK) {
+        LMMC_REAL_CLEAR(&vr);
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (!lmmc_tensor_same_shape(tensor, out_tensor)) {
+        LMMC_REAL_CLEAR(&vr);
         return LMMC_STATUS_DIMENSION_MISMATCH;
     }
-    if (!lmmc_is_finite_number(alpha)) {
+    if (!lmmc_is_finite_number(&alpha)) {
+        LMMC_REAL_CLEAR(&vr);
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
     for (i = 0; i < tensor->dim0; ++i) {
         for (j = 0; j < tensor->dim1; ++j) {
             for (k = 0; k < tensor->dim2; ++k) {
-                double v = tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
-                double vr = 0.0;
+                lmmc_real_t* v = &tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
                 if (!lmmc_is_finite_number(v)) {
+                    LMMC_REAL_CLEAR(&vr);
                     return LMMC_STATUS_NUMERICAL_FAILURE;
                 }
-                vr = v * alpha;
-                if (!lmmc_is_finite_number(vr)) {
+                LMMC_REAL_MUL(&vr, v, &alpha);
+                if (!lmmc_is_finite_number(&vr)) {
+                    LMMC_REAL_CLEAR(&vr);
                     return LMMC_STATUS_NUMERICAL_FAILURE;
                 }
-                out_tensor->data[i * out_tensor->stride0 + j * out_tensor->stride1 + k * out_tensor->stride2] = vr;
+                LMMC_REAL_SET(&out_tensor->data[i * out_tensor->stride0 + j * out_tensor->stride1 + k * out_tensor->stride2], &vr);
             }
         }
     }
+    LMMC_REAL_CLEAR(&vr);
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_tensor_sum(const lmmc_tensor_t* tensor, double* out_sum) {
-    size_t i = 0;
-    size_t j = 0;
-    size_t k = 0;
-    double sum = 0.0;
+lmmc_status_t lmmc_tensor_sum(const lmmc_tensor_t* tensor, lmmc_real_t* out_sum) {
+    size_t i = 0, j = 0, k = 0;
+    lmmc_real_t sum, tmp_sum;
+    LMMC_REAL_INIT(&sum);
+    LMMC_REAL_INIT(&tmp_sum);
     if (lmmc_tensor_validate(tensor) != LMMC_STATUS_OK || out_sum == NULL) {
+        LMMC_REAL_CLEAR(&sum);
+        LMMC_REAL_CLEAR(&tmp_sum);
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
+    LMMC_REAL_SET_D(&sum, 0.0);
 
     for (i = 0; i < tensor->dim0; ++i) {
         for (j = 0; j < tensor->dim1; ++j) {
             for (k = 0; k < tensor->dim2; ++k) {
-                double v = tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
+                lmmc_real_t* v = &tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
                 if (!lmmc_is_finite_number(v)) {
+                    LMMC_REAL_CLEAR(&sum);
+                    LMMC_REAL_CLEAR(&tmp_sum);
                     return LMMC_STATUS_NUMERICAL_FAILURE;
                 }
-                sum += v;
-                if (!lmmc_is_finite_number(sum)) {
+                LMMC_REAL_ADD(&tmp_sum, &sum, v);
+                LMMC_REAL_SET(&sum, &tmp_sum);
+                if (!lmmc_is_finite_number(&sum)) {
+                    LMMC_REAL_CLEAR(&sum);
+                    LMMC_REAL_CLEAR(&tmp_sum);
                     return LMMC_STATUS_NUMERICAL_FAILURE;
                 }
             }
         }
     }
-    *out_sum = sum;
+    LMMC_REAL_SET(out_sum, &sum);
+    LMMC_REAL_CLEAR(&sum);
+    LMMC_REAL_CLEAR(&tmp_sum);
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_tensor_max(const lmmc_tensor_t* tensor, double* out_max) {
-    size_t i = 0;
-    size_t j = 0;
-    size_t k = 0;
-    double max_v = 0.0;
+lmmc_status_t lmmc_tensor_max(const lmmc_tensor_t* tensor, lmmc_real_t* out_max) {
+    size_t i = 0, j = 0, k = 0;
+    lmmc_real_t max_v;
+    LMMC_REAL_INIT(&max_v);
     if (lmmc_tensor_validate(tensor) != LMMC_STATUS_OK || out_max == NULL) {
+        LMMC_REAL_CLEAR(&max_v);
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-
-    max_v = tensor->data[0];
-    if (!lmmc_is_finite_number(max_v)) {
+    LMMC_REAL_SET(&max_v, &tensor->data[0]);
+    if (!lmmc_is_finite_number(&max_v)) {
+        LMMC_REAL_CLEAR(&max_v);
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }
 
     for (i = 0; i < tensor->dim0; ++i) {
         for (j = 0; j < tensor->dim1; ++j) {
             for (k = 0; k < tensor->dim2; ++k) {
-                double v = tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
+                lmmc_real_t* v = &tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
                 if (!lmmc_is_finite_number(v)) {
+                    LMMC_REAL_CLEAR(&max_v);
                     return LMMC_STATUS_NUMERICAL_FAILURE;
                 }
-                if (v > max_v) {
-                    max_v = v;
+                if (LMMC_REAL_CMP(v, &max_v) > 0) {
+                    LMMC_REAL_SET(&max_v, v);
                 }
             }
         }
     }
-    *out_max = max_v;
+    LMMC_REAL_SET(out_max, &max_v);
+    LMMC_REAL_CLEAR(&max_v);
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_tensor_min(const lmmc_tensor_t* tensor, double* out_min) {
-    size_t i = 0;
-    size_t j = 0;
-    size_t k = 0;
-    double min_v = 0.0;
+lmmc_status_t lmmc_tensor_min(const lmmc_tensor_t* tensor, lmmc_real_t* out_min) {
+    size_t i = 0, j = 0, k = 0;
+    lmmc_real_t min_v;
+    LMMC_REAL_INIT(&min_v);
     if (lmmc_tensor_validate(tensor) != LMMC_STATUS_OK || out_min == NULL) {
+        LMMC_REAL_CLEAR(&min_v);
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-
-    min_v = tensor->data[0];
-    if (!lmmc_is_finite_number(min_v)) {
+    LMMC_REAL_SET(&min_v, &tensor->data[0]);
+    if (!lmmc_is_finite_number(&min_v)) {
+        LMMC_REAL_CLEAR(&min_v);
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }
 
     for (i = 0; i < tensor->dim0; ++i) {
         for (j = 0; j < tensor->dim1; ++j) {
             for (k = 0; k < tensor->dim2; ++k) {
-                double v = tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
+                lmmc_real_t* v = &tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
                 if (!lmmc_is_finite_number(v)) {
+                    LMMC_REAL_CLEAR(&min_v);
                     return LMMC_STATUS_NUMERICAL_FAILURE;
                 }
-                if (v < min_v) {
-                    min_v = v;
+                if (LMMC_REAL_CMP(v, &min_v) < 0) {
+                    LMMC_REAL_SET(&min_v, v);
                 }
             }
         }
     }
-    *out_min = min_v;
+    LMMC_REAL_SET(out_min, &min_v);
+    LMMC_REAL_CLEAR(&min_v);
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_tensor_sum_axis(const lmmc_tensor_t* tensor, size_t axis, lmmc_mat_t* out_matrix) {
-    size_t i = 0;
-    size_t j = 0;
-    size_t k = 0;
+    size_t i = 0, j = 0, k = 0;
+    lmmc_real_t sum, tmp_sum;
+    LMMC_REAL_INIT(&sum);
+    LMMC_REAL_INIT(&tmp_sum);
 
     if (lmmc_tensor_validate(tensor) != LMMC_STATUS_OK || lmmc_mat_validate(out_matrix) != LMMC_STATUS_OK) {
+        LMMC_REAL_CLEAR(&sum);
+        LMMC_REAL_CLEAR(&tmp_sum);
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (axis > 2) {
+        LMMC_REAL_CLEAR(&sum);
+        LMMC_REAL_CLEAR(&tmp_sum);
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
     if (axis == 0 && (out_matrix->rows != tensor->dim1 || out_matrix->cols != tensor->dim2)) {
+        LMMC_REAL_CLEAR(&sum);
+        LMMC_REAL_CLEAR(&tmp_sum);
         return LMMC_STATUS_DIMENSION_MISMATCH;
     }
     if (axis == 1 && (out_matrix->rows != tensor->dim0 || out_matrix->cols != tensor->dim2)) {
+        LMMC_REAL_CLEAR(&sum);
+        LMMC_REAL_CLEAR(&tmp_sum);
         return LMMC_STATUS_DIMENSION_MISMATCH;
     }
     if (axis == 2 && (out_matrix->rows != tensor->dim0 || out_matrix->cols != tensor->dim1)) {
+        LMMC_REAL_CLEAR(&sum);
+        LMMC_REAL_CLEAR(&tmp_sum);
         return LMMC_STATUS_DIMENSION_MISMATCH;
     }
 
     if (axis == 0) {
         for (j = 0; j < tensor->dim1; ++j) {
             for (k = 0; k < tensor->dim2; ++k) {
-                double sum = 0.0;
+                LMMC_REAL_SET_D(&sum, 0.0);
                 for (i = 0; i < tensor->dim0; ++i) {
-                    double v = tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
+                    lmmc_real_t* v = &tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
                     if (!lmmc_is_finite_number(v)) {
+                        LMMC_REAL_CLEAR(&sum);
+                        LMMC_REAL_CLEAR(&tmp_sum);
                         return LMMC_STATUS_NUMERICAL_FAILURE;
                     }
-                    sum += v;
-                    if (!lmmc_is_finite_number(sum)) {
+                    LMMC_REAL_ADD(&tmp_sum, &sum, v);
+                    LMMC_REAL_SET(&sum, &tmp_sum);
+                    if (!lmmc_is_finite_number(&sum)) {
+                        LMMC_REAL_CLEAR(&sum);
+                        LMMC_REAL_CLEAR(&tmp_sum);
                         return LMMC_STATUS_NUMERICAL_FAILURE;
                     }
                 }
-                out_matrix->data[j * out_matrix->stride + k] = sum;
+                LMMC_REAL_SET(&out_matrix->data[j * out_matrix->stride + k], &sum);
             }
         }
     } else if (axis == 1) {
         for (i = 0; i < tensor->dim0; ++i) {
             for (k = 0; k < tensor->dim2; ++k) {
-                double sum = 0.0;
+                LMMC_REAL_SET_D(&sum, 0.0);
                 for (j = 0; j < tensor->dim1; ++j) {
-                    double v = tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
+                    lmmc_real_t* v = &tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
                     if (!lmmc_is_finite_number(v)) {
+                        LMMC_REAL_CLEAR(&sum);
+                        LMMC_REAL_CLEAR(&tmp_sum);
                         return LMMC_STATUS_NUMERICAL_FAILURE;
                     }
-                    sum += v;
-                    if (!lmmc_is_finite_number(sum)) {
+                    LMMC_REAL_ADD(&tmp_sum, &sum, v);
+                    LMMC_REAL_SET(&sum, &tmp_sum);
+                    if (!lmmc_is_finite_number(&sum)) {
+                        LMMC_REAL_CLEAR(&sum);
+                        LMMC_REAL_CLEAR(&tmp_sum);
                         return LMMC_STATUS_NUMERICAL_FAILURE;
                     }
                 }
-                out_matrix->data[i * out_matrix->stride + k] = sum;
+                LMMC_REAL_SET(&out_matrix->data[i * out_matrix->stride + k], &sum);
             }
         }
     } else {
         for (i = 0; i < tensor->dim0; ++i) {
             for (j = 0; j < tensor->dim1; ++j) {
-                double sum = 0.0;
+                LMMC_REAL_SET_D(&sum, 0.0);
                 for (k = 0; k < tensor->dim2; ++k) {
-                    double v = tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
+                    lmmc_real_t* v = &tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
                     if (!lmmc_is_finite_number(v)) {
+                        LMMC_REAL_CLEAR(&sum);
+                        LMMC_REAL_CLEAR(&tmp_sum);
                         return LMMC_STATUS_NUMERICAL_FAILURE;
                     }
-                    sum += v;
-                    if (!lmmc_is_finite_number(sum)) {
+                    LMMC_REAL_ADD(&tmp_sum, &sum, v);
+                    LMMC_REAL_SET(&sum, &tmp_sum);
+                    if (!lmmc_is_finite_number(&sum)) {
+                        LMMC_REAL_CLEAR(&sum);
+                        LMMC_REAL_CLEAR(&tmp_sum);
                         return LMMC_STATUS_NUMERICAL_FAILURE;
                     }
                 }
-                out_matrix->data[i * out_matrix->stride + j] = sum;
+                LMMC_REAL_SET(&out_matrix->data[i * out_matrix->stride + j], &sum);
             }
         }
     }
 
+    LMMC_REAL_CLEAR(&sum);
+    LMMC_REAL_CLEAR(&tmp_sum);
     return LMMC_STATUS_OK;
 }
 

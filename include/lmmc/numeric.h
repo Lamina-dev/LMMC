@@ -16,50 +16,50 @@ extern "C" {
 #define LMMC_DEFAULT_REL_TOL 1e-10
 
 /* Constants */
-lmmc_status_t lmmc_inf(double* out_inf);
-lmmc_status_t lmmc_nan(double* out_nan);
-lmmc_status_t lmmc_eps(double* out_eps);
+lmmc_status_t lmmc_inf(lmmc_real_t* out_inf);
+lmmc_status_t lmmc_nan(lmmc_real_t* out_nan);
+lmmc_status_t lmmc_eps(lmmc_real_t* out_eps);
 
 /* Float Properties */
-lmmc_status_t lmmc_isnan(double x, int* out_isnan);
-lmmc_status_t lmmc_isinf(double x, int* out_isinf);
-lmmc_status_t lmmc_isfinite(double x, int* out_isfinite);
-lmmc_status_t lmmc_signbit(double x, int* out_signbit);
+lmmc_status_t lmmc_isnan(lmmc_real_t x, int* out_isnan);
+lmmc_status_t lmmc_isinf(lmmc_real_t x, int* out_isinf);
+lmmc_status_t lmmc_isfinite(lmmc_real_t x, int* out_isfinite);
+lmmc_status_t lmmc_signbit(lmmc_real_t x, int* out_signbit);
 
 /* Enhanced Trig */
-lmmc_status_t lmmc_atan2(double y, double x, double* out_res);
-lmmc_status_t lmmc_sincos(double x, double* out_sin, double* out_cos);
-lmmc_status_t lmmc_hypot(double x, double y, double* out_res);
+lmmc_status_t lmmc_atan2(lmmc_real_t y, lmmc_real_t x, lmmc_real_t* out_res);
+lmmc_status_t lmmc_sincos(lmmc_real_t x, lmmc_real_t* out_sin, lmmc_real_t* out_cos);
+lmmc_status_t lmmc_hypot(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out_res);
 
 /* Power and Log */
-lmmc_status_t lmmc_exp2(double x, double* out_res);
-lmmc_status_t lmmc_log2(double x, double* out_res);
-lmmc_status_t lmmc_expm1(double x, double* out_res);
-lmmc_status_t lmmc_log1p(double x, double* out_res);
+lmmc_status_t lmmc_exp2(lmmc_real_t x, lmmc_real_t* out_res);
+lmmc_status_t lmmc_log2(lmmc_real_t x, lmmc_real_t* out_res);
+lmmc_status_t lmmc_expm1(lmmc_real_t x, lmmc_real_t* out_res);
+lmmc_status_t lmmc_log1p(lmmc_real_t x, lmmc_real_t* out_res);
 
 /* Float Manipulation */
-lmmc_status_t lmmc_modf(double x, double* out_iptr, double* out_frac);
-lmmc_status_t lmmc_fmod(double x, double y, double* out_res);
-lmmc_status_t lmmc_ldexp(double x, int exp, double* out_res);
-lmmc_status_t lmmc_nextafter(double x, double y, double* out_res);
+lmmc_status_t lmmc_modf(lmmc_real_t x, lmmc_real_t* out_iptr, lmmc_real_t* out_frac);
+lmmc_status_t lmmc_fmod(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out_res);
+lmmc_status_t lmmc_ldexp(lmmc_real_t x, int exp, lmmc_real_t* out_res);
+lmmc_status_t lmmc_nextafter(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out_res);
 
 /* Comparison */
-lmmc_status_t lmmc_approx_eq(double a, double b, double epsilon, int* out_equal);
+lmmc_status_t lmmc_approx_eq(lmmc_real_t a, lmmc_real_t b, lmmc_real_t epsilon, int* out_equal);
 
 lmmc_status_t lmmc_double_nearly_equal_tol(
-    double a,
-    double b,
-    double abs_tol,
-    double rel_tol,
+    lmmc_real_t a,
+    lmmc_real_t b,
+    lmmc_real_t abs_tol,
+    lmmc_real_t rel_tol,
     int* out_equal
 );
 
-lmmc_status_t lmmc_double_nearly_equal(double a, double b, int* out_equal);
+lmmc_status_t lmmc_double_nearly_equal(lmmc_real_t a, lmmc_real_t b, int* out_equal);
 
 lmmc_status_t lmmc_fft_radix4_next_size(size_t n, size_t* out_nfft);
-lmmc_status_t lmmc_fft_radix4(double* real, double* imag, size_t n, int inverse);
-lmmc_status_t lmmc_fft_radix4_forward(double* real, double* imag, size_t n);
-lmmc_status_t lmmc_fft_radix4_inverse(double* real, double* imag, size_t n);
+lmmc_status_t lmmc_fft_radix4(lmmc_real_t* real, lmmc_real_t* imag, size_t n, int inverse);
+lmmc_status_t lmmc_fft_radix4_forward(lmmc_real_t* real, lmmc_real_t* imag, size_t n);
+lmmc_status_t lmmc_fft_radix4_inverse(lmmc_real_t* real, lmmc_real_t* imag, size_t n);
 
 #ifdef __cplusplus
 }

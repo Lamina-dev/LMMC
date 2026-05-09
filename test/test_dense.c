@@ -13,6 +13,11 @@ int main(void) {
     lmmc_status_t st = LMMC_STATUS_OK;
     int rc = 0;
 
+    lmmc_mat_t a_copy = {0};
+    lmmc_vec_t v2 = {0};
+    lmmc_vec_t v_wrap = {0};
+    lmmc_real_t wrap_data[2] = {5.0, 6.0};
+
     st = lmmc_mat_create(2, 2, &a);
     if (st != LMMC_STATUS_OK) {
         rc = 1;
@@ -82,7 +87,66 @@ int main(void) {
         rc = 1;
     }
 
+    st = lmmc_mat_create(2, 2, &a_copy);
+    if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
+    st = lmmc_mat_copy(&a, &a_copy);
+    if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
+    if (!lmmc_test_nearly_equal(a_copy.data[0], 1.0, 1e-12) ||
+        !lmmc_test_nearly_equal(a_copy.data[1], 2.0, 1e-12) ||
+        !lmmc_test_nearly_equal(a_copy.data[2], 3.0, 1e-12) ||
+        !lmmc_test_nearly_equal(a_copy.data[3], 4.0, 1e-12)) {
+        rc = 1; goto cleanup;
+    }
+
+    lmmc_real_t fnorm = 0.0;
+    st = lmmc_mat_norm_fro(&a_copy, &fnorm);
+    if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
+    if (!lmmc_test_nearly_equal(fnorm, 5.47722557505, 1e-6)) { // sqrt(1+4+9+16) = sqrt(30) = 5.477225...
+        rc = 1; goto cleanup;
+    }
+
+    lmmc_mat_t a_trans = {0};
+    st = lmmc_mat_create(2, 2, &a_trans);
+    if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
+    st = lmmc_mat_transpose_to(&a_copy, &a_trans);
+    if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
+    if (!lmmc_test_nearly_equal(a_trans.data[0], 1.0, 1e-12) ||
+        !lmmc_test_nearly_equal(a_trans.data[1], 3.0, 1e-12) ||
+        !lmmc_test_nearly_equal(a_trans.data[2], 2.0, 1e-12) ||
+        !lmmc_test_nearly_equal(a_trans.data[3], 4.0, 1e-12)) {
+        rc = 1; goto cleanup;
+    }
+
+    lmmc_mat_t m_wrap = {0};
+    st = lmmc_mat_wrap(2, 1, 1, wrap_data, &m_wrap);
+    if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
+    if (!lmmc_test_nearly_equal(m_wrap.data[0], 5.0, 1e-12) ||
+        !lmmc_test_nearly_equal(m_wrap.data[1], 6.0, 1e-12)) {
+        rc = 1; goto cleanup;
+    }
+
+    st = lmmc_vec_wrap(2, wrap_data, &v_wrap);
+    if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
+    if (!lmmc_test_nearly_equal(v_wrap.data[0], 5.0, 1e-12) ||
+        !lmmc_test_nearly_equal(v_wrap.data[1], 6.0, 1e-12)) {
+        rc = 1; goto cleanup;
+    }
+
+    st = lmmc_vec_create(2, &v2);
+    if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
+    st = lmmc_mat_vec_mul(&a, &v_wrap, &v2);
+    if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
+    if (!lmmc_test_nearly_equal(v2.data[0], 17.0, 1e-12) ||
+        !lmmc_test_nearly_equal(v2.data[1], 39.0, 1e-12)) {
+        rc = 1; goto cleanup;
+    }
+
 cleanup:
+    lmmc_vec_destroy(&v2);
+    lmmc_vec_destroy(&v_wrap);
+    lmmc_mat_destroy(&m_wrap);
+    lmmc_mat_destroy(&a_trans);
+    lmmc_mat_destroy(&a_copy);
     lmmc_vec_destroy(&zero_vec);
     lmmc_mat_destroy(&out_bad);
     lmmc_mat_destroy(&right_bad);

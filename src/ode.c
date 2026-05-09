@@ -2,13 +2,14 @@
 #include <string.h>
 #include <stdio.h>
 #include "memory_bridge.h"
+#include "lmmc/config.h"
 #include "lmmc/ode.h"
 
-static int lmmc_is_finite_number(double v) {
+static int lmmc_is_finite_number(lmmc_real_t v) {
     return isfinite(v) ? 1 : 0;
 }
 
-static void lmmc_ode_do_log(const lmmc_ode_config_t* cfg, size_t step, double t, const double* y, size_t dim) {
+static void lmmc_ode_do_log(const lmmc_ode_config_t* cfg, size_t step, lmmc_real_t t, const lmmc_real_t* y, size_t dim) {
     if (cfg->log_cb != NULL) {
         cfg->log_cb(step, t, y, dim, cfg->log_user_data);
     } else if (cfg->verbose) {
@@ -28,15 +29,15 @@ static int lmmc_mul_overflow_size(size_t a, size_t b, size_t* out) {
     return 0;
 }
 
-static double lmmc_absd(double x) {
+static lmmc_real_t lmmc_absd(lmmc_real_t x) {
     return x < 0.0 ? -x : x;
 }
 
-static double lmmc_maxd(double a, double b) {
+static lmmc_real_t lmmc_maxd(lmmc_real_t a, lmmc_real_t b) {
     return a > b ? a : b;
 }
 
-static double lmmc_clampd(double v, double lo, double hi) {
+static lmmc_real_t lmmc_clampd(lmmc_real_t v, lmmc_real_t lo, lmmc_real_t hi) {
     if (v < lo) {
         return lo;
     }
@@ -46,7 +47,7 @@ static double lmmc_clampd(double v, double lo, double hi) {
     return v;
 }
 
-static void lmmc_ode_reset_result(lmmc_ode_result_t* out_result, double t_start) {
+static void lmmc_ode_reset_result(lmmc_ode_result_t* out_result, lmmc_real_t t_start) {
     if (out_result == NULL) {
         return;
     }
@@ -80,15 +81,15 @@ const char* lmmc_ode_failure_string(lmmc_ode_failure_t reason) {
 }
 
 lmmc_status_t lmmc_ode_default_config(
-    double t_start,
-    double t_end,
+    lmmc_real_t t_start,
+    lmmc_real_t t_end,
     size_t problem_dim,
     lmmc_ode_config_t* out_cfg
 ) {
-    double span = 0.0;
-    double initial_step = 0.0;
-    double min_step = 0.0;
-    double max_step = 0.0;
+    lmmc_real_t span = 0.0;
+    lmmc_real_t initial_step = 0.0;
+    lmmc_real_t min_step = 0.0;
+    lmmc_real_t max_step = 0.0;
     size_t max_steps = 0;
 
     if (out_cfg == NULL || problem_dim == 0 || !lmmc_is_finite_number(t_start) ||
@@ -142,8 +143,8 @@ lmmc_status_t lmmc_ode_default_config(
 
 static lmmc_status_t lmmc_ode_load_and_validate_config(
     size_t dim,
-    double t_start,
-    double t_end,
+    lmmc_real_t t_start,
+    lmmc_real_t t_end,
     const lmmc_ode_config_t* cfg,
     lmmc_ode_config_t* out_cfg,
     lmmc_ode_result_t* out_result
@@ -205,9 +206,9 @@ static lmmc_status_t lmmc_ode_load_and_validate_config(
 
 static lmmc_status_t lmmc_ode_rhs_eval(
     lmmc_ode_rhs_t rhs,
-    double t,
-    const double* y,
-    double* y_prime,
+    lmmc_real_t t,
+    const lmmc_real_t* y,
+    lmmc_real_t* y_prime,
     size_t dim,
     void* user_data,
     size_t* io_eval_count,
@@ -237,7 +238,7 @@ static lmmc_status_t lmmc_ode_rhs_eval(
     return LMMC_STATUS_OK;
 }
 
-static int lmmc_ode_state_is_finite(const double* y, size_t dim) {
+static int lmmc_ode_state_is_finite(const lmmc_real_t* y, size_t dim) {
     size_t i = 0;
     if (y == NULL || dim == 0) {
         return 0;
@@ -252,29 +253,24 @@ static int lmmc_ode_state_is_finite(const double* y, size_t dim) {
     return 1;
 }
 
-lmmc_status_t lmmc_ode_euler_solve(
+static lmmc_status_t validate_and_init_ode_config(
     lmmc_ode_rhs_t rhs,
-    void* user_data,
     size_t dim,
-    double t_start,
-    double t_end,
-    double* y,
+    lmmc_real_t t_start,
+    lmmc_real_t t_end,
+    const lmmc_real_t* y,
     const lmmc_ode_config_t* cfg,
-    lmmc_ode_result_t* out_result
+    lmmc_ode_config_t* out_cfg,
+    lmmc_ode_result_t* out_result,
+    size_t* out_work_bytes
 ) {
-    lmmc_ode_config_t local_cfg = {0};
-    size_t work_bytes = 0;
-    double* y_prime = NULL;
-    double t = t_start;
-    double h = 0.0;
-
     if (rhs == NULL || y == NULL || out_result == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
     lmmc_ode_reset_result(out_result, t_start);
 
-    if (lmmc_ode_load_and_validate_config(dim, t_start, t_end, cfg, &local_cfg, out_result) != LMMC_STATUS_OK) {
+    if (lmmc_ode_load_and_validate_config(dim, t_start, t_end, cfg, out_cfg, out_result) != LMMC_STATUS_OK) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -283,12 +279,37 @@ lmmc_status_t lmmc_ode_euler_solve(
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }
 
-    if (lmmc_mul_overflow_size(dim, sizeof(double), &work_bytes)) {
+    if (lmmc_mul_overflow_size(dim, sizeof(lmmc_real_t), out_work_bytes)) {
         out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_DIMENSION;
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    y_prime = (double*)lmmc_alloc(work_bytes);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_ode_euler_solve(
+    lmmc_ode_rhs_t rhs,
+    void* user_data,
+    size_t dim,
+    lmmc_real_t t_start,
+    lmmc_real_t t_end,
+    lmmc_real_t* y,
+    const lmmc_ode_config_t* cfg,
+    lmmc_ode_result_t* out_result
+) {
+    lmmc_ode_config_t local_cfg = {0};
+    size_t work_bytes = 0;
+    lmmc_real_t* y_prime = NULL;
+    lmmc_real_t t = t_start;
+    lmmc_real_t h = 0.0;
+    lmmc_status_t init_st;
+
+    init_st = validate_and_init_ode_config(rhs, dim, t_start, t_end, y, cfg, &local_cfg, out_result, &work_bytes);
+    if (init_st != LMMC_STATUS_OK) {
+        return init_st;
+    }
+
+    y_prime = (lmmc_real_t*)lmmc_alloc(work_bytes);
     if (y_prime == NULL) {
         out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
         return LMMC_STATUS_ALLOCATION_FAILED;
@@ -303,7 +324,7 @@ lmmc_status_t lmmc_ode_euler_solve(
 
     while (t < t_end && out_result->num_steps < local_cfg.max_steps) {
         size_t i = 0;
-        double rem = t_end - t;
+        lmmc_real_t rem = t_end - t;
         int callback_failed = 0;
         lmmc_status_t st = LMMC_STATUS_OK;
 
@@ -360,47 +381,33 @@ lmmc_status_t lmmc_ode_rk4_solve(
     lmmc_ode_rhs_t rhs,
     void* user_data,
     size_t dim,
-    double t_start,
-    double t_end,
-    double* y,
+    lmmc_real_t t_start,
+    lmmc_real_t t_end,
+    lmmc_real_t* y,
     const lmmc_ode_config_t* cfg,
     lmmc_ode_result_t* out_result
 ) {
     lmmc_ode_config_t local_cfg = {0};
     size_t work_bytes = 0;
-    double* k1 = NULL;
-    double* k2 = NULL;
-    double* k3 = NULL;
-    double* k4 = NULL;
-    double* y_tmp = NULL;
-    double t = t_start;
-    double h = 0.0;
+    lmmc_real_t* k1 = NULL;
+    lmmc_real_t* k2 = NULL;
+    lmmc_real_t* k3 = NULL;
+    lmmc_real_t* k4 = NULL;
+    lmmc_real_t* y_tmp = NULL;
+    lmmc_real_t t = t_start;
+    lmmc_real_t h = 0.0;
+    lmmc_status_t init_st;
 
-    if (rhs == NULL || y == NULL || out_result == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
+    init_st = validate_and_init_ode_config(rhs, dim, t_start, t_end, y, cfg, &local_cfg, out_result, &work_bytes);
+    if (init_st != LMMC_STATUS_OK) {
+        return init_st;
     }
 
-    lmmc_ode_reset_result(out_result, t_start);
-
-    if (lmmc_ode_load_and_validate_config(dim, t_start, t_end, cfg, &local_cfg, out_result) != LMMC_STATUS_OK) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
-    if (!lmmc_ode_state_is_finite(y, dim)) {
-        out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-        return LMMC_STATUS_NUMERICAL_FAILURE;
-    }
-
-    if (lmmc_mul_overflow_size(dim, sizeof(double), &work_bytes)) {
-        out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_DIMENSION;
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
-    k1 = (double*)lmmc_alloc(work_bytes);
-    k2 = (double*)lmmc_alloc(work_bytes);
-    k3 = (double*)lmmc_alloc(work_bytes);
-    k4 = (double*)lmmc_alloc(work_bytes);
-    y_tmp = (double*)lmmc_alloc(work_bytes);
+    k1 = (lmmc_real_t*)lmmc_alloc(work_bytes);
+    k2 = (lmmc_real_t*)lmmc_alloc(work_bytes);
+    k3 = (lmmc_real_t*)lmmc_alloc(work_bytes);
+    k4 = (lmmc_real_t*)lmmc_alloc(work_bytes);
+    y_tmp = (lmmc_real_t*)lmmc_alloc(work_bytes);
 
     if (k1 == NULL || k2 == NULL || k3 == NULL || k4 == NULL || y_tmp == NULL) {
         lmmc_free(y_tmp);
@@ -421,7 +428,7 @@ lmmc_status_t lmmc_ode_rk4_solve(
 
     while (t < t_end && out_result->num_steps < local_cfg.max_steps) {
         size_t i = 0;
-        double rem = t_end - t;
+        lmmc_real_t rem = t_end - t;
         int callback_failed = 0;
         lmmc_status_t st = LMMC_STATUS_OK;
 
@@ -517,55 +524,41 @@ lmmc_status_t lmmc_ode_rk45_solve(
     lmmc_ode_rhs_t rhs,
     void* user_data,
     size_t dim,
-    double t_start,
-    double t_end,
-    double* y,
+    lmmc_real_t t_start,
+    lmmc_real_t t_end,
+    lmmc_real_t* y,
     const lmmc_ode_config_t* cfg,
     lmmc_ode_result_t* out_result
 ) {
     lmmc_ode_config_t local_cfg = {0};
     size_t work_bytes = 0;
-    double* k1 = NULL;
-    double* k2 = NULL;
-    double* k3 = NULL;
-    double* k4 = NULL;
-    double* k5 = NULL;
-    double* k6 = NULL;
-    double* k7 = NULL;
-    double* y_tmp = NULL;
-    double* y5 = NULL;
-    double t = t_start;
-    double h = 0.0;
+    lmmc_real_t* k1 = NULL;
+    lmmc_real_t* k2 = NULL;
+    lmmc_real_t* k3 = NULL;
+    lmmc_real_t* k4 = NULL;
+    lmmc_real_t* k5 = NULL;
+    lmmc_real_t* k6 = NULL;
+    lmmc_real_t* k7 = NULL;
+    lmmc_real_t* y_tmp = NULL;
+    lmmc_real_t* y5 = NULL;
+    lmmc_real_t t = t_start;
+    lmmc_real_t h = 0.0;
+    lmmc_status_t init_st;
 
-    if (rhs == NULL || y == NULL || out_result == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
+    init_st = validate_and_init_ode_config(rhs, dim, t_start, t_end, y, cfg, &local_cfg, out_result, &work_bytes);
+    if (init_st != LMMC_STATUS_OK) {
+        return init_st;
     }
 
-    lmmc_ode_reset_result(out_result, t_start);
-
-    if (lmmc_ode_load_and_validate_config(dim, t_start, t_end, cfg, &local_cfg, out_result) != LMMC_STATUS_OK) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
-    if (!lmmc_ode_state_is_finite(y, dim)) {
-        out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-        return LMMC_STATUS_NUMERICAL_FAILURE;
-    }
-
-    if (lmmc_mul_overflow_size(dim, sizeof(double), &work_bytes)) {
-        out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_DIMENSION;
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
-    k1 = (double*)lmmc_alloc(work_bytes);
-    k2 = (double*)lmmc_alloc(work_bytes);
-    k3 = (double*)lmmc_alloc(work_bytes);
-    k4 = (double*)lmmc_alloc(work_bytes);
-    k5 = (double*)lmmc_alloc(work_bytes);
-    k6 = (double*)lmmc_alloc(work_bytes);
-    k7 = (double*)lmmc_alloc(work_bytes);
-    y_tmp = (double*)lmmc_alloc(work_bytes);
-    y5 = (double*)lmmc_alloc(work_bytes);
+    k1 = (lmmc_real_t*)lmmc_alloc(work_bytes);
+    k2 = (lmmc_real_t*)lmmc_alloc(work_bytes);
+    k3 = (lmmc_real_t*)lmmc_alloc(work_bytes);
+    k4 = (lmmc_real_t*)lmmc_alloc(work_bytes);
+    k5 = (lmmc_real_t*)lmmc_alloc(work_bytes);
+    k6 = (lmmc_real_t*)lmmc_alloc(work_bytes);
+    k7 = (lmmc_real_t*)lmmc_alloc(work_bytes);
+    y_tmp = (lmmc_real_t*)lmmc_alloc(work_bytes);
+    y5 = (lmmc_real_t*)lmmc_alloc(work_bytes);
 
     if (k1 == NULL || k2 == NULL || k3 == NULL || k4 == NULL || k5 == NULL || k6 == NULL ||
         k7 == NULL || y_tmp == NULL || y5 == NULL) {
@@ -590,7 +583,7 @@ lmmc_status_t lmmc_ode_rk45_solve(
     lmmc_ode_do_log(&local_cfg, 0, t, y, dim);
 
     while (t < t_end && out_result->num_steps < local_cfg.max_steps) {
-        double rem = t_end - t;
+        lmmc_real_t rem = t_end - t;
         int accepted = 0;
         size_t reject_guard = 0;
 
@@ -605,9 +598,9 @@ lmmc_status_t lmmc_ode_rk45_solve(
         while (!accepted) {
             size_t i = 0;
             int callback_failed = 0;
-            double err_norm = 0.0;
-            double factor = 1.0;
-            double h_new = 0.0;
+            lmmc_real_t err_norm = 0.0;
+            lmmc_real_t factor = 1.0;
+            lmmc_real_t h_new = 0.0;
             lmmc_status_t st = LMMC_STATUS_OK;
 
             if (++reject_guard > 1000) {
@@ -686,10 +679,10 @@ lmmc_status_t lmmc_ode_rk45_solve(
             }
 
             for (i = 0; i < dim; ++i) {
-                double y4 = 0.0;
-                double diff = 0.0;
-                double tol = 0.0;
-                double ratio = 0.0;
+                lmmc_real_t y4 = 0.0;
+                lmmc_real_t diff = 0.0;
+                lmmc_real_t tol = 0.0;
+                lmmc_real_t ratio = 0.0;
 
                 y5[i] = y[i] + h * ((35.0 / 384.0) * k1[i] + (500.0 / 1113.0) * k3[i] +
                                     (125.0 / 192.0) * k4[i] + (-2187.0 / 6784.0) * k5[i] +

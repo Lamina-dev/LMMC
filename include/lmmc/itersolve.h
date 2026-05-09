@@ -13,19 +13,19 @@ extern "C" {
 typedef struct {
     int converged;
     size_t num_iter;
-    double initial_residual_norm;
-    double final_residual_norm;
+    lmmc_real_t initial_residual_norm;
+    lmmc_real_t final_residual_norm;
 } lmmc_itersolve_result_t;
 
 typedef void (*lmmc_itersolve_log_callback_t)(
     size_t iter,
-    double residual_norm,
+    lmmc_real_t residual_norm,
     void* user_data
 );
 
 typedef struct {
-    double abs_tol;
-    double rel_tol;
+    lmmc_real_t abs_tol;
+    lmmc_real_t rel_tol;
     size_t max_iter;
     size_t restart;
     int verbose;

@@ -85,6 +85,23 @@ int main(void) {
         rc = 1;
         goto cleanup;
     }
+    
+    // Verify values via dense matrix
+    lmmc_mat_t t_dense;
+    lmmc_mat_create(3, 3, &t_dense);
+    st = lmmc_sparse_to_dense(&csc_t, &t_dense);
+    if (st != LMMC_STATUS_OK) { rc = 1; lmmc_mat_destroy(&t_dense); goto cleanup; }
+    
+    for (size_t i = 0; i < 3; ++i) {
+        for (size_t j = 0; j < 3; ++j) {
+            if (!lmmc_test_nearly_equal(t_dense.data[i * t_dense.stride + j], dense.data[j * dense.stride + i], 1e-12)) {
+                printf("Transpose mismatch at (%zu, %zu): expected %f, got %f\n", i, j, dense.data[j * dense.stride + i], t_dense.data[i * t_dense.stride + j]);
+                rc = 1;
+            }
+        }
+    }
+    lmmc_mat_destroy(&t_dense);
+
     lmmc_sparse_destroy(&csc_t);
 
 cleanup:

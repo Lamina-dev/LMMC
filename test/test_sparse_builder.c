@@ -32,9 +32,6 @@ int main(void) {
     assert(sparse.nnz == 5);
 
     /* 4. Verify entries */
-    /* Row 0: (0, 1.0), (2, 2.0) */
-    assert(sparse.row_ptr[0] == 0);
-    assert(sparse.row_ptr[1] == 2);
     /* Note: Builder doesn't guarantee sorted columns within a row unless we add a sort step.
        But it should contain the correct data. */
     
@@ -52,6 +49,16 @@ int main(void) {
         }
         printf("\n");
     }
+
+    assert(dense.data[0 * dense.stride + 0] == 1.0);
+    assert(dense.data[0 * dense.stride + 1] == 0.0);
+    assert(dense.data[0 * dense.stride + 2] == 2.0);
+    assert(dense.data[1 * dense.stride + 0] == 0.0);
+    assert(dense.data[1 * dense.stride + 1] == 3.0);
+    assert(dense.data[1 * dense.stride + 2] == 0.0);
+    assert(dense.data[2 * dense.stride + 0] == 4.0);
+    assert(dense.data[2 * dense.stride + 1] == 0.0);
+    assert(dense.data[2 * dense.stride + 2] == 5.0);
 
     /* Cleanup */
     lmmc_mat_destroy(&dense);

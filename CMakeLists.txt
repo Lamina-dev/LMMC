@@ -119,11 +119,11 @@ endif()
 
 if(MSVC)
     foreach(_lmmc_target IN LISTS LMMC_LIB_TARGETS)
-        target_compile_options(${_lmmc_target} PRIVATE /W4)
+        target_compile_options(${_lmmc_target} PRIVATE /W4 $<$<CONFIG:Release>:/O2;/arch:AVX2;/fp:fast>)
     endforeach()
 else()
     foreach(_lmmc_target IN LISTS LMMC_LIB_TARGETS)
-        target_compile_options(${_lmmc_target} PRIVATE -Wall -Wextra -Wpedantic)
+        target_compile_options(${_lmmc_target} PRIVATE -Wall -Wextra -Wpedantic $<$<CONFIG:Release>:-O3;-march=native;-ffast-math>)
     endforeach()
 endif()
 
