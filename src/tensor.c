@@ -151,9 +151,13 @@ void lmmc_tensor_destroy(lmmc_tensor_t* tensor) {
         return;
     }
     if (tensor->owns_data && tensor->data != NULL) {
-        size_t total = tensor->dim0 * tensor->dim1 * tensor->dim2;
-        for (size_t i = 0; i < total; ++i) {
-            LMMC_REAL_CLEAR(&tensor->data[i]);
+        size_t total = 0;
+        size_t total_part = 0;
+        if (!lmmc_mul_overflow_size(tensor->dim0, tensor->dim1, &total_part) &&
+            !lmmc_mul_overflow_size(total_part, tensor->dim2, &total)) {
+            for (size_t i = 0; i < total; ++i) {
+                LMMC_REAL_CLEAR(&tensor->data[i]);
+            }
         }
         lmmc_free(tensor->data);
     }

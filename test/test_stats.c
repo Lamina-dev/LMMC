@@ -42,15 +42,15 @@ int main(void) {
         goto cleanup;
     }
 
-    x.data[0] = 1.0;
-    x.data[1] = 2.0;
-    x.data[2] = 3.0;
-    x.data[3] = 4.0;
+    LMMC_REAL_SET_D(&x.data[0], 1.0);
+    LMMC_REAL_SET_D(&x.data[1], 2.0);
+    LMMC_REAL_SET_D(&x.data[2], 3.0);
+    LMMC_REAL_SET_D(&x.data[3], 4.0);
 
-    y.data[0] = 2.0;
-    y.data[1] = 4.0;
-    y.data[2] = 6.0;
-    y.data[3] = 8.0;
+    LMMC_REAL_SET_D(&y.data[0], 2.0);
+    LMMC_REAL_SET_D(&y.data[1], 4.0);
+    LMMC_REAL_SET_D(&y.data[2], 6.0);
+    LMMC_REAL_SET_D(&y.data[3], 8.0);
 
     st = lmmc_vec_mean(&x, &mean);
     if (st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(mean, 2.5, 1e-12)) {
@@ -137,10 +137,10 @@ int main(void) {
         goto cleanup;
     }
 
-    data.data[0] = 1.0; data.data[1] = 2.0;
-    data.data[2] = 2.0; data.data[3] = 4.0;
-    data.data[4] = 3.0; data.data[5] = 6.0;
-    data.data[6] = 4.0; data.data[7] = 8.0;
+    LMMC_REAL_SET_D(&data.data[0], 1.0); LMMC_REAL_SET_D(&data.data[1], 2.0);
+    LMMC_REAL_SET_D(&data.data[2], 2.0); LMMC_REAL_SET_D(&data.data[3], 4.0);
+    LMMC_REAL_SET_D(&data.data[4], 3.0); LMMC_REAL_SET_D(&data.data[5], 6.0);
+    LMMC_REAL_SET_D(&data.data[6], 4.0); LMMC_REAL_SET_D(&data.data[7], 8.0);
 
     st = lmmc_mat_column_mean(&data, &means);
     if (st != LMMC_STATUS_OK ||
@@ -195,7 +195,7 @@ int main(void) {
         rc = 1;
         goto cleanup;
     }
-    one.data[0] = 42.0;
+    LMMC_REAL_SET_D(&one.data[0], 42.0);
 
     st = lmmc_vec_variance_sample(&one, &var);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
@@ -219,12 +219,12 @@ int main(void) {
         rc = 1;
         goto cleanup;
     }
-    const_x.data[0] = 1.0;
-    const_x.data[1] = 1.0;
-    const_x.data[2] = 1.0;
-    lin_y.data[0] = 1.0;
-    lin_y.data[1] = 2.0;
-    lin_y.data[2] = 3.0;
+    LMMC_REAL_SET_D(&const_x.data[0], 1.0);
+    LMMC_REAL_SET_D(&const_x.data[1], 1.0);
+    LMMC_REAL_SET_D(&const_x.data[2], 1.0);
+    LMMC_REAL_SET_D(&lin_y.data[0], 1.0);
+    LMMC_REAL_SET_D(&lin_y.data[1], 2.0);
+    LMMC_REAL_SET_D(&lin_y.data[2], 3.0);
 
     st = lmmc_vec_correlation_sample(&const_x, &lin_y, &corr);
     if (st != LMMC_STATUS_NUMERICAL_FAILURE) {
@@ -248,7 +248,7 @@ int main(void) {
         rc = 1;
         goto cleanup;
     }
-    nan_vec.data[0] = 1.0;
+    LMMC_REAL_SET_D(&nan_vec.data[0], 1.0);
     nan_vec.data[1] = NAN;
 
     st = lmmc_vec_mean(&nan_vec, &mean);
@@ -267,8 +267,8 @@ int main(void) {
         rc = 1;
         goto cleanup;
     }
-    one_row.data[0] = 1.0;
-    one_row.data[1] = 2.0;
+    LMMC_REAL_SET_D(&one_row.data[0], 1.0);
+    LMMC_REAL_SET_D(&one_row.data[1], 2.0);
 
     st = lmmc_mat_covariance_sample(&one_row, &one_row_cov);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
@@ -293,9 +293,9 @@ int main(void) {
         rc = 1;
         goto cleanup;
     }
-    nan_mat.data[0] = 1.0;
-    nan_mat.data[1] = 2.0;
-    nan_mat.data[2] = 3.0;
+    LMMC_REAL_SET_D(&nan_mat.data[0], 1.0);
+    LMMC_REAL_SET_D(&nan_mat.data[1], 2.0);
+    LMMC_REAL_SET_D(&nan_mat.data[2], 3.0);
     nan_mat.data[3] = NAN;
 
     st = lmmc_mat_column_mean(&nan_mat, &means);

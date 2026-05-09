@@ -62,7 +62,7 @@ int main(void) {
         double real[16] = {0.0};
         double imag[16] = {0.0};
 
-        real[0] = 1.0;
+        LMMC_REAL_SET_D(&real[0], 1.0);
         st = lmmc_fft_radix4_forward(real, imag, n);
         if (st != LMMC_STATUS_OK) {
             rc = 1;

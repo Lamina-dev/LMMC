@@ -4,7 +4,7 @@
 #include "lmmc/config.h"
 #include "lmmc/linear_algebra.h"
 
-static void lmmc_abs_inplace(lmmc_real_t* res, const lmmc_real_t* x) {
+static void lmmc_abs_to(lmmc_real_t* res, const lmmc_real_t* x) {
     lmmc_real_t zero;
     LMMC_REAL_INIT(&zero);
     LMMC_REAL_SET_D(&zero, 0.0);
@@ -53,12 +53,12 @@ lmmc_status_t lmmc_lu_decompose_inplace(lmmc_mat_t* a, size_t* pivots, size_t* o
         size_t p = k;
         lmmc_real_t maxv;
         LMMC_REAL_INIT(&maxv);
-        lmmc_abs_inplace(&maxv, &a->data[k * a->stride + k]);
+        lmmc_abs_to(&maxv, &a->data[k * a->stride + k]);
 
         for (i = k + 1; i < n; ++i) {
             lmmc_real_t v;
             LMMC_REAL_INIT(&v);
-            lmmc_abs_inplace(&v, &a->data[i * a->stride + k]);
+            lmmc_abs_to(&v, &a->data[i * a->stride + k]);
             if (LMMC_REAL_CMP(&v, &maxv) > 0) {
                 LMMC_REAL_SET(&maxv, &v);
                 p = i;
@@ -144,10 +144,14 @@ lmmc_status_t lmmc_lu_solve(const lmmc_mat_t* lu, const size_t* pivots, const lm
         }
     }
 
+    lmmc_real_t eps;
+    lmmc_real_t abs_lu;
+    LMMC_REAL_INIT(&eps);
+    LMMC_REAL_SET_D(&eps, 1e-15);
+    LMMC_REAL_INIT(&abs_lu);
+
     for (i = n; i-- > 0;) {
         size_t j = 0;
-        lmmc_real_t eps;
-        lmmc_real_t abs_lu;
         for (j = i + 1; j < n; ++j) {
             lmmc_real_t tmp;
             LMMC_REAL_INIT(&tmp);
@@ -156,21 +160,19 @@ lmmc_status_t lmmc_lu_solve(const lmmc_mat_t* lu, const size_t* pivots, const lm
             LMMC_REAL_CLEAR(&tmp);
         }
         
-        LMMC_REAL_INIT(&eps);
-        LMMC_REAL_SET_D(&eps, 1e-15);
-        LMMC_REAL_INIT(&abs_lu);
-        lmmc_abs_inplace(&abs_lu, &lu->data[i * lu->stride + i]);
+        lmmc_abs_to(&abs_lu, &lu->data[i * lu->stride + i]);
         
         if (LMMC_REAL_CMP(&abs_lu, &eps) <= 0) {
             LMMC_REAL_CLEAR(&abs_lu);
             LMMC_REAL_CLEAR(&eps);
             return LMMC_STATUS_SINGULAR_MATRIX;
         }
-        LMMC_REAL_CLEAR(&abs_lu);
-        LMMC_REAL_CLEAR(&eps);
         
         LMMC_REAL_DIV(&x->data[i], &x->data[i], &lu->data[i * lu->stride + i]);
     }
+    
+    LMMC_REAL_CLEAR(&abs_lu);
+    LMMC_REAL_CLEAR(&eps);
 
     return LMMC_STATUS_OK;
 }
@@ -449,11 +451,15 @@ lmmc_status_t lmmc_qr_solve(const lmmc_mat_t* qr, const lmmc_real_t* tau, const 
         LMMC_REAL_CLEAR(&dot);
     }
 
+    lmmc_real_t eps;
+    lmmc_real_t abs_qr;
+    LMMC_REAL_INIT(&eps);
+    LMMC_REAL_SET_D(&eps, 1e-15);
+    LMMC_REAL_INIT(&abs_qr);
+
     for (k = n; k-- > 0;) {
         size_t j = 0;
         lmmc_real_t rhs;
-        lmmc_real_t eps;
-        lmmc_real_t abs_qr;
         
         LMMC_REAL_INIT(&rhs);
         LMMC_REAL_SET(&rhs, &y[k]);
@@ -465,10 +471,7 @@ lmmc_status_t lmmc_qr_solve(const lmmc_mat_t* qr, const lmmc_real_t* tau, const 
             LMMC_REAL_CLEAR(&tmp);
         }
         
-        LMMC_REAL_INIT(&eps);
-        LMMC_REAL_SET_D(&eps, 1e-15);
-        LMMC_REAL_INIT(&abs_qr);
-        lmmc_abs_inplace(&abs_qr, &qr->data[k * qr->stride + k]);
+        lmmc_abs_to(&abs_qr, &qr->data[k * qr->stride + k]);
         
         if (LMMC_REAL_CMP(&abs_qr, &eps) <= 0) {
             size_t c = 0;
@@ -481,12 +484,13 @@ lmmc_status_t lmmc_qr_solve(const lmmc_mat_t* qr, const lmmc_real_t* tau, const 
             lmmc_free(y);
             return LMMC_STATUS_SINGULAR_MATRIX;
         }
-        LMMC_REAL_CLEAR(&abs_qr);
-        LMMC_REAL_CLEAR(&eps);
         
         LMMC_REAL_DIV(&x->data[k], &rhs, &qr->data[k * qr->stride + k]);
         LMMC_REAL_CLEAR(&rhs);
     }
+    
+    LMMC_REAL_CLEAR(&abs_qr);
+    LMMC_REAL_CLEAR(&eps);
 
     for (k = 0; k < m; ++k) {
         LMMC_REAL_CLEAR(&y[k]);

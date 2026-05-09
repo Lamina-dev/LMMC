@@ -16,9 +16,9 @@ int main(void) {
     // 1. Create a dense matrix and convert to CSR
     st = lmmc_mat_create(3, 3, &dense);
     if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
-    dense.data[0] = 1.0; dense.data[1] = 0.0; dense.data[2] = 2.0;
-    dense.data[3] = 3.0; dense.data[4] = 4.0; dense.data[5] = 0.0;
-    dense.data[6] = 0.0; dense.data[7] = 5.0; dense.data[8] = 6.0;
+    LMMC_REAL_SET_D(&dense.data[0], 1.0); LMMC_REAL_SET_D(&dense.data[1], 0.0); LMMC_REAL_SET_D(&dense.data[2], 2.0);
+    LMMC_REAL_SET_D(&dense.data[3], 3.0); LMMC_REAL_SET_D(&dense.data[4], 4.0); LMMC_REAL_SET_D(&dense.data[5], 0.0);
+    LMMC_REAL_SET_D(&dense.data[6], 0.0); LMMC_REAL_SET_D(&dense.data[7], 5.0); LMMC_REAL_SET_D(&dense.data[8], 6.0);
 
     st = lmmc_sparse_from_dense(&dense, 1e-14, &csr);
     if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
@@ -41,7 +41,7 @@ int main(void) {
     st = lmmc_vec_create(3, &x);
     st = lmmc_vec_create(3, &y_csr);
     st = lmmc_vec_create(3, &y_csc);
-    x.data[0] = 1.0; x.data[1] = 1.0; x.data[2] = 1.0;
+    LMMC_REAL_SET_D(&x.data[0], 1.0); LMMC_REAL_SET_D(&x.data[1], 1.0); LMMC_REAL_SET_D(&x.data[2], 1.0);
 
     st = lmmc_sparse_mat_vec_mul(&csr, &x, &y_csr);
     st = lmmc_sparse_mat_vec_mul(&csc, &x, &y_csc);

@@ -20,11 +20,16 @@ int main(void) {
        [ 0.0  3.0  0.0 ]
        [ 4.0  0.0  5.0 ]
     */
-    lmmc_sparse_builder_add(builder, 2, 2, 5.0);
-    lmmc_sparse_builder_add(builder, 0, 0, 1.0);
-    lmmc_sparse_builder_add(builder, 1, 1, 3.0);
-    lmmc_sparse_builder_add(builder, 0, 2, 2.0);
-    lmmc_sparse_builder_add(builder, 2, 0, 4.0);
+    st = lmmc_sparse_builder_add(builder, 2, 2, 5.0);
+    if (st != LMMC_STATUS_OK) {  goto cleanup; }
+    st = lmmc_sparse_builder_add(builder, 0, 0, 1.0);
+    if (st != LMMC_STATUS_OK) {  goto cleanup; }
+    st = lmmc_sparse_builder_add(builder, 1, 1, 3.0);
+    if (st != LMMC_STATUS_OK) {  goto cleanup; }
+    st = lmmc_sparse_builder_add(builder, 0, 2, 2.0);
+    if (st != LMMC_STATUS_OK) {  goto cleanup; }
+    st = lmmc_sparse_builder_add(builder, 2, 0, 4.0);
+    if (st != LMMC_STATUS_OK) {  goto cleanup; }
 
     /* 3. Build CSR matrix */
     st = lmmc_sparse_builder_build(builder, LMMC_SPARSE_CSR, &sparse);
@@ -60,11 +65,16 @@ int main(void) {
     assert(dense.data[2 * dense.stride + 1] == 0.0);
     assert(dense.data[2 * dense.stride + 2] == 5.0);
 
-    /* Cleanup */
+    cleanup:
     lmmc_mat_destroy(&dense);
     lmmc_sparse_destroy(&sparse);
     lmmc_sparse_builder_destroy(builder);
 
-    printf("Sparse Builder Test Passed!\n");
-    return 0;
+    if (st == LMMC_STATUS_OK) {
+        printf("Sparse Builder Test Passed!\n");
+        return 0;
+    } else {
+        printf("Sparse Builder Test Failed!\n");
+        return 1;
+    }
 }

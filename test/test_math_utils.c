@@ -43,7 +43,7 @@ int main(void) {
     TEST_ASSERT(lmmc_log1p(1e-10, &val) == LMMC_STATUS_OK);
 
     // Manipulation
-    TEST_ASSERT(lmmc_modf(3.14, &val, &val2) == LMMC_STATUS_OK && val == 3.0 && fabs(val2 - 0.14) < 1e-15);
+    TEST_ASSERT(lmmc_split_int_frac(3.14, &val, &val2) == LMMC_STATUS_OK && val == 3.0 && fabs(val2 - 0.14) < 1e-15);
     TEST_ASSERT(lmmc_fmod(5.3, 2.0, &val) == LMMC_STATUS_OK && fabs(val - 1.3) < 1e-15);
     TEST_ASSERT(lmmc_ldexp(0.5, 3, &val) == LMMC_STATUS_OK && val == 4.0);
     TEST_ASSERT(lmmc_nextafter(1.0, 2.0, &val) == LMMC_STATUS_OK && val > 1.0);

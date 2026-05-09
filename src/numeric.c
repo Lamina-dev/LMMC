@@ -193,7 +193,7 @@ lmmc_status_t lmmc_log1p(lmmc_real_t x, lmmc_real_t* out_res) {
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_modf(lmmc_real_t x, lmmc_real_t* out_iptr, lmmc_real_t* out_frac) {
+lmmc_status_t lmmc_split_int_frac(lmmc_real_t x, lmmc_real_t* out_iptr, lmmc_real_t* out_frac) {
     if (out_iptr == NULL || out_frac == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
     {
         double ip;

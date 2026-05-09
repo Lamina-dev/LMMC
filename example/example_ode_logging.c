@@ -2,7 +2,7 @@
 #include "lmmc/lmmc.h"
 
 // Custom ODE callback
-static void my_ode_logger(size_t step, double t, const double* y, size_t dim, void* user_data) {
+static void my_ode_logger(size_t step, lmmc_real_t t, const lmmc_real_t* y, size_t dim, void* user_data) {
     (void)user_data;
     printf("[Step %zu] Time = %.3f, State = [", step, t);
     for (size_t i = 0; i < dim; ++i) {
@@ -12,7 +12,7 @@ static void my_ode_logger(size_t step, double t, const double* y, size_t dim, vo
 }
 
 // Simple RHS: y' = -y
-static lmmc_status_t decay_rhs(double t, const double* y, double* y_prime, size_t dim, void* user_data) {
+static lmmc_status_t decay_rhs(lmmc_real_t t, const lmmc_real_t* y, lmmc_real_t* y_prime, size_t dim, void* user_data) {
     (void)t; (void)user_data;
     for (size_t i = 0; i < dim; ++i) {
         y_prime[i] = -y[i];
@@ -23,7 +23,7 @@ static lmmc_status_t decay_rhs(double t, const double* y, double* y_prime, size_
 int main(void) {
     lmmc_ode_config_t cfg;
     lmmc_ode_result_t res;
-    double y[1] = {1.0}; // Initial condition y(0) = 1
+    lmmc_real_t y[1] = {1.0}; // Initial condition y(0) = 1
     lmmc_status_t st;
 
     lmmc_ode_default_config(0.0, 1.0, 1, &cfg);

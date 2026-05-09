@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 
-static double lmmc_example_fn(double x, void* user_data) {
+static double lmmc_example_fn(lmmc_real_t x, void* user_data) {
     (void)user_data;
     return x * x * x - x - 2.0;
 }

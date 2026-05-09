@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -128,6 +129,7 @@ int main(void) {
 
     mp_bitcnt_t fac_bits = 0;
     rn = lmmp_factorial_size_(10, &fac_bits);
+    assert(rn > 0);
     limbs = (mp_ptr)lmmp_alloc((size_t)rn * sizeof(mp_limb_t));
     CHECK_OR_FAIL("factorial_alloc", limbs != NULL);
     an = lmmp_factorial_(limbs, fac_bits, rn, 10);

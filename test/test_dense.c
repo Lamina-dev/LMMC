@@ -16,7 +16,9 @@ int main(void) {
     lmmc_mat_t a_copy = {0};
     lmmc_vec_t v2 = {0};
     lmmc_vec_t v_wrap = {0};
-    lmmc_real_t wrap_data[2] = {5.0, 6.0};
+    lmmc_real_t wrap_data[2];
+    LMMC_REAL_INIT(&wrap_data[0]); LMMC_REAL_SET_D(&wrap_data[0], 5.0);
+    LMMC_REAL_INIT(&wrap_data[1]); LMMC_REAL_SET_D(&wrap_data[1], 6.0);
 
     st = lmmc_mat_create(2, 2, &a);
     if (st != LMMC_STATUS_OK) {
@@ -34,11 +36,11 @@ int main(void) {
         goto cleanup;
     }
 
-    a.data[0] = 1.0; a.data[1] = 2.0;
-    a.data[2] = 3.0; a.data[3] = 4.0;
+    LMMC_REAL_SET_D(&a.data[0], 1.0); LMMC_REAL_SET_D(&a.data[1], 2.0);
+    LMMC_REAL_SET_D(&a.data[2], 3.0); LMMC_REAL_SET_D(&a.data[3], 4.0);
 
-    b.data[0] = 2.0; b.data[1] = 0.0;
-    b.data[2] = 1.0; b.data[3] = 2.0;
+    LMMC_REAL_SET_D(&b.data[0], 2.0); LMMC_REAL_SET_D(&b.data[1], 0.0);
+    LMMC_REAL_SET_D(&b.data[2], 1.0); LMMC_REAL_SET_D(&b.data[3], 2.0);
 
     st = lmmc_mat_mul(&a, &b, &c);
     if (st != LMMC_STATUS_OK) {

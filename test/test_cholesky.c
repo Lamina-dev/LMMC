@@ -20,9 +20,9 @@ int main(void) {
     st = lmmc_mat_create(3, 3, &a);
     if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
     
-    a.data[0] = 4.0;  a.data[1] = 12.0; a.data[2] = -16.0;
-    a.data[3] = 12.0; a.data[4] = 37.0; a.data[5] = -43.0;
-    a.data[6] = -16.0; a.data[7] = -43.0; a.data[8] = 98.0;
+    LMMC_REAL_SET_D(&a.data[0], 4.0);  LMMC_REAL_SET_D(&a.data[1], 12.0); LMMC_REAL_SET_D(&a.data[2], -16.0);
+    LMMC_REAL_SET_D(&a.data[3], 12.0); LMMC_REAL_SET_D(&a.data[4], 37.0); LMMC_REAL_SET_D(&a.data[5], -43.0);
+    LMMC_REAL_SET_D(&a.data[6], -16.0); LMMC_REAL_SET_D(&a.data[7], -43.0); LMMC_REAL_SET_D(&a.data[8], 98.0);
 
     st = lmmc_cholesky_decompose_inplace(&a);
     if (st != LMMC_STATUS_OK) {
@@ -53,9 +53,9 @@ int main(void) {
     st = lmmc_vec_create(3, &x);
     if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
 
-    b.data[0] = -20.0;
-    b.data[1] = -43.0;
-    b.data[2] = 192.0;
+    LMMC_REAL_SET_D(&b.data[0], -20.0);
+    LMMC_REAL_SET_D(&b.data[1], -43.0);
+    LMMC_REAL_SET_D(&b.data[2], 192.0);
 
     st = lmmc_cholesky_solve(&a, &b, &x);
     if (st != LMMC_STATUS_OK) {
@@ -75,8 +75,9 @@ int main(void) {
     // Test 3: Non-positive definite matrix
     lmmc_mat_t a_npd = {0};
     st = lmmc_mat_create(2, 2, &a_npd);
-    a_npd.data[0] = 1.0; a_npd.data[1] = 2.0;
-    a_npd.data[2] = 2.0; a_npd.data[3] = 1.0; // Det = 1 - 4 = -3
+    if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
+    LMMC_REAL_SET_D(&a_npd.data[0], 1.0); LMMC_REAL_SET_D(&a_npd.data[1], 2.0);
+    LMMC_REAL_SET_D(&a_npd.data[2], 2.0); LMMC_REAL_SET_D(&a_npd.data[3], 1.0); // Det = 1 - 4 = -3
     st = lmmc_cholesky_decompose_inplace(&a_npd);
     if (st != LMMC_STATUS_NUMERICAL_FAILURE) {
         printf("Expected NUMERICAL_FAILURE for non-positive definite matrix, got %s\n", lmmc_status_string(st));

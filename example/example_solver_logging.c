@@ -55,6 +55,11 @@ int main(void) {
     printf("Starting BiCGSTAB solve with built-in verbose logging:\n");
     st = lmmc_bicgstab_solve(&a, &b, NULL, &cfg, &x, &res);
 
+    if (st == LMMC_STATUS_OK && res.converged) {
+        printf("\nConvergence reached in %zu iterations.\n", res.num_iter);
+        printf("Final residual: %.4e\n\n", res.final_residual_norm);
+    }
+
     // Cleanup
     lmmc_vec_destroy(&x);
     lmmc_vec_destroy(&b);

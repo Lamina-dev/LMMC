@@ -25,7 +25,7 @@ typedef double lmmc_real_t;
 #define LMMC_REAL_CMP(a, b)         ((*(a) > *(b)) ? 1 : ((*(a) < *(b)) ? -1 : 0))
 #define LMMC_REAL_IS_FINITE(x)      isfinite(*(x))
 
-#define LMMC_REAL_EPSILON  1e-15
-#define LMMC_CONST_PI  3.14159265358979323846
+#define LMMC_REAL_EPSILON  ((lmmc_real_t)1e-15)
+#define LMMC_CONST_PI      ((lmmc_real_t)3.14159265358979323846)
 
 #endif

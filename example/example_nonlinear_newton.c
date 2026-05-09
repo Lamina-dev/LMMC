@@ -2,12 +2,12 @@
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 
-static double lmmc_example_fn(double x, void* user_data) {
+static double lmmc_example_fn(lmmc_real_t x, void* user_data) {
     (void)user_data;
     return cos(x) - x;
 }
 
-static double lmmc_example_dfn(double x, void* user_data) {
+static double lmmc_example_dfn(lmmc_real_t x, void* user_data) {
     (void)user_data;
     return -sin(x) - 1.0;
 }

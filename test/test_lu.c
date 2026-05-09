@@ -30,12 +30,12 @@ int main(void) {
         goto cleanup;
     }
 
-    a.data[0] = 3.0; a.data[1] = 2.0; a.data[2] = -1.0;
-    a.data[3] = 2.0; a.data[4] = -2.0; a.data[5] = 4.0;
-    a.data[6] = -1.0; a.data[7] = 0.5; a.data[8] = -1.0;
-    b.data[0] = 1.0;
-    b.data[1] = -2.0;
-    b.data[2] = 0.0;
+    LMMC_REAL_SET_D(&a.data[0], 3.0); LMMC_REAL_SET_D(&a.data[1], 2.0); LMMC_REAL_SET_D(&a.data[2], -1.0);
+    LMMC_REAL_SET_D(&a.data[3], 2.0); LMMC_REAL_SET_D(&a.data[4], -2.0); LMMC_REAL_SET_D(&a.data[5], 4.0);
+    LMMC_REAL_SET_D(&a.data[6], -1.0); LMMC_REAL_SET_D(&a.data[7], 0.5); LMMC_REAL_SET_D(&a.data[8], -1.0);
+    LMMC_REAL_SET_D(&b.data[0], 1.0);
+    LMMC_REAL_SET_D(&b.data[1], -2.0);
+    LMMC_REAL_SET_D(&b.data[2], 0.0);
 
     st = lmmc_lu_decompose_inplace(&a, piv, NULL);
     if (st != LMMC_STATUS_OK) {
@@ -60,8 +60,8 @@ int main(void) {
         rc = 1;
         goto cleanup;
     }
-    singular.data[0] = 1.0; singular.data[1] = 2.0;
-    singular.data[2] = 2.0; singular.data[3] = 4.0;
+    LMMC_REAL_SET_D(&singular.data[0], 1.0); LMMC_REAL_SET_D(&singular.data[1], 2.0);
+    LMMC_REAL_SET_D(&singular.data[2], 2.0); LMMC_REAL_SET_D(&singular.data[3], 4.0);
     st = lmmc_lu_decompose_inplace(&singular, piv2, NULL);
     if (st != LMMC_STATUS_SINGULAR_MATRIX) {
         rc = 1;

@@ -3,17 +3,17 @@
 #include "lmmc/lmmc.h"
 
 // 1. Define a custom callback for nonlinear solver
-static void my_nonlinear_logger(size_t iter, double x, double f_x, void* user_data) {
+static void my_nonlinear_logger(size_t iter, lmmc_real_t x, lmmc_real_t f_x, void* user_data) {
     const char* prefix = (const char*)user_data;
     printf("[%s] Step %zu: root_guess = %.6f, error = %.3e\n", prefix, iter, x, f_x);
 }
 
-static double my_function(double x, void* user_data) {
+static double my_function(lmmc_real_t x, void* user_data) {
     (void)user_data;
     return x * x - 2.0; // Finding sqrt(2)
 }
 
-static double my_derivative(double x, void* user_data) {
+static double my_derivative(lmmc_real_t x, void* user_data) {
     (void)user_data;
     return 2.0 * x;
 }

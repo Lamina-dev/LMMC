@@ -2,18 +2,29 @@
 #define LMMC_NUMERIC_H
 
 #include <stddef.h>
+#include "lmmc/config.h"
 #include "lmmc/status.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define LMMC_PI 3.14159265358979323846
-#define LMMC_INV_PI 0.31830988618379067154
-#define LMMC_SQRT2 1.41421356237309504880
+#ifndef LMMC_PI
+#define LMMC_PI (3.14159265358979323846)
+#endif
+#ifndef LMMC_INV_PI
+#define LMMC_INV_PI (0.31830988618379067154)
+#endif
+#ifndef LMMC_SQRT2
+#define LMMC_SQRT2 (1.41421356237309504880)
+#endif
 
+#ifndef LMMC_DEFAULT_ABS_TOL
 #define LMMC_DEFAULT_ABS_TOL 1e-12
+#endif
+#ifndef LMMC_DEFAULT_REL_TOL
 #define LMMC_DEFAULT_REL_TOL 1e-10
+#endif
 
 /* Constants */
 lmmc_status_t lmmc_inf(lmmc_real_t* out_inf);
@@ -38,7 +49,7 @@ lmmc_status_t lmmc_expm1(lmmc_real_t x, lmmc_real_t* out_res);
 lmmc_status_t lmmc_log1p(lmmc_real_t x, lmmc_real_t* out_res);
 
 /* Float Manipulation */
-lmmc_status_t lmmc_modf(lmmc_real_t x, lmmc_real_t* out_iptr, lmmc_real_t* out_frac);
+lmmc_status_t lmmc_split_int_frac(lmmc_real_t x, lmmc_real_t* out_iptr, lmmc_real_t* out_frac);
 lmmc_status_t lmmc_fmod(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out_res);
 lmmc_status_t lmmc_ldexp(lmmc_real_t x, int exp, lmmc_real_t* out_res);
 lmmc_status_t lmmc_nextafter(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out_res);

@@ -44,15 +44,15 @@ int main(void) {
         goto cleanup;
     }
 
-    a.data[0] = 1.0; a.data[1] = 0.0;
-    a.data[2] = 1.0; a.data[3] = 1.0;
-    a.data[4] = 1.0; a.data[5] = 2.0;
-    a.data[6] = 1.0; a.data[7] = 3.0;
+    LMMC_REAL_SET_D(&a.data[0], 1.0); LMMC_REAL_SET_D(&a.data[1], 0.0);
+    LMMC_REAL_SET_D(&a.data[2], 1.0); LMMC_REAL_SET_D(&a.data[3], 1.0);
+    LMMC_REAL_SET_D(&a.data[4], 1.0); LMMC_REAL_SET_D(&a.data[5], 2.0);
+    LMMC_REAL_SET_D(&a.data[6], 1.0); LMMC_REAL_SET_D(&a.data[7], 3.0);
 
-    b.data[0] = 1.0;
-    b.data[1] = 3.0;
-    b.data[2] = 5.0;
-    b.data[3] = 7.0;
+    LMMC_REAL_SET_D(&b.data[0], 1.0);
+    LMMC_REAL_SET_D(&b.data[1], 3.0);
+    LMMC_REAL_SET_D(&b.data[2], 5.0);
+    LMMC_REAL_SET_D(&b.data[3], 7.0);
 
     st = lmmc_qr_decompose_inplace(&a, tau, 2);
     if (st != LMMC_STATUS_OK) {
@@ -99,13 +99,13 @@ int main(void) {
         goto cleanup;
     }
 
-    singular_qr.data[0] = 1.0; singular_qr.data[1] = 2.0;
-    singular_qr.data[2] = 0.0; singular_qr.data[3] = 0.0;
-    singular_qr.data[4] = 0.0; singular_qr.data[5] = 0.0;
+    LMMC_REAL_SET_D(&singular_qr.data[0], 1.0); LMMC_REAL_SET_D(&singular_qr.data[1], 2.0);
+    LMMC_REAL_SET_D(&singular_qr.data[2], 0.0); LMMC_REAL_SET_D(&singular_qr.data[3], 0.0);
+    LMMC_REAL_SET_D(&singular_qr.data[4], 0.0); LMMC_REAL_SET_D(&singular_qr.data[5], 0.0);
 
-    singular_b.data[0] = 1.0;
-    singular_b.data[1] = 0.0;
-    singular_b.data[2] = 0.0;
+    LMMC_REAL_SET_D(&singular_b.data[0], 1.0);
+    LMMC_REAL_SET_D(&singular_b.data[1], 0.0);
+    LMMC_REAL_SET_D(&singular_b.data[2], 0.0);
 
     st = lmmc_qr_decompose_inplace(&singular_qr, tau_singular, 2);
     if (st != LMMC_STATUS_OK) {

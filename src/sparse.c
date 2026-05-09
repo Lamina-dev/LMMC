@@ -666,8 +666,11 @@ cleanup:
 
 lmmc_status_t lmmc_sparse_to_csc(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t* dst) {
     if (src == NULL || dst == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    lmmc_status_t st = lmmc_sparse_validate(src);
+    if (st != LMMC_STATUS_OK) return st;
+
     if (src->format == LMMC_SPARSE_CSC) {
-        lmmc_status_t st = lmmc_sparse_create_csc(src->rows, src->cols, src->nnz, dst);
+        st = lmmc_sparse_create_csc(src->rows, src->cols, src->nnz, dst);
         if (st != LMMC_STATUS_OK) return st;
         memcpy(dst->row_ptr, src->row_ptr, (src->cols + 1) * sizeof(size_t));
         if (src->nnz > 0) {
@@ -678,8 +681,8 @@ lmmc_status_t lmmc_sparse_to_csc(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
         }
         return LMMC_STATUS_OK;
     }
-    
-    lmmc_status_t st = lmmc_sparse_create_csc(src->rows, src->cols, src->nnz, dst);
+
+    st = lmmc_sparse_create_csc(src->rows, src->cols, src->nnz, dst);
     if (st != LMMC_STATUS_OK) return st;
 
     for (size_t p = 0; p < src->nnz; ++p) {
@@ -710,8 +713,11 @@ lmmc_status_t lmmc_sparse_to_csc(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
 
 lmmc_status_t lmmc_sparse_to_csr(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t* dst) {
     if (src == NULL || dst == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    lmmc_status_t st = lmmc_sparse_validate(src);
+    if (st != LMMC_STATUS_OK) return st;
+
     if (src->format == LMMC_SPARSE_CSR) {
-        lmmc_status_t st = lmmc_sparse_create_csr(src->rows, src->cols, src->nnz, dst);
+        st = lmmc_sparse_create_csr(src->rows, src->cols, src->nnz, dst);
         if (st != LMMC_STATUS_OK) return st;
         memcpy(dst->row_ptr, src->row_ptr, (src->rows + 1) * sizeof(size_t));
         if (src->nnz > 0) {
@@ -722,8 +728,8 @@ lmmc_status_t lmmc_sparse_to_csr(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
         }
         return LMMC_STATUS_OK;
     }
-    
-    lmmc_status_t st = lmmc_sparse_create_csr(src->rows, src->cols, src->nnz, dst);
+
+    st = lmmc_sparse_create_csr(src->rows, src->cols, src->nnz, dst);
     if (st != LMMC_STATUS_OK) return st;
 
     for (size_t p = 0; p < src->nnz; ++p) {
