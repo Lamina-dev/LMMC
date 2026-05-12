@@ -39,8 +39,8 @@ int main(void) {
     // Power and Log
     TEST_ASSERT(lmmc_exp2(3.0, &val) == LMMC_STATUS_OK && fabs(val - 8.0) < 1e5 * LMMC_REAL_EPSILON);
     TEST_ASSERT(lmmc_log2(8.0, &val) == LMMC_STATUS_OK && fabs(val - 3.0) < 1e5 * LMMC_REAL_EPSILON);
-    TEST_ASSERT(lmmc_expm1(1e-10, &val) == LMMC_STATUS_OK); // Just check status, exact value hard to type
-    TEST_ASSERT(lmmc_log1p(1e-10, &val) == LMMC_STATUS_OK);
+    TEST_ASSERT(lmmc_expm1(1e-10, &val) == LMMC_STATUS_OK && fabs(val - 1e-10) < 1e5 * LMMC_REAL_EPSILON);
+    TEST_ASSERT(lmmc_log1p(1e-10, &val) == LMMC_STATUS_OK && fabs(val - 1e-10) < 1e5 * LMMC_REAL_EPSILON);
 
     // Manipulation
     TEST_ASSERT(lmmc_split_int_frac(3.14, &val, &val2) == LMMC_STATUS_OK && val == 3.0 && fabs(val2 - 0.14) < 1e5 * LMMC_REAL_EPSILON);
@@ -49,8 +49,8 @@ int main(void) {
     TEST_ASSERT(lmmc_nextafter(1.0, 2.0, &val) == LMMC_STATUS_OK && val > 1.0);
 
     // Comparison
-    TEST_ASSERT(lmmc_approx_eq(1.0, 1.0001, 1e-3, &flag) == LMMC_STATUS_OK && flag == 1);
-    TEST_ASSERT(lmmc_approx_eq(1.0, 1.0001, 1e-5, &flag) == LMMC_STATUS_OK && flag == 0);
+    TEST_ASSERT(lmmc_approx_eq(1.0, 1.0 + 10.0 * LMMC_REAL_EPSILON, 20.0 * LMMC_REAL_EPSILON, &flag) == LMMC_STATUS_OK && flag == 1);
+    TEST_ASSERT(lmmc_approx_eq(1.0, 1.0 + 10.0 * LMMC_REAL_EPSILON, 5.0 * LMMC_REAL_EPSILON, &flag) == LMMC_STATUS_OK && flag == 0);
 
     printf("All math utility tests passed!\n");
     return 0;

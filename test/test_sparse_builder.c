@@ -12,7 +12,7 @@ int main(void) {
 
     /* 1. Create builder for a 3x3 matrix */
     st = lmmc_sparse_builder_create(3, 3, 4, &builder);
-    assert(st == LMMC_STATUS_OK);
+    if (st != LMMC_STATUS_OK) goto cleanup;
 
     /* 2. Add entries in random order */
     /*
@@ -34,8 +34,11 @@ int main(void) {
 
     /* 3. Build CSR matrix */
     st = lmmc_sparse_builder_build(builder, LMMC_SPARSE_CSR, &sparse);
-    assert(st == LMMC_STATUS_OK);
-    assert(sparse.nnz == 5);
+    if (st != LMMC_STATUS_OK) goto cleanup;
+    if (sparse.nnz != 5) {
+        st = LMMC_STATUS_DIMENSION_MISMATCH; // or another appropriate error
+        goto cleanup;
+    }
 
     /* 4. Verify entries */
     /* Note: Builder doesn't guarantee sorted columns within a row unless we add a sort step.

@@ -42,14 +42,15 @@ static lmmc_status_t test_rhs(lmmc_real_t t, const lmmc_real_t* y, lmmc_real_t* 
 int main(void) {
     {
         printf("Testing Nonlinear Logging Callback...\n");
-        lmmc_nonlinear_config_t cfg;
-        lmmc_nonlinear_result_t res;
+        lmmc_nonlinear_config_t cfg = {0};
+        lmmc_nonlinear_result_t res = {0};
         test_ctx_t ctx;
         ctx.count = 0;
         LMMC_REAL_INIT(&ctx.last_val);
         LMMC_REAL_SET_D(&ctx.last_val, 0.0);
         
-        lmmc_nonlinear_default_config(&cfg);
+        lmmc_status_t st_cfg = lmmc_nonlinear_default_config(&cfg);
+        assert(st_cfg == LMMC_STATUS_OK);
         cfg.log_cb = test_nonlinear_cb;
         cfg.log_user_data = &ctx;
         
@@ -62,8 +63,8 @@ int main(void) {
 
     {
         printf("Testing ODE Logging Callback...\n");
-        lmmc_ode_config_t cfg;
-        lmmc_ode_result_t res;
+        lmmc_ode_config_t cfg = {0};
+        lmmc_ode_result_t res = {0};
         test_ctx_t ctx;
         ctx.count = 0;
         LMMC_REAL_INIT(&ctx.last_val);
@@ -72,7 +73,8 @@ int main(void) {
         LMMC_REAL_INIT(&y[0]);
         LMMC_REAL_SET_D(&y[0], 0.0);
         
-        lmmc_ode_default_config(0.0, 1.0, 1, &cfg);
+        lmmc_status_t st_cfg = lmmc_ode_default_config(0.0, 1.0, 1, &cfg);
+        assert(st_cfg == LMMC_STATUS_OK);
         cfg.log_cb = test_ode_cb;
         cfg.log_user_data = &ctx;
         cfg.initial_step = 0.1;

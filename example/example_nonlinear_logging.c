@@ -8,12 +8,12 @@ static void my_nonlinear_logger(size_t iter, lmmc_real_t x, lmmc_real_t f_x, voi
     printf("[%s] Step %zu: root_guess = %.6f, error = %.3e\n", prefix, iter, x, f_x);
 }
 
-static double my_function(lmmc_real_t x, void* user_data) {
+static lmmc_real_t my_function(lmmc_real_t x, void* user_data) {
     (void)user_data;
     return x * x - 2.0; // Finding sqrt(2)
 }
 
-static double my_derivative(lmmc_real_t x, void* user_data) {
+static lmmc_real_t my_derivative(lmmc_real_t x, void* user_data) {
     (void)user_data;
     return 2.0 * x;
 }
@@ -52,7 +52,7 @@ int main(void) {
         printf("\n\n");
     }
 
-    printf("--- Part 2: Custom Callback Logging ---\n");
+    printf("--- Part 3: Custom Callback Logging ---\n");
     cfg.verbose = 0; // Disable built-in printf
     cfg.log_cb = my_nonlinear_logger;
     cfg.log_user_data = (void*)"CustomSolver";
