@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -126,27 +127,31 @@ int main(void) {
 
     CHECK_OR_FAIL("version", LAMMP_VERSION[0] != '\0' && LAMMP_COMPILER[0] != '\0');
 
-    rn = lmmp_factorial_size_(10);
+    mp_bitcnt_t fac_bits = 0;
+    rn = lmmp_factorial_size_(10, &fac_bits);
+    assert(rn > 0);
     limbs = (mp_ptr)lmmp_alloc((size_t)rn * sizeof(mp_limb_t));
     CHECK_OR_FAIL("factorial_alloc", limbs != NULL);
-    an = lmmp_factorial_(limbs, rn, 10);
+    an = lmmp_factorial_(limbs, fac_bits, rn, 10);
     CHECK_OR_FAIL("factorial_to_text", lmmp_bigint_to_text(limbs, an, 10, &factorial_text) == 0);
     CHECK_OR_FAIL("factorial_text", strcmp(factorial_text, "3628800") == 0);
     lmmp_free(limbs);
     limbs = NULL;
 
-    rn = lmmp_nPr_size_(10, 3);
+    mp_bitcnt_t npr_bits = 0;
+    rn = lmmp_nPr_size_(10, 3, &npr_bits);
     limbs = (mp_ptr)lmmp_alloc((size_t)rn * sizeof(mp_limb_t));
     CHECK_OR_FAIL("npr_alloc", limbs != NULL);
-    an = lmmp_nPr_(limbs, rn, 10, 3);
+    an = lmmp_nPr_(limbs, npr_bits, rn, 10, 3);
     CHECK_OR_FAIL("npr_text", lmmp_bigint_to_text(limbs, an, 10, &npr_text) == 0 && strcmp(npr_text, "720") == 0);
     lmmp_free(limbs);
     limbs = NULL;
 
-    rn = lmmp_nCr_size_(10, 3);
+    mp_bitcnt_t ncr_bits = 0;
+    rn = lmmp_nCr_size_(10, 3, &ncr_bits);
     limbs = (mp_ptr)lmmp_alloc((size_t)rn * sizeof(mp_limb_t));
     CHECK_OR_FAIL("ncr_alloc", limbs != NULL);
-    an = lmmp_nCr_(limbs, rn, 10, 3);
+    an = lmmp_nCr_(limbs, ncr_bits, rn, 10, 3);
     CHECK_OR_FAIL("ncr_text", lmmp_bigint_to_text(limbs, an, 10, &ncr_text) == 0 && strcmp(ncr_text, "120") == 0);
     lmmp_free(limbs);
     limbs = NULL;

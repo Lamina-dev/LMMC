@@ -6,7 +6,7 @@ static double lmmc_pi_value(void) {
     return 3.14159265358979323846;
 }
 
-static lmmc_status_t rhs_harmonic(double t, const double* y, double* y_prime, size_t dim, void* user_data) {
+static lmmc_status_t rhs_harmonic(lmmc_real_t t, const lmmc_real_t* y, lmmc_real_t* y_prime, size_t dim, void* user_data) {
     (void)t;
     (void)user_data;
     if (dim != 2) {

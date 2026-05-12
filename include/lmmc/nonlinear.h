@@ -8,8 +8,8 @@
 extern "C" {
 #endif
 
-typedef double (*lmmc_scalar_func_t)(double x, void* user_data);
-typedef double (*lmmc_scalar_dfunc_t)(double x, void* user_data);
+typedef lmmc_real_t (*lmmc_scalar_func_t)(lmmc_real_t x, void* user_data);
+typedef lmmc_real_t (*lmmc_scalar_dfunc_t)(lmmc_real_t x, void* user_data);
 
 typedef enum {
     LMMC_NONLINEAR_FAILURE_NONE = 0,
@@ -21,23 +21,32 @@ typedef enum {
 } lmmc_nonlinear_failure_t;
 
 typedef struct {
-    double abs_tol;
-    double rel_tol;
-    size_t max_iter;
-    double derivative_step;
-    double min_derivative;
-    double min_step;
-    int verbose;
-} lmmc_nonlinear_config_t;
-
-typedef struct {
     int converged;
     size_t num_iter;
-    double root;
-    double function_value;
-    double residual_norm;
+    lmmc_real_t root;
+    lmmc_real_t function_value;
+    lmmc_real_t residual_norm;
     lmmc_nonlinear_failure_t failure_reason;
 } lmmc_nonlinear_result_t;
+
+typedef void (*lmmc_nonlinear_log_callback_t)(
+    size_t iter,
+    lmmc_real_t x,
+    lmmc_real_t f_x,
+    void* user_data
+);
+
+typedef struct {
+    lmmc_real_t abs_tol;
+    lmmc_real_t rel_tol;
+    size_t max_iter;
+    lmmc_real_t derivative_step;
+    lmmc_real_t min_derivative;
+    lmmc_real_t min_step;
+    int verbose;
+    lmmc_nonlinear_log_callback_t log_cb;
+    void* log_user_data;
+} lmmc_nonlinear_config_t;
 
 const char* lmmc_nonlinear_failure_string(lmmc_nonlinear_failure_t reason);
 
@@ -46,8 +55,8 @@ lmmc_status_t lmmc_nonlinear_default_config(lmmc_nonlinear_config_t* out_cfg);
 lmmc_status_t lmmc_bisection_solve(
     lmmc_scalar_func_t func,
     void* user_data,
-    double left,
-    double right,
+    lmmc_real_t left,
+    lmmc_real_t right,
     const lmmc_nonlinear_config_t* cfg,
     lmmc_nonlinear_result_t* out_result
 );
@@ -56,7 +65,7 @@ lmmc_status_t lmmc_newton_solve(
     lmmc_scalar_func_t func,
     lmmc_scalar_dfunc_t dfunc,
     void* user_data,
-    double x0,
+    lmmc_real_t x0,
     const lmmc_nonlinear_config_t* cfg,
     lmmc_nonlinear_result_t* out_result
 );
@@ -64,8 +73,8 @@ lmmc_status_t lmmc_newton_solve(
 lmmc_status_t lmmc_secant_solve(
     lmmc_scalar_func_t func,
     void* user_data,
-    double x0,
-    double x1,
+    lmmc_real_t x0,
+    lmmc_real_t x1,
     const lmmc_nonlinear_config_t* cfg,
     lmmc_nonlinear_result_t* out_result
 );

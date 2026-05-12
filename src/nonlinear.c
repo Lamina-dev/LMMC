@@ -1,16 +1,46 @@
 #include <math.h>
+#include <stdio.h>
+#include "lmmc/config.h"
 #include "lmmc/nonlinear.h"
 
-static int lmmc_is_finite_number(double v) {
+static int lmmc_is_finite_number(lmmc_real_t v) {
     return isfinite(v) ? 1 : 0;
 }
 
-static double lmmc_absd(double x) {
+static lmmc_real_t lmmc_absd(lmmc_real_t x) {
     return x < 0.0 ? -x : x;
 }
 
-static double lmmc_maxd(double a, double b) {
+static lmmc_real_t lmmc_maxd(lmmc_real_t a, lmmc_real_t b) {
     return a > b ? a : b;
+}
+
+static void lmmc_nonlinear_do_log(const lmmc_nonlinear_config_t* cfg, size_t iter, lmmc_real_t x, lmmc_real_t f_x) {
+    if (cfg->log_cb != NULL) {
+        cfg->log_cb(iter, x, f_x, cfg->log_user_data);
+    } else if (cfg->verbose) {
+        printf("Iteration %zu: x = %.10e, f(x) = %.10e\n", iter, x, f_x);
+    }
+}
+
+static void lmmc_abs_inplace(lmmc_real_t* res, const lmmc_real_t* x) {
+    lmmc_real_t zero;
+    LMMC_REAL_INIT(&zero);
+    LMMC_REAL_SET_D(&zero, 0.0);
+    if (LMMC_REAL_CMP(x, &zero) < 0) {
+        LMMC_REAL_NEG(res, x);
+    } else {
+        LMMC_REAL_SET(res, x);
+    }
+    LMMC_REAL_CLEAR(&zero);
+}
+
+static void lmmc_max_inplace(lmmc_real_t* res, const lmmc_real_t* a, const lmmc_real_t* b) {
+    if (LMMC_REAL_CMP(a, b) > 0) {
+        LMMC_REAL_SET(res, a);
+    } else {
+        LMMC_REAL_SET(res, b);
+    }
 }
 
 static lmmc_status_t lmmc_nonlinear_load_and_validate_config(
@@ -42,12 +72,12 @@ static lmmc_status_t lmmc_nonlinear_load_and_validate_config(
 }
 
 static lmmc_status_t lmmc_nonlinear_x_tolerance(
-    double x,
+    lmmc_real_t x,
     const lmmc_nonlinear_config_t* cfg,
-    double* out_x_tol
+    lmmc_real_t* out_x_tol
 ) {
-    double x_scale = 0.0;
-    double x_tol = 0.0;
+    lmmc_real_t x_scale = 0.0;
+    lmmc_real_t x_tol = 0.0;
 
     if (cfg == NULL || out_x_tol == NULL || !lmmc_is_finite_number(x)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
@@ -108,20 +138,22 @@ lmmc_status_t lmmc_nonlinear_default_config(lmmc_nonlinear_config_t* out_cfg) {
     out_cfg->min_derivative = 1e-14;
     out_cfg->min_step = 1e-14;
     out_cfg->verbose = 0;
+    out_cfg->log_cb = NULL;
+    out_cfg->log_user_data = NULL;
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_bisection_solve(
     lmmc_scalar_func_t func,
     void* user_data,
-    double left,
-    double right,
+    lmmc_real_t left,
+    lmmc_real_t right,
     const lmmc_nonlinear_config_t* cfg,
     lmmc_nonlinear_result_t* out_result
 ) {
     lmmc_nonlinear_config_t local_cfg = {0};
-    double f_left = 0.0;
-    double f_right = 0.0;
+    lmmc_real_t f_left = 0.0;
+    lmmc_real_t f_right = 0.0;
     size_t iter = 0;
 
     if (func == NULL || out_result == NULL) {
@@ -160,6 +192,8 @@ lmmc_status_t lmmc_bisection_solve(
     out_result->function_value = f_left;
     out_result->residual_norm = lmmc_absd(f_left);
 
+    lmmc_nonlinear_do_log(&local_cfg, 0, out_result->root, out_result->function_value);
+
     if (lmmc_absd(f_left) <= local_cfg.abs_tol) {
         out_result->converged = 1;
         return LMMC_STATUS_OK;
@@ -170,6 +204,7 @@ lmmc_status_t lmmc_bisection_solve(
         out_result->root = right;
         out_result->function_value = f_right;
         out_result->residual_norm = lmmc_absd(f_right);
+        lmmc_nonlinear_do_log(&local_cfg, 0, out_result->root, out_result->function_value);
         return LMMC_STATUS_OK;
     }
 
@@ -179,11 +214,11 @@ lmmc_status_t lmmc_bisection_solve(
     }
 
     for (iter = 1; iter <= local_cfg.max_iter; ++iter) {
-        double mid = 0.5 * (left + right);
-        double f_mid = func(mid, user_data);
-        double interval_width = right - left;
-        double x_scale = lmmc_maxd(lmmc_absd(mid), 1.0);
-        double x_tol = local_cfg.abs_tol + local_cfg.rel_tol * x_scale;
+        lmmc_real_t mid = 0.5 * (left + right);
+        lmmc_real_t f_mid = func(mid, user_data);
+        lmmc_real_t interval_width = right - left;
+        lmmc_real_t x_scale = lmmc_maxd(lmmc_absd(mid), 1.0);
+        lmmc_real_t x_tol = local_cfg.abs_tol + local_cfg.rel_tol * x_scale;
 
         if (!lmmc_is_finite_number(mid) || !lmmc_is_finite_number(f_mid) ||
             !lmmc_is_finite_number(interval_width) || !lmmc_is_finite_number(x_tol)) {
@@ -196,6 +231,8 @@ lmmc_status_t lmmc_bisection_solve(
         out_result->root = mid;
         out_result->function_value = f_mid;
         out_result->residual_norm = lmmc_absd(f_mid);
+
+        lmmc_nonlinear_do_log(&local_cfg, iter, out_result->root, out_result->function_value);
 
         if (lmmc_absd(f_mid) <= local_cfg.abs_tol || 0.5 * interval_width <= x_tol) {
             out_result->converged = 1;
@@ -221,13 +258,13 @@ lmmc_status_t lmmc_newton_solve(
     lmmc_scalar_func_t func,
     lmmc_scalar_dfunc_t dfunc,
     void* user_data,
-    double x0,
+    lmmc_real_t x0,
     const lmmc_nonlinear_config_t* cfg,
     lmmc_nonlinear_result_t* out_result
 ) {
     lmmc_nonlinear_config_t local_cfg = {0};
-    double x = x0;
-    double fx = 0.0;
+    lmmc_real_t x = x0;
+    lmmc_real_t fx = 0.0;
     size_t iter = 0;
 
     if (func == NULL || out_result == NULL || !lmmc_is_finite_number(x0)) {
@@ -253,6 +290,8 @@ lmmc_status_t lmmc_newton_solve(
     out_result->function_value = fx;
     out_result->residual_norm = lmmc_absd(fx);
 
+    lmmc_nonlinear_do_log(&local_cfg, 0, out_result->root, out_result->function_value);
+
     if (out_result->residual_norm <= local_cfg.abs_tol) {
         out_result->converged = 1;
         out_result->failure_reason = LMMC_NONLINEAR_FAILURE_NONE;
@@ -260,18 +299,18 @@ lmmc_status_t lmmc_newton_solve(
     }
 
     for (iter = 1; iter <= local_cfg.max_iter; ++iter) {
-        double derivative = 0.0;
-        double step = 0.0;
-        double x_next = 0.0;
-        double f_next = 0.0;
-        double x_tol = 0.0;
+        lmmc_real_t derivative = 0.0;
+        lmmc_real_t step = 0.0;
+        lmmc_real_t x_next = 0.0;
+        lmmc_real_t f_next = 0.0;
+        lmmc_real_t x_tol = 0.0;
 
         if (dfunc != NULL) {
             derivative = dfunc(x, user_data);
         } else {
-            double h = local_cfg.derivative_step * lmmc_maxd(lmmc_absd(x), 1.0);
-            double f_plus = 0.0;
-            double f_minus = 0.0;
+            lmmc_real_t h = local_cfg.derivative_step * lmmc_maxd(lmmc_absd(x), 1.0);
+            lmmc_real_t f_plus = 0.0;
+            lmmc_real_t f_minus = 0.0;
 
             if (!lmmc_is_finite_number(h) || h <= 0.0) {
                 out_result->num_iter = iter;
@@ -330,6 +369,8 @@ lmmc_status_t lmmc_newton_solve(
         out_result->function_value = f_next;
         out_result->residual_norm = lmmc_absd(f_next);
 
+        lmmc_nonlinear_do_log(&local_cfg, iter, out_result->root, out_result->function_value);
+
         if (out_result->residual_norm <= local_cfg.abs_tol || lmmc_absd(x_next - x) <= x_tol) {
             out_result->converged = 1;
             out_result->failure_reason = LMMC_NONLINEAR_FAILURE_NONE;
@@ -353,14 +394,14 @@ lmmc_status_t lmmc_newton_solve(
 lmmc_status_t lmmc_secant_solve(
     lmmc_scalar_func_t func,
     void* user_data,
-    double x0,
-    double x1,
+    lmmc_real_t x0,
+    lmmc_real_t x1,
     const lmmc_nonlinear_config_t* cfg,
     lmmc_nonlinear_result_t* out_result
 ) {
     lmmc_nonlinear_config_t local_cfg = {0};
-    double f0 = 0.0;
-    double f1 = 0.0;
+    lmmc_real_t f0 = 0.0;
+    lmmc_real_t f1 = 0.0;
     size_t iter = 0;
 
     if (func == NULL || out_result == NULL || !lmmc_is_finite_number(x0) || !lmmc_is_finite_number(x1) || x0 == x1) {
@@ -390,12 +431,15 @@ lmmc_status_t lmmc_secant_solve(
         out_result->function_value = f0;
         out_result->residual_norm = lmmc_absd(f0);
         out_result->failure_reason = LMMC_NONLINEAR_FAILURE_NONE;
+        lmmc_nonlinear_do_log(&local_cfg, 0, out_result->root, out_result->function_value);
         return LMMC_STATUS_OK;
     }
 
     out_result->root = x1;
     out_result->function_value = f1;
     out_result->residual_norm = lmmc_absd(f1);
+
+    lmmc_nonlinear_do_log(&local_cfg, 0, out_result->root, out_result->function_value);
 
     if (lmmc_absd(f1) <= local_cfg.abs_tol) {
         out_result->converged = 1;
@@ -404,11 +448,11 @@ lmmc_status_t lmmc_secant_solve(
     }
 
     for (iter = 1; iter <= local_cfg.max_iter; ++iter) {
-        double denom = f1 - f0;
-        double step = 0.0;
-        double x2 = 0.0;
-        double f2 = 0.0;
-        double x_tol = 0.0;
+        lmmc_real_t denom = f1 - f0;
+        lmmc_real_t step = 0.0;
+        lmmc_real_t x2 = 0.0;
+        lmmc_real_t f2 = 0.0;
+        lmmc_real_t x_tol = 0.0;
 
         if (!lmmc_is_finite_number(denom)) {
             out_result->num_iter = iter;
@@ -448,6 +492,8 @@ lmmc_status_t lmmc_secant_solve(
         out_result->root = x2;
         out_result->function_value = f2;
         out_result->residual_norm = lmmc_absd(f2);
+
+        lmmc_nonlinear_do_log(&local_cfg, iter, out_result->root, out_result->function_value);
 
         if (out_result->residual_norm <= local_cfg.abs_tol || lmmc_absd(x2 - x1) <= x_tol) {
             out_result->converged = 1;

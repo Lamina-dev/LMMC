@@ -29,7 +29,7 @@ lmmc_status_t lmmc_precond_create_jacobi(const lmmc_sparse_mat_t* a, lmmc_precon
 lmmc_status_t lmmc_precond_create_ilu0(const lmmc_sparse_mat_t* a, lmmc_precond_t* out_precond);
 lmmc_status_t lmmc_precond_create_ilut(
     const lmmc_sparse_mat_t* a,
-    double drop_tol,
+    lmmc_real_t drop_tol,
     size_t max_fill_per_row,
     lmmc_precond_t* out_precond
 );

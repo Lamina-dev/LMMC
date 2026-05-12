@@ -39,13 +39,13 @@ int main(void) {
         goto cleanup;
     }
 
-    dense.data[0] = 4.0; dense.data[1] = 0.0; dense.data[2] = 0.0;
-    dense.data[3] = 0.0; dense.data[4] = 5.0; dense.data[5] = 1.0;
-    dense.data[6] = 2.0; dense.data[7] = 0.0; dense.data[8] = 3.0;
+    LMMC_REAL_SET_D(&dense.data[0], 4.0); LMMC_REAL_SET_D(&dense.data[1], 0.0); LMMC_REAL_SET_D(&dense.data[2], 0.0);
+    LMMC_REAL_SET_D(&dense.data[3], 0.0); LMMC_REAL_SET_D(&dense.data[4], 5.0); LMMC_REAL_SET_D(&dense.data[5], 1.0);
+    LMMC_REAL_SET_D(&dense.data[6], 2.0); LMMC_REAL_SET_D(&dense.data[7], 0.0); LMMC_REAL_SET_D(&dense.data[8], 3.0);
 
-    x.data[0] = 1.0;
-    x.data[1] = 2.0;
-    x.data[2] = -1.0;
+    LMMC_REAL_SET_D(&x.data[0], 1.0);
+    LMMC_REAL_SET_D(&x.data[1], 2.0);
+    LMMC_REAL_SET_D(&x.data[2], -1.0);
 
     st = lmmc_sparse_from_dense(&dense, 1e-14, &sparse);
     if (st != LMMC_STATUS_OK) {
@@ -113,9 +113,9 @@ int main(void) {
         goto cleanup;
     }
 
-    bmat.data[0] = 1.0; bmat.data[1] = 2.0;
-    bmat.data[2] = 0.0; bmat.data[3] = 1.0;
-    bmat.data[4] = 3.0; bmat.data[5] = -1.0;
+    LMMC_REAL_SET_D(&bmat.data[0], 1.0); LMMC_REAL_SET_D(&bmat.data[1], 2.0);
+    LMMC_REAL_SET_D(&bmat.data[2], 0.0); LMMC_REAL_SET_D(&bmat.data[3], 1.0);
+    LMMC_REAL_SET_D(&bmat.data[4], 3.0); LMMC_REAL_SET_D(&bmat.data[5], -1.0);
 
     st = lmmc_sparse_mat_mat_mul_dense(&sparse, &bmat, &cmat);
     if (st != LMMC_STATUS_OK) {
@@ -217,10 +217,10 @@ int main(void) {
         goto cleanup;
     }
 
-    bzero.data[0] = 1.0; bzero.data[1] = 0.0;
-    bzero.data[2] = 2.0; bzero.data[3] = 1.0;
-    bzero.data[4] = 3.0; bzero.data[5] = 2.0;
-    bzero.data[6] = 4.0; bzero.data[7] = 3.0;
+    LMMC_REAL_SET_D(&bzero.data[0], 1.0); LMMC_REAL_SET_D(&bzero.data[1], 0.0);
+    LMMC_REAL_SET_D(&bzero.data[2], 2.0); LMMC_REAL_SET_D(&bzero.data[3], 1.0);
+    LMMC_REAL_SET_D(&bzero.data[4], 3.0); LMMC_REAL_SET_D(&bzero.data[5], 2.0);
+    LMMC_REAL_SET_D(&bzero.data[6], 4.0); LMMC_REAL_SET_D(&bzero.data[7], 3.0);
 
     st = lmmc_sparse_mat_mat_mul_dense(&zero_sparse, &bzero, &czero);
     if (st != LMMC_STATUS_OK) {

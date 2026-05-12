@@ -1,6 +1,7 @@
 #include <math.h>
 #include <string.h>
 #include "memory_bridge.h"
+#include "lmmc/config.h"
 #include "lmmc/precond.h"
 
 typedef struct {
@@ -9,12 +10,13 @@ typedef struct {
     size_t capacity;
     size_t* row_ptr;
     size_t* col_idx;
-    double* lu_values;
+    lmmc_real_t* lu_values;
     size_t* diag_pos;
+    lmmc_real_t* y_arr;
 } lmmc_precond_ilu_impl_t;
 
-static int lmmc_is_finite_number(double v) {
-    return isfinite(v) ? 1 : 0;
+static int lmmc_is_finite_number(const lmmc_real_t* v) {
+    return LMMC_REAL_IS_FINITE(v) ? 1 : 0;
 }
 
 static int lmmc_mul_overflow_size(size_t a, size_t b, size_t* out) {
@@ -83,8 +85,21 @@ static void lmmc_ilu_impl_destroy(lmmc_precond_ilu_impl_t* impl) {
         return;
     }
 
+    if (impl->lu_values != NULL) {
+        size_t k;
+        for (k = 0; k < impl->capacity; ++k) {
+            LMMC_REAL_CLEAR(&impl->lu_values[k]);
+        }
+        lmmc_free(impl->lu_values);
+    }
+    if (impl->y_arr != NULL) {
+        size_t k;
+        for (k = 0; k < impl->size; ++k) {
+            LMMC_REAL_CLEAR(&impl->y_arr[k]);
+        }
+        lmmc_free(impl->y_arr);
+    }
     lmmc_free(impl->diag_pos);
-    lmmc_free(impl->lu_values);
     lmmc_free(impl->col_idx);
     lmmc_free(impl->row_ptr);
     lmmc_free(impl);
@@ -112,10 +127,10 @@ static void lmmc_select_top_abs(
     const size_t* active_cols,
     size_t active_count,
     const unsigned char* present,
-    const double* workspace,
+    const lmmc_real_t* workspace,
     size_t row,
     int lower_side,
-    double drop_tol,
+    lmmc_real_t drop_tol,
     size_t max_keep,
     size_t* out_cols,
     size_t* out_count
@@ -123,18 +138,22 @@ static void lmmc_select_top_abs(
     size_t i = 0;
     size_t selected = 0;
 
+    lmmc_real_t v; LMMC_REAL_INIT(&v);
+    lmmc_real_t av; LMMC_REAL_INIT(&av);
     if (active_cols == NULL || present == NULL || workspace == NULL || out_cols == NULL || out_count == NULL ||
         max_keep == 0) {
         if (out_count != NULL) {
             *out_count = 0;
         }
+        LMMC_REAL_CLEAR(&av);
+        LMMC_REAL_CLEAR(&v);
         return;
     }
+    LMMC_REAL_SET_D(&v, 0.0);
+    LMMC_REAL_SET_D(&av, 0.0);
 
     for (i = 0; i < active_count; ++i) {
         size_t col = active_cols[i];
-        double v = 0.0;
-        double av = 0.0;
 
         if (!present[col]) {
             continue;
@@ -150,9 +169,10 @@ static void lmmc_select_top_abs(
             }
         }
 
-        v = workspace[col];
-        av = fabs(v);
-        if (av <= drop_tol) {
+        LMMC_REAL_SET(&v, &workspace[col]);
+        LMMC_REAL_ABS(&av, &v);
+
+        if (LMMC_REAL_CMP(&av, &drop_tol) <= 0) {
             continue;
         }
 
@@ -160,24 +180,33 @@ static void lmmc_select_top_abs(
             out_cols[selected++] = col;
         } else {
             size_t min_idx = 0;
-            double min_abs = fabs(workspace[out_cols[0]]);
+            lmmc_real_t min_abs; LMMC_REAL_INIT(&min_abs);
+            LMMC_REAL_ABS(&min_abs, &workspace[out_cols[0]]);
+
             size_t s = 0;
             for (s = 1; s < selected; ++s) {
-                double cur_abs = fabs(workspace[out_cols[s]]);
-                if (cur_abs < min_abs) {
-                    min_abs = cur_abs;
+                lmmc_real_t cur_abs; LMMC_REAL_INIT(&cur_abs);
+                LMMC_REAL_ABS(&cur_abs, &workspace[out_cols[s]]);
+                
+                if (LMMC_REAL_CMP(&cur_abs, &min_abs) < 0) {
+                    LMMC_REAL_SET(&min_abs, &cur_abs);
                     min_idx = s;
                 }
+                LMMC_REAL_CLEAR(&cur_abs);
             }
 
-            if (av > min_abs) {
+            if (LMMC_REAL_CMP(&av, &min_abs) > 0) {
                 out_cols[min_idx] = col;
             }
+            LMMC_REAL_CLEAR(&min_abs);
         }
     }
 
     lmmc_sort_size_t_asc(out_cols, selected);
     *out_count = selected;
+
+    LMMC_REAL_CLEAR(&av);
+    LMMC_REAL_CLEAR(&v);
 }
 
 static lmmc_status_t lmmc_ilu_impl_reserve(lmmc_precond_ilu_impl_t* impl, size_t required_capacity) {
@@ -185,7 +214,7 @@ static lmmc_status_t lmmc_ilu_impl_reserve(lmmc_precond_ilu_impl_t* impl, size_t
     size_t idx_bytes = 0;
     size_t val_bytes = 0;
     size_t* new_col_idx = NULL;
-    double* new_lu_values = NULL;
+    lmmc_real_t* new_lu_values = NULL;
 
     if (impl == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
@@ -206,24 +235,38 @@ static lmmc_status_t lmmc_ilu_impl_reserve(lmmc_precond_ilu_impl_t* impl, size_t
     }
 
     if (lmmc_mul_overflow_size(new_capacity, sizeof(size_t), &idx_bytes) ||
-        lmmc_mul_overflow_size(new_capacity, sizeof(double), &val_bytes)) {
+        lmmc_mul_overflow_size(new_capacity, sizeof(lmmc_real_t), &val_bytes)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
     new_col_idx = (size_t*)lmmc_alloc(idx_bytes);
-    new_lu_values = (double*)lmmc_alloc(val_bytes);
+    new_lu_values = (lmmc_real_t*)lmmc_alloc(val_bytes);
     if (new_col_idx == NULL || new_lu_values == NULL) {
         lmmc_free(new_lu_values);
         lmmc_free(new_col_idx);
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
 
-    if (impl->nnz > 0) {
-        memcpy(new_col_idx, impl->col_idx, impl->nnz * sizeof(size_t));
-        memcpy(new_lu_values, impl->lu_values, impl->nnz * sizeof(double));
+    size_t k;
+    for (k = 0; k < new_capacity; ++k) {
+        LMMC_REAL_INIT(&new_lu_values[k]);
+        LMMC_REAL_SET_D(&new_lu_values[k], 0.0);
     }
 
-    lmmc_free(impl->lu_values);
+    if (impl->nnz > 0) {
+        memcpy(new_col_idx, impl->col_idx, impl->nnz * sizeof(size_t));
+        for (k = 0; k < impl->nnz; ++k) {
+            LMMC_REAL_SET(&new_lu_values[k], &impl->lu_values[k]);
+        }
+    }
+
+    if (impl->lu_values != NULL) {
+        for (k = 0; k < impl->capacity; ++k) {
+            LMMC_REAL_CLEAR(&impl->lu_values[k]);
+        }
+        lmmc_free(impl->lu_values);
+    }
+
     lmmc_free(impl->col_idx);
     impl->col_idx = new_col_idx;
     impl->lu_values = new_lu_values;
@@ -246,7 +289,7 @@ lmmc_status_t lmmc_precond_create_none(size_t size, lmmc_precond_t* out_precond)
 lmmc_status_t lmmc_precond_create_jacobi(const lmmc_sparse_mat_t* a, lmmc_precond_t* out_precond) {
     size_t i = 0;
     size_t bytes = 0;
-    double* diag_inv = NULL;
+    lmmc_real_t* diag_inv = NULL;
     lmmc_status_t st = lmmc_sparse_validate_csr_basic(a);
 
     if (out_precond == NULL || st != LMMC_STATUS_OK) {
@@ -256,41 +299,68 @@ lmmc_status_t lmmc_precond_create_jacobi(const lmmc_sparse_mat_t* a, lmmc_precon
         return LMMC_STATUS_DIMENSION_MISMATCH;
     }
 
-    if (a->rows > ((size_t)-1) / sizeof(double)) {
+    if (a->rows > ((size_t)-1) / sizeof(lmmc_real_t)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    bytes = a->rows * sizeof(double);
+    bytes = a->rows * sizeof(lmmc_real_t);
 
-    diag_inv = (double*)lmmc_alloc(bytes);
+    diag_inv = (lmmc_real_t*)lmmc_alloc(bytes);
     if (diag_inv == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
-    memset(diag_inv, 0, bytes);
+
+    for (i = 0; i < a->rows; ++i) {
+        LMMC_REAL_INIT(&diag_inv[i]);
+        LMMC_REAL_SET_D(&diag_inv[i], 0.0);
+    }
+
+    lmmc_real_t diag; LMMC_REAL_INIT(&diag); LMMC_REAL_SET_D(&diag, 0.0);
+    lmmc_real_t eps_15; LMMC_REAL_INIT(&eps_15); LMMC_REAL_SET_D(&eps_15, 1e-15);
+    lmmc_real_t one; LMMC_REAL_INIT(&one); LMMC_REAL_SET_D(&one, 1.0);
+    lmmc_real_t abs_diag; LMMC_REAL_INIT(&abs_diag); LMMC_REAL_SET_D(&abs_diag, 0.0);
 
     for (i = 0; i < a->rows; ++i) {
         size_t p = 0;
         int found = 0;
-        double diag = 0.0;
+        LMMC_REAL_SET_D(&diag, 0.0);
 
         for (p = a->row_ptr[i]; p < a->row_ptr[i + 1]; ++p) {
             if (a->col_idx[p] == i) {
-                diag = a->values[p];
+                LMMC_REAL_SET(&diag, &a->values[p]);
                 found = 1;
                 break;
             }
         }
 
-        if (!found || !lmmc_is_finite_number(diag) || fabs(diag) <= 1e-15) {
+        LMMC_REAL_ABS(&abs_diag, &diag);
+
+        if (!found || !lmmc_is_finite_number(&diag) || LMMC_REAL_CMP(&abs_diag, &eps_15) <= 0) {
+            LMMC_REAL_CLEAR(&abs_diag);
+            LMMC_REAL_CLEAR(&one);
+            LMMC_REAL_CLEAR(&eps_15);
+            LMMC_REAL_CLEAR(&diag);
+            for (size_t k = 0; k < a->rows; ++k) LMMC_REAL_CLEAR(&diag_inv[k]);
             lmmc_free(diag_inv);
             return LMMC_STATUS_SINGULAR_MATRIX;
         }
 
-        diag_inv[i] = 1.0 / diag;
-        if (!lmmc_is_finite_number(diag_inv[i])) {
+        LMMC_REAL_DIV(&diag_inv[i], &one, &diag);
+
+        if (!lmmc_is_finite_number(&diag_inv[i])) {
+            LMMC_REAL_CLEAR(&abs_diag);
+            LMMC_REAL_CLEAR(&one);
+            LMMC_REAL_CLEAR(&eps_15);
+            LMMC_REAL_CLEAR(&diag);
+            for (size_t k = 0; k < a->rows; ++k) LMMC_REAL_CLEAR(&diag_inv[k]);
             lmmc_free(diag_inv);
             return LMMC_STATUS_NUMERICAL_FAILURE;
         }
     }
+
+    LMMC_REAL_CLEAR(&abs_diag);
+    LMMC_REAL_CLEAR(&one);
+    LMMC_REAL_CLEAR(&eps_15);
+    LMMC_REAL_CLEAR(&diag);
 
     out_precond->type = LMMC_PRECOND_JACOBI;
     out_precond->size = a->rows;
@@ -305,6 +375,7 @@ lmmc_status_t lmmc_precond_create_ilu0(const lmmc_sparse_mat_t* a, lmmc_precond_
     size_t idx_bytes = 0;
     size_t val_bytes = 0;
     size_t diag_bytes = 0;
+    size_t y_bytes = 0;
     lmmc_precond_ilu_impl_t* impl = NULL;
     lmmc_status_t st = lmmc_sparse_validate_csr_basic(a);
 
@@ -317,8 +388,9 @@ lmmc_status_t lmmc_precond_create_ilu0(const lmmc_sparse_mat_t* a, lmmc_precond_
 
     if (lmmc_mul_overflow_size(a->rows + 1, sizeof(size_t), &row_ptr_bytes) ||
         lmmc_mul_overflow_size(a->nnz, sizeof(size_t), &idx_bytes) ||
-        lmmc_mul_overflow_size(a->nnz, sizeof(double), &val_bytes) ||
-        lmmc_mul_overflow_size(a->rows, sizeof(size_t), &diag_bytes)) {
+        lmmc_mul_overflow_size(a->nnz, sizeof(lmmc_real_t), &val_bytes) ||
+        lmmc_mul_overflow_size(a->rows, sizeof(size_t), &diag_bytes) ||
+        lmmc_mul_overflow_size(a->rows, sizeof(lmmc_real_t), &y_bytes)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -334,20 +406,29 @@ lmmc_status_t lmmc_precond_create_ilu0(const lmmc_sparse_mat_t* a, lmmc_precond_
 
     impl->row_ptr = (size_t*)lmmc_alloc(row_ptr_bytes);
     impl->diag_pos = (size_t*)lmmc_alloc(diag_bytes);
-    if (impl->row_ptr == NULL || impl->diag_pos == NULL) {
+    impl->y_arr = (lmmc_real_t*)lmmc_alloc(y_bytes);
+    if (impl->row_ptr == NULL || impl->diag_pos == NULL || impl->y_arr == NULL) {
         lmmc_ilu_impl_destroy(impl);
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
 
+    for (i = 0; i < a->rows; ++i) {
+        LMMC_REAL_INIT(&impl->y_arr[i]);
+        LMMC_REAL_SET_D(&impl->y_arr[i], 0.0);
+    }
+
     if (a->nnz > 0) {
         impl->col_idx = (size_t*)lmmc_alloc(idx_bytes);
-        impl->lu_values = (double*)lmmc_alloc(val_bytes);
+        impl->lu_values = (lmmc_real_t*)lmmc_alloc(val_bytes);
         if (impl->col_idx == NULL || impl->lu_values == NULL) {
             lmmc_ilu_impl_destroy(impl);
             return LMMC_STATUS_ALLOCATION_FAILED;
         }
         memcpy(impl->col_idx, a->col_idx, idx_bytes);
-        memcpy(impl->lu_values, a->values, val_bytes);
+        for(size_t k=0; k < a->nnz; k++) {
+            LMMC_REAL_INIT(&impl->lu_values[k]);
+            LMMC_REAL_SET(&impl->lu_values[k], &a->values[k]);
+        }
     }
 
     memcpy(impl->row_ptr, a->row_ptr, row_ptr_bytes);
@@ -369,6 +450,13 @@ lmmc_status_t lmmc_precond_create_ilu0(const lmmc_sparse_mat_t* a, lmmc_precond_
         }
     }
 
+    lmmc_real_t sum; LMMC_REAL_INIT(&sum); LMMC_REAL_SET_D(&sum, 0.0);
+    lmmc_real_t diag; LMMC_REAL_INIT(&diag); LMMC_REAL_SET_D(&diag, 0.0);
+    lmmc_real_t tmp_mul; LMMC_REAL_INIT(&tmp_mul); LMMC_REAL_SET_D(&tmp_mul, 0.0);
+    lmmc_real_t tmp_sub; LMMC_REAL_INIT(&tmp_sub); LMMC_REAL_SET_D(&tmp_sub, 0.0);
+    lmmc_real_t eps_15; LMMC_REAL_INIT(&eps_15); LMMC_REAL_SET_D(&eps_15, 1e-15);
+    lmmc_real_t abs_diag; LMMC_REAL_INIT(&abs_diag); LMMC_REAL_SET_D(&abs_diag, 0.0);
+
     for (i = 0; i < a->rows; ++i) {
         size_t row_start = impl->row_ptr[i];
         size_t row_end = impl->row_ptr[i + 1];
@@ -376,7 +464,7 @@ lmmc_status_t lmmc_precond_create_ilu0(const lmmc_sparse_mat_t* a, lmmc_precond_
 
         for (p = row_start; p < row_end; ++p) {
             size_t j = impl->col_idx[p];
-            double sum = impl->lu_values[p];
+            LMMC_REAL_SET(&sum, &impl->lu_values[p]);
             size_t q = 0;
 
             if (j >= i) {
@@ -391,18 +479,27 @@ lmmc_status_t lmmc_precond_create_ilu0(const lmmc_sparse_mat_t* a, lmmc_precond_
                     continue;
                 }
                 if (lmmc_find_col_pos(impl->col_idx, impl->row_ptr[k], impl->row_ptr[k + 1], j, &pos_kj)) {
-                    sum -= impl->lu_values[q] * impl->lu_values[pos_kj];
+                    LMMC_REAL_MUL(&tmp_mul, &impl->lu_values[q], &impl->lu_values[pos_kj]);
+                    LMMC_REAL_SUB(&tmp_sub, &sum, &tmp_mul);
+                    LMMC_REAL_SET(&sum, &tmp_sub);
                 }
             }
 
             {
-                double diag_j = impl->lu_values[impl->diag_pos[j]];
-                if (!lmmc_is_finite_number(sum) || !lmmc_is_finite_number(diag_j) || fabs(diag_j) <= 1e-15) {
+                LMMC_REAL_SET(&diag, &impl->lu_values[impl->diag_pos[j]]);
+                LMMC_REAL_ABS(&abs_diag, &diag);
+                if (!lmmc_is_finite_number(&sum) || !lmmc_is_finite_number(&diag) || LMMC_REAL_CMP(&abs_diag, &eps_15) <= 0) {
+                    LMMC_REAL_CLEAR(&abs_diag); LMMC_REAL_CLEAR(&eps_15);
+                    LMMC_REAL_CLEAR(&tmp_sub); LMMC_REAL_CLEAR(&tmp_mul);
+                    LMMC_REAL_CLEAR(&diag); LMMC_REAL_CLEAR(&sum);
                     lmmc_ilu_impl_destroy(impl);
                     return LMMC_STATUS_SINGULAR_MATRIX;
                 }
-                impl->lu_values[p] = sum / diag_j;
-                if (!lmmc_is_finite_number(impl->lu_values[p])) {
+                LMMC_REAL_DIV(&impl->lu_values[p], &sum, &diag);
+                if (!lmmc_is_finite_number(&impl->lu_values[p])) {
+                    LMMC_REAL_CLEAR(&abs_diag); LMMC_REAL_CLEAR(&eps_15);
+                    LMMC_REAL_CLEAR(&tmp_sub); LMMC_REAL_CLEAR(&tmp_mul);
+                    LMMC_REAL_CLEAR(&diag); LMMC_REAL_CLEAR(&sum);
                     lmmc_ilu_impl_destroy(impl);
                     return LMMC_STATUS_NUMERICAL_FAILURE;
                 }
@@ -411,7 +508,7 @@ lmmc_status_t lmmc_precond_create_ilu0(const lmmc_sparse_mat_t* a, lmmc_precond_
 
         for (p = row_start; p < row_end; ++p) {
             size_t j = impl->col_idx[p];
-            double sum = impl->lu_values[p];
+            LMMC_REAL_SET(&sum, &impl->lu_values[p]);
             size_t q = 0;
 
             if (j < i) {
@@ -426,25 +523,41 @@ lmmc_status_t lmmc_precond_create_ilu0(const lmmc_sparse_mat_t* a, lmmc_precond_
                     continue;
                 }
                 if (lmmc_find_col_pos(impl->col_idx, impl->row_ptr[k], impl->row_ptr[k + 1], j, &pos_kj)) {
-                    sum -= impl->lu_values[q] * impl->lu_values[pos_kj];
+                    LMMC_REAL_MUL(&tmp_mul, &impl->lu_values[q], &impl->lu_values[pos_kj]);
+                    LMMC_REAL_SUB(&tmp_sub, &sum, &tmp_mul);
+                    LMMC_REAL_SET(&sum, &tmp_sub);
                 }
             }
 
-            if (!lmmc_is_finite_number(sum)) {
+            if (!lmmc_is_finite_number(&sum)) {
+                LMMC_REAL_CLEAR(&abs_diag); LMMC_REAL_CLEAR(&eps_15);
+                LMMC_REAL_CLEAR(&tmp_sub); LMMC_REAL_CLEAR(&tmp_mul);
+                LMMC_REAL_CLEAR(&diag); LMMC_REAL_CLEAR(&sum);
                 lmmc_ilu_impl_destroy(impl);
                 return LMMC_STATUS_NUMERICAL_FAILURE;
             }
-            impl->lu_values[p] = sum;
+            LMMC_REAL_SET(&impl->lu_values[p], &sum);
         }
 
         {
-            double diag_i = impl->lu_values[impl->diag_pos[i]];
-            if (!lmmc_is_finite_number(diag_i) || fabs(diag_i) <= 1e-15) {
+            LMMC_REAL_SET(&diag, &impl->lu_values[impl->diag_pos[i]]);
+            LMMC_REAL_ABS(&abs_diag, &diag);
+            if (!lmmc_is_finite_number(&diag) || LMMC_REAL_CMP(&abs_diag, &eps_15) <= 0) {
+                LMMC_REAL_CLEAR(&abs_diag); LMMC_REAL_CLEAR(&eps_15);
+                LMMC_REAL_CLEAR(&tmp_sub); LMMC_REAL_CLEAR(&tmp_mul);
+                LMMC_REAL_CLEAR(&diag); LMMC_REAL_CLEAR(&sum);
                 lmmc_ilu_impl_destroy(impl);
                 return LMMC_STATUS_SINGULAR_MATRIX;
             }
         }
     }
+
+    LMMC_REAL_CLEAR(&abs_diag);
+    LMMC_REAL_CLEAR(&eps_15);
+    LMMC_REAL_CLEAR(&tmp_sub);
+    LMMC_REAL_CLEAR(&tmp_mul);
+    LMMC_REAL_CLEAR(&diag);
+    LMMC_REAL_CLEAR(&sum);
 
     out_precond->type = LMMC_PRECOND_ILU0;
     out_precond->size = a->rows;
@@ -455,7 +568,7 @@ lmmc_status_t lmmc_precond_create_ilu0(const lmmc_sparse_mat_t* a, lmmc_precond_
 
 lmmc_status_t lmmc_precond_create_ilut(
     const lmmc_sparse_mat_t* a,
-    double drop_tol,
+    lmmc_real_t drop_tol,
     size_t max_fill_per_row,
     lmmc_precond_t* out_precond
 ) {
@@ -467,7 +580,8 @@ lmmc_status_t lmmc_precond_create_ilut(
     size_t mark_bytes = 0;
     size_t active_bytes = 0;
     size_t keep_bytes = 0;
-    double* workspace = NULL;
+    size_t y_bytes = 0;
+    lmmc_real_t* workspace = NULL;
     unsigned char* present = NULL;
     unsigned char* processed = NULL;
     size_t* active_cols = NULL;
@@ -476,28 +590,35 @@ lmmc_status_t lmmc_precond_create_ilut(
     size_t active_count = 0;
     lmmc_precond_ilu_impl_t* impl = NULL;
     lmmc_status_t st = lmmc_sparse_validate_csr_basic(a);
+    
+    lmmc_real_t zero; LMMC_REAL_INIT(&zero); LMMC_REAL_SET_D(&zero, 0.0);
+    lmmc_real_t eps_15; LMMC_REAL_INIT(&eps_15); LMMC_REAL_SET_D(&eps_15, 1e-15);
+    lmmc_real_t tmp_add; LMMC_REAL_INIT(&tmp_add); LMMC_REAL_SET_D(&tmp_add, 0.0);
+    lmmc_real_t tmp_mul; LMMC_REAL_INIT(&tmp_mul); LMMC_REAL_SET_D(&tmp_mul, 0.0);
+    lmmc_real_t tmp_sub; LMMC_REAL_INIT(&tmp_sub); LMMC_REAL_SET_D(&tmp_sub, 0.0);
 
-    if (out_precond == NULL || st != LMMC_STATUS_OK || !lmmc_is_finite_number(drop_tol) ||
-        drop_tol < 0.0 || max_fill_per_row == 0) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
+    if (out_precond == NULL || st != LMMC_STATUS_OK || !lmmc_is_finite_number(&drop_tol) ||
+        LMMC_REAL_CMP(&drop_tol, &zero) < 0 || max_fill_per_row == 0) {
+        st = LMMC_STATUS_INVALID_ARGUMENT; goto fail_early;
     }
     if (a->rows != a->cols) {
-        return LMMC_STATUS_DIMENSION_MISMATCH;
+        st = LMMC_STATUS_DIMENSION_MISMATCH; goto fail_early;
     }
 
     n = a->rows;
     if (lmmc_mul_overflow_size(n + 1, sizeof(size_t), &row_ptr_bytes) ||
         lmmc_mul_overflow_size(n, sizeof(size_t), &diag_bytes) ||
-        lmmc_mul_overflow_size(n, sizeof(double), &workspace_bytes) ||
+        lmmc_mul_overflow_size(n, sizeof(lmmc_real_t), &workspace_bytes) ||
         lmmc_mul_overflow_size(n, sizeof(unsigned char), &mark_bytes) ||
         lmmc_mul_overflow_size(n, sizeof(size_t), &active_bytes) ||
-        lmmc_mul_overflow_size(max_fill_per_row, sizeof(size_t), &keep_bytes)) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
+        lmmc_mul_overflow_size(max_fill_per_row, sizeof(size_t), &keep_bytes) ||
+        lmmc_mul_overflow_size(n, sizeof(lmmc_real_t), &y_bytes)) {
+        st = LMMC_STATUS_INVALID_ARGUMENT; goto fail_early;
     }
 
     impl = (lmmc_precond_ilu_impl_t*)lmmc_alloc(sizeof(lmmc_precond_ilu_impl_t));
     if (impl == NULL) {
-        return LMMC_STATUS_ALLOCATION_FAILED;
+        st = LMMC_STATUS_ALLOCATION_FAILED; goto fail_early;
     }
     memset(impl, 0, sizeof(lmmc_precond_ilu_impl_t));
 
@@ -507,20 +628,27 @@ lmmc_status_t lmmc_precond_create_ilut(
 
     impl->row_ptr = (size_t*)lmmc_alloc(row_ptr_bytes);
     impl->diag_pos = (size_t*)lmmc_alloc(diag_bytes);
-    workspace = (double*)lmmc_alloc(workspace_bytes);
+    impl->y_arr = (lmmc_real_t*)lmmc_alloc(y_bytes);
+    workspace = (lmmc_real_t*)lmmc_alloc(workspace_bytes);
     present = (unsigned char*)lmmc_alloc(mark_bytes);
     processed = (unsigned char*)lmmc_alloc(mark_bytes);
     active_cols = (size_t*)lmmc_alloc(active_bytes);
     lower_keep_cols = (size_t*)lmmc_alloc(keep_bytes);
     upper_keep_cols = (size_t*)lmmc_alloc(keep_bytes);
 
-    if (impl->row_ptr == NULL || impl->diag_pos == NULL || workspace == NULL || present == NULL ||
+    if (impl->row_ptr == NULL || impl->diag_pos == NULL || impl->y_arr == NULL || workspace == NULL || present == NULL ||
         processed == NULL || active_cols == NULL || lower_keep_cols == NULL || upper_keep_cols == NULL) {
         st = LMMC_STATUS_ALLOCATION_FAILED;
         goto fail;
     }
 
-    memset(workspace, 0, workspace_bytes);
+    size_t kw;
+    for(kw=0; kw<n; ++kw) {
+        LMMC_REAL_INIT(&workspace[kw]);
+        LMMC_REAL_SET_D(&workspace[kw], 0.0);
+        LMMC_REAL_INIT(&impl->y_arr[kw]);
+        LMMC_REAL_SET_D(&impl->y_arr[kw], 0.0);
+    }
     memset(present, 0, mark_bytes);
     memset(processed, 0, mark_bytes);
 
@@ -544,15 +672,16 @@ lmmc_status_t lmmc_precond_create_ilut(
     for (i = 0; i < n; ++i) {
         size_t lower_keep_count = 0;
         size_t upper_keep_count = 0;
-        double diag_i = 0.0;
+        lmmc_real_t diag_i; LMMC_REAL_INIT(&diag_i); LMMC_REAL_SET_D(&diag_i, 0.0);
         size_t p = 0;
         active_count = 0;
 
         for (p = a->row_ptr[i]; p < a->row_ptr[i + 1]; ++p) {
             size_t col = a->col_idx[p];
-            double v = a->values[p];
+            lmmc_real_t v; LMMC_REAL_INIT(&v); LMMC_REAL_SET(&v, &a->values[p]);
 
-            if (!lmmc_is_finite_number(v)) {
+            if (!lmmc_is_finite_number(&v)) {
+                LMMC_REAL_CLEAR(&v); LMMC_REAL_CLEAR(&diag_i);
                 st = LMMC_STATUS_NUMERICAL_FAILURE;
                 goto fail;
             }
@@ -561,14 +690,17 @@ lmmc_status_t lmmc_precond_create_ilut(
                 present[col] = 1;
                 processed[col] = 0;
                 active_cols[active_count++] = col;
-                workspace[col] = v;
+                LMMC_REAL_SET(&workspace[col], &v);
             } else {
-                workspace[col] += v;
-                if (!lmmc_is_finite_number(workspace[col])) {
+                LMMC_REAL_ADD(&tmp_add, &workspace[col], &v);
+                LMMC_REAL_SET(&workspace[col], &tmp_add);
+                if (!lmmc_is_finite_number(&workspace[col])) {
+                    LMMC_REAL_CLEAR(&v); LMMC_REAL_CLEAR(&diag_i);
                     st = LMMC_STATUS_NUMERICAL_FAILURE;
                     goto fail;
                 }
             }
+            LMMC_REAL_CLEAR(&v);
         }
 
         while (1) {
@@ -593,70 +725,95 @@ lmmc_status_t lmmc_precond_create_ilut(
             processed[k] = 1;
 
             {
-                double aik = workspace[k];
-                double diag_k = 0.0;
-                double lik = 0.0;
+                lmmc_real_t aik; LMMC_REAL_INIT(&aik); LMMC_REAL_SET(&aik, &workspace[k]);
+                lmmc_real_t diag_k; LMMC_REAL_INIT(&diag_k); LMMC_REAL_SET_D(&diag_k, 0.0);
+                lmmc_real_t lik; LMMC_REAL_INIT(&lik); LMMC_REAL_SET_D(&lik, 0.0);
+                lmmc_real_t abs_aik; LMMC_REAL_INIT(&abs_aik);
+                lmmc_real_t abs_diag_k; LMMC_REAL_INIT(&abs_diag_k);
+                
                 size_t u_start = 0;
                 size_t u_end = 0;
 
-                if (!lmmc_is_finite_number(aik)) {
-                    st = LMMC_STATUS_NUMERICAL_FAILURE;
-                    goto fail;
+                if (!lmmc_is_finite_number(&aik)) {
+                    LMMC_REAL_CLEAR(&abs_diag_k); LMMC_REAL_CLEAR(&abs_aik);
+                    LMMC_REAL_CLEAR(&lik); LMMC_REAL_CLEAR(&diag_k); LMMC_REAL_CLEAR(&aik);
+                    LMMC_REAL_CLEAR(&diag_i);
+                    st = LMMC_STATUS_NUMERICAL_FAILURE; goto fail;
                 }
 
-                if (fabs(aik) <= drop_tol) {
+                LMMC_REAL_ABS(&abs_aik, &aik);
+                if (LMMC_REAL_CMP(&abs_aik, &drop_tol) <= 0) {
                     present[k] = 0;
-                    workspace[k] = 0.0;
+                    LMMC_REAL_SET_D(&workspace[k], 0.0);
+                    LMMC_REAL_CLEAR(&abs_diag_k); LMMC_REAL_CLEAR(&abs_aik);
+                    LMMC_REAL_CLEAR(&lik); LMMC_REAL_CLEAR(&diag_k); LMMC_REAL_CLEAR(&aik);
                     continue;
                 }
 
                 if (impl->diag_pos[k] == (size_t)-1 || impl->diag_pos[k] >= impl->nnz) {
-                    st = LMMC_STATUS_NUMERICAL_FAILURE;
-                    goto fail;
+                    LMMC_REAL_CLEAR(&abs_diag_k); LMMC_REAL_CLEAR(&abs_aik);
+                    LMMC_REAL_CLEAR(&lik); LMMC_REAL_CLEAR(&diag_k); LMMC_REAL_CLEAR(&aik);
+                    LMMC_REAL_CLEAR(&diag_i);
+                    st = LMMC_STATUS_NUMERICAL_FAILURE; goto fail;
                 }
 
-                diag_k = impl->lu_values[impl->diag_pos[k]];
-                if (!lmmc_is_finite_number(diag_k) || fabs(diag_k) <= 1e-15) {
-                    st = LMMC_STATUS_SINGULAR_MATRIX;
-                    goto fail;
+                LMMC_REAL_SET(&diag_k, &impl->lu_values[impl->diag_pos[k]]);
+                LMMC_REAL_ABS(&abs_diag_k, &diag_k);
+                if (!lmmc_is_finite_number(&diag_k) || LMMC_REAL_CMP(&abs_diag_k, &eps_15) <= 0) {
+                    LMMC_REAL_CLEAR(&abs_diag_k); LMMC_REAL_CLEAR(&abs_aik);
+                    LMMC_REAL_CLEAR(&lik); LMMC_REAL_CLEAR(&diag_k); LMMC_REAL_CLEAR(&aik);
+                    LMMC_REAL_CLEAR(&diag_i);
+                    st = LMMC_STATUS_SINGULAR_MATRIX; goto fail;
                 }
 
-                lik = aik / diag_k;
-                if (!lmmc_is_finite_number(lik)) {
-                    st = LMMC_STATUS_NUMERICAL_FAILURE;
-                    goto fail;
+                LMMC_REAL_DIV(&lik, &aik, &diag_k);
+                if (!lmmc_is_finite_number(&lik)) {
+                    LMMC_REAL_CLEAR(&abs_diag_k); LMMC_REAL_CLEAR(&abs_aik);
+                    LMMC_REAL_CLEAR(&lik); LMMC_REAL_CLEAR(&diag_k); LMMC_REAL_CLEAR(&aik);
+                    LMMC_REAL_CLEAR(&diag_i);
+                    st = LMMC_STATUS_NUMERICAL_FAILURE; goto fail;
                 }
-                workspace[k] = lik;
+                LMMC_REAL_SET(&workspace[k], &lik);
 
                 u_start = impl->diag_pos[k] + 1;
                 u_end = impl->row_ptr[k + 1];
 
                 for (p = u_start; p < u_end; ++p) {
                     size_t j = impl->col_idx[p];
-                    double delta = lik * impl->lu_values[p];
+                    lmmc_real_t delta; LMMC_REAL_INIT(&delta);
+                    LMMC_REAL_MUL(&delta, &lik, &impl->lu_values[p]);
 
-                    if (j <= k) {
-                        continue;
-                    }
-                    if (!lmmc_is_finite_number(delta)) {
-                        st = LMMC_STATUS_NUMERICAL_FAILURE;
-                        goto fail;
+                    if (j <= k) { LMMC_REAL_CLEAR(&delta); continue; }
+                    if (!lmmc_is_finite_number(&delta)) {
+                        LMMC_REAL_CLEAR(&delta);
+                        LMMC_REAL_CLEAR(&abs_diag_k); LMMC_REAL_CLEAR(&abs_aik);
+                        LMMC_REAL_CLEAR(&lik); LMMC_REAL_CLEAR(&diag_k); LMMC_REAL_CLEAR(&aik);
+                        LMMC_REAL_CLEAR(&diag_i);
+                        st = LMMC_STATUS_NUMERICAL_FAILURE; goto fail;
                     }
 
                     if (!present[j]) {
                         present[j] = 1;
                         processed[j] = 0;
                         active_cols[active_count++] = j;
-                        workspace[j] = -delta;
+                        LMMC_REAL_NEG(&workspace[j], &delta);
                     } else {
-                        workspace[j] -= delta;
+                        LMMC_REAL_SUB(&tmp_sub, &workspace[j], &delta);
+                        LMMC_REAL_SET(&workspace[j], &tmp_sub);
                     }
 
-                    if (!lmmc_is_finite_number(workspace[j])) {
-                        st = LMMC_STATUS_NUMERICAL_FAILURE;
-                        goto fail;
+                    if (!lmmc_is_finite_number(&workspace[j])) {
+                        LMMC_REAL_CLEAR(&delta);
+                        LMMC_REAL_CLEAR(&abs_diag_k); LMMC_REAL_CLEAR(&abs_aik);
+                        LMMC_REAL_CLEAR(&lik); LMMC_REAL_CLEAR(&diag_k); LMMC_REAL_CLEAR(&aik);
+                        LMMC_REAL_CLEAR(&diag_i);
+                        st = LMMC_STATUS_NUMERICAL_FAILURE; goto fail;
                     }
+                    LMMC_REAL_CLEAR(&delta);
                 }
+
+                LMMC_REAL_CLEAR(&abs_diag_k); LMMC_REAL_CLEAR(&abs_aik);
+                LMMC_REAL_CLEAR(&lik); LMMC_REAL_CLEAR(&diag_k); LMMC_REAL_CLEAR(&aik);
             }
         }
 
@@ -664,39 +821,27 @@ lmmc_status_t lmmc_precond_create_ilut(
             present[i] = 1;
             processed[i] = 0;
             active_cols[active_count++] = i;
-            workspace[i] = 0.0;
+            LMMC_REAL_SET_D(&workspace[i], 0.0);
         }
 
-        diag_i = workspace[i];
-        if (!lmmc_is_finite_number(diag_i) || fabs(diag_i) <= 1e-15) {
-            st = LMMC_STATUS_SINGULAR_MATRIX;
-            goto fail;
+        LMMC_REAL_SET(&diag_i, &workspace[i]);
+        lmmc_real_t abs_diag_i; LMMC_REAL_INIT(&abs_diag_i);
+        LMMC_REAL_ABS(&abs_diag_i, &diag_i);
+        
+        if (!lmmc_is_finite_number(&diag_i) || LMMC_REAL_CMP(&abs_diag_i, &eps_15) <= 0) {
+            LMMC_REAL_CLEAR(&abs_diag_i); LMMC_REAL_CLEAR(&diag_i);
+            st = LMMC_STATUS_SINGULAR_MATRIX; goto fail;
         }
+        LMMC_REAL_CLEAR(&abs_diag_i);
 
         lmmc_select_top_abs(
-            active_cols,
-            active_count,
-            present,
-            workspace,
-            i,
-            1,
-            drop_tol,
-            max_fill_per_row,
-            lower_keep_cols,
-            &lower_keep_count
+            active_cols, active_count, present, workspace, i, 1,
+            drop_tol, max_fill_per_row, lower_keep_cols, &lower_keep_count
         );
 
         lmmc_select_top_abs(
-            active_cols,
-            active_count,
-            present,
-            workspace,
-            i,
-            0,
-            drop_tol,
-            max_fill_per_row,
-            upper_keep_cols,
-            &upper_keep_count
+            active_cols, active_count, present, workspace, i, 0,
+            drop_tol, max_fill_per_row, upper_keep_cols, &upper_keep_count
         );
 
         {
@@ -705,53 +850,58 @@ lmmc_status_t lmmc_precond_create_ilut(
             size_t idx = 0;
 
             if (impl->nnz > ((size_t)-1) - row_need) {
-                st = LMMC_STATUS_INVALID_ARGUMENT;
-                goto fail;
+                LMMC_REAL_CLEAR(&diag_i);
+                st = LMMC_STATUS_INVALID_ARGUMENT; goto fail;
             }
             required = impl->nnz + row_need;
 
             st = lmmc_ilu_impl_reserve(impl, required);
             if (st != LMMC_STATUS_OK) {
+                LMMC_REAL_CLEAR(&diag_i);
                 goto fail;
             }
 
             for (idx = 0; idx < lower_keep_count; ++idx) {
                 size_t col = lower_keep_cols[idx];
-                double v = workspace[col];
-                if (!lmmc_is_finite_number(v)) {
-                    st = LMMC_STATUS_NUMERICAL_FAILURE;
-                    goto fail;
+                lmmc_real_t v; LMMC_REAL_INIT(&v); LMMC_REAL_SET(&v, &workspace[col]);
+                if (!lmmc_is_finite_number(&v)) {
+                    LMMC_REAL_CLEAR(&v); LMMC_REAL_CLEAR(&diag_i);
+                    st = LMMC_STATUS_NUMERICAL_FAILURE; goto fail;
                 }
                 impl->col_idx[impl->nnz] = col;
-                impl->lu_values[impl->nnz] = v;
+                LMMC_REAL_SET(&impl->lu_values[impl->nnz], &v);
                 impl->nnz += 1;
+                LMMC_REAL_CLEAR(&v);
             }
 
             impl->diag_pos[i] = impl->nnz;
             impl->col_idx[impl->nnz] = i;
-            impl->lu_values[impl->nnz] = diag_i;
+            LMMC_REAL_SET(&impl->lu_values[impl->nnz], &diag_i);
             impl->nnz += 1;
 
             for (idx = 0; idx < upper_keep_count; ++idx) {
                 size_t col = upper_keep_cols[idx];
-                double v = workspace[col];
-                if (!lmmc_is_finite_number(v)) {
-                    st = LMMC_STATUS_NUMERICAL_FAILURE;
-                    goto fail;
+                lmmc_real_t v; LMMC_REAL_INIT(&v); LMMC_REAL_SET(&v, &workspace[col]);
+                if (!lmmc_is_finite_number(&v)) {
+                    LMMC_REAL_CLEAR(&v); LMMC_REAL_CLEAR(&diag_i);
+                    st = LMMC_STATUS_NUMERICAL_FAILURE; goto fail;
                 }
                 impl->col_idx[impl->nnz] = col;
-                impl->lu_values[impl->nnz] = v;
+                LMMC_REAL_SET(&impl->lu_values[impl->nnz], &v);
                 impl->nnz += 1;
+                LMMC_REAL_CLEAR(&v);
             }
 
             impl->row_ptr[i + 1] = impl->nnz;
         }
 
+        LMMC_REAL_CLEAR(&diag_i);
+
         for (p = 0; p < active_count; ++p) {
             size_t col = active_cols[p];
             present[col] = 0;
             processed[col] = 0;
-            workspace[col] = 0.0;
+            LMMC_REAL_SET_D(&workspace[col], 0.0);
         }
     }
 
@@ -760,22 +910,38 @@ lmmc_status_t lmmc_precond_create_ilut(
     out_precond->impl = impl;
     out_precond->owns_data = 1;
 
+    LMMC_REAL_CLEAR(&tmp_sub); LMMC_REAL_CLEAR(&tmp_mul); LMMC_REAL_CLEAR(&tmp_add);
+    LMMC_REAL_CLEAR(&eps_15); LMMC_REAL_CLEAR(&zero);
+
     lmmc_free(upper_keep_cols);
     lmmc_free(lower_keep_cols);
     lmmc_free(active_cols);
     lmmc_free(processed);
     lmmc_free(present);
-    lmmc_free(workspace);
+    if (workspace != NULL) {
+        for(size_t kw=0; kw<n; ++kw) {
+            LMMC_REAL_CLEAR(&workspace[kw]);
+        }
+        lmmc_free(workspace);
+    }
     return LMMC_STATUS_OK;
 
 fail:
+    if (workspace != NULL) {
+        for(size_t kw=0; kw<n; ++kw) {
+            LMMC_REAL_CLEAR(&workspace[kw]);
+        }
+        lmmc_free(workspace);
+    }
     lmmc_free(upper_keep_cols);
     lmmc_free(lower_keep_cols);
     lmmc_free(active_cols);
     lmmc_free(processed);
     lmmc_free(present);
-    lmmc_free(workspace);
     lmmc_ilu_impl_destroy(impl);
+fail_early:
+    LMMC_REAL_CLEAR(&tmp_sub); LMMC_REAL_CLEAR(&tmp_mul); LMMC_REAL_CLEAR(&tmp_add);
+    LMMC_REAL_CLEAR(&eps_15); LMMC_REAL_CLEAR(&zero);
     return st;
 }
 
@@ -790,97 +956,117 @@ lmmc_status_t lmmc_precond_apply(const lmmc_precond_t* precond, const lmmc_vec_t
     }
 
     if (precond->type == LMMC_PRECOND_NONE) {
-        memcpy(out->data, rhs->data, rhs->size * sizeof(double));
+        for(i = 0; i < rhs->size; ++i) {
+            LMMC_REAL_SET(&out->data[i], &rhs->data[i]);
+        }
         return LMMC_STATUS_OK;
     }
 
     if (precond->type == LMMC_PRECOND_JACOBI) {
-        const double* diag_inv = NULL;
+        const lmmc_real_t* diag_inv = NULL;
         if (precond->impl == NULL) {
             return LMMC_STATUS_INVALID_ARGUMENT;
         }
 
-        diag_inv = (const double*)precond->impl;
+        diag_inv = (const lmmc_real_t*)precond->impl;
         for (i = 0; i < rhs->size; ++i) {
-            double v = rhs->data[i] * diag_inv[i];
-            if (!lmmc_is_finite_number(rhs->data[i]) || !lmmc_is_finite_number(v)) {
+            lmmc_real_t v; LMMC_REAL_INIT(&v);
+            LMMC_REAL_MUL(&v, &rhs->data[i], &diag_inv[i]);
+            if (!lmmc_is_finite_number(&rhs->data[i]) || !lmmc_is_finite_number(&v)) {
+                LMMC_REAL_CLEAR(&v);
                 return LMMC_STATUS_NUMERICAL_FAILURE;
             }
-            out->data[i] = v;
+            LMMC_REAL_SET(&out->data[i], &v);
+            LMMC_REAL_CLEAR(&v);
         }
         return LMMC_STATUS_OK;
     }
 
     if (precond->type == LMMC_PRECOND_ILU0 || precond->type == LMMC_PRECOND_ILUT) {
         const lmmc_precond_ilu_impl_t* impl = NULL;
-        size_t bytes = 0;
-        double* y = NULL;
+        lmmc_real_t* y_arr = NULL;
 
         if (precond->impl == NULL) {
             return LMMC_STATUS_INVALID_ARGUMENT;
         }
 
         impl = (const lmmc_precond_ilu_impl_t*)precond->impl;
-        if (impl->size != precond->size || impl->diag_pos == NULL || impl->row_ptr == NULL) {
+        if (impl->size != precond->size || impl->diag_pos == NULL || impl->row_ptr == NULL || impl->y_arr == NULL) {
             return LMMC_STATUS_INVALID_ARGUMENT;
         }
 
-        if (lmmc_mul_overflow_size(impl->size, sizeof(double), &bytes)) {
-            return LMMC_STATUS_INVALID_ARGUMENT;
+        y_arr = impl->y_arr;
+        for (i = 0; i < impl->size; ++i) {
+            LMMC_REAL_SET_D(&y_arr[i], 0.0);
         }
 
-        y = (double*)lmmc_alloc(bytes);
-        if (y == NULL) {
-            return LMMC_STATUS_ALLOCATION_FAILED;
-        }
+        lmmc_real_t sum; LMMC_REAL_INIT(&sum); LMMC_REAL_SET_D(&sum, 0.0);
+        lmmc_real_t tmp_mul; LMMC_REAL_INIT(&tmp_mul); LMMC_REAL_SET_D(&tmp_mul, 0.0);
+        lmmc_real_t tmp_sub; LMMC_REAL_INIT(&tmp_sub); LMMC_REAL_SET_D(&tmp_sub, 0.0);
+        lmmc_real_t diag; LMMC_REAL_INIT(&diag); LMMC_REAL_SET_D(&diag, 0.0);
+        lmmc_real_t abs_diag; LMMC_REAL_INIT(&abs_diag); LMMC_REAL_SET_D(&abs_diag, 0.0);
+        lmmc_real_t eps_15; LMMC_REAL_INIT(&eps_15); LMMC_REAL_SET_D(&eps_15, 1e-15);
 
         for (i = 0; i < impl->size; ++i) {
             size_t p = 0;
-            double sum = rhs->data[i];
+            LMMC_REAL_SET(&sum, &rhs->data[i]);
 
             for (p = impl->row_ptr[i]; p < impl->row_ptr[i + 1]; ++p) {
                 size_t j = impl->col_idx[p];
                 if (j >= i) {
                     continue;
                 }
-                sum -= impl->lu_values[p] * y[j];
+                LMMC_REAL_MUL(&tmp_mul, &impl->lu_values[p], &y_arr[j]);
+                LMMC_REAL_SUB(&tmp_sub, &sum, &tmp_mul);
+                LMMC_REAL_SET(&sum, &tmp_sub);
             }
 
-            if (!lmmc_is_finite_number(sum)) {
-                lmmc_free(y);
+            if (!lmmc_is_finite_number(&sum)) {
+                LMMC_REAL_CLEAR(&eps_15); LMMC_REAL_CLEAR(&abs_diag);
+                LMMC_REAL_CLEAR(&diag); LMMC_REAL_CLEAR(&tmp_sub);
+                LMMC_REAL_CLEAR(&tmp_mul); LMMC_REAL_CLEAR(&sum);
                 return LMMC_STATUS_NUMERICAL_FAILURE;
             }
-            y[i] = sum;
+            LMMC_REAL_SET(&y_arr[i], &sum);
         }
 
         for (i = impl->size; i > 0; --i) {
             size_t row = i - 1;
             size_t p = 0;
-            double sum = y[row];
-            double diag = 0.0;
+            LMMC_REAL_SET(&sum, &y_arr[row]);
+            LMMC_REAL_SET_D(&diag, 0.0);
 
             for (p = impl->row_ptr[row]; p < impl->row_ptr[row + 1]; ++p) {
                 size_t j = impl->col_idx[p];
                 if (j <= row) {
                     continue;
                 }
-                sum -= impl->lu_values[p] * out->data[j];
+                LMMC_REAL_MUL(&tmp_mul, &impl->lu_values[p], &out->data[j]);
+                LMMC_REAL_SUB(&tmp_sub, &sum, &tmp_mul);
+                LMMC_REAL_SET(&sum, &tmp_sub);
             }
 
-            diag = impl->lu_values[impl->diag_pos[row]];
-            if (!lmmc_is_finite_number(sum) || !lmmc_is_finite_number(diag) || fabs(diag) <= 1e-15) {
-                lmmc_free(y);
+            LMMC_REAL_SET(&diag, &impl->lu_values[impl->diag_pos[row]]);
+            LMMC_REAL_ABS(&abs_diag, &diag);
+            if (!lmmc_is_finite_number(&sum) || !lmmc_is_finite_number(&diag) || LMMC_REAL_CMP(&abs_diag, &eps_15) <= 0) {
+                LMMC_REAL_CLEAR(&eps_15); LMMC_REAL_CLEAR(&abs_diag);
+                LMMC_REAL_CLEAR(&diag); LMMC_REAL_CLEAR(&tmp_sub);
+                LMMC_REAL_CLEAR(&tmp_mul); LMMC_REAL_CLEAR(&sum);
                 return LMMC_STATUS_NUMERICAL_FAILURE;
             }
 
-            out->data[row] = sum / diag;
-            if (!lmmc_is_finite_number(out->data[row])) {
-                lmmc_free(y);
+            LMMC_REAL_DIV(&out->data[row], &sum, &diag);
+            if (!lmmc_is_finite_number(&out->data[row])) {
+                LMMC_REAL_CLEAR(&eps_15); LMMC_REAL_CLEAR(&abs_diag);
+                LMMC_REAL_CLEAR(&diag); LMMC_REAL_CLEAR(&tmp_sub);
+                LMMC_REAL_CLEAR(&tmp_mul); LMMC_REAL_CLEAR(&sum);
                 return LMMC_STATUS_NUMERICAL_FAILURE;
             }
         }
 
-        lmmc_free(y);
+        LMMC_REAL_CLEAR(&eps_15); LMMC_REAL_CLEAR(&abs_diag);
+        LMMC_REAL_CLEAR(&diag); LMMC_REAL_CLEAR(&tmp_sub);
+        LMMC_REAL_CLEAR(&tmp_mul); LMMC_REAL_CLEAR(&sum);
         return LMMC_STATUS_OK;
     }
 
@@ -894,6 +1080,11 @@ void lmmc_precond_destroy(lmmc_precond_t* precond) {
 
     if (precond->owns_data && precond->impl != NULL) {
         if (precond->type == LMMC_PRECOND_JACOBI) {
+            lmmc_real_t* arr = (lmmc_real_t*)precond->impl;
+            size_t k;
+            for (k = 0; k < precond->size; ++k) {
+                LMMC_REAL_CLEAR(&arr[k]);
+            }
             lmmc_free(precond->impl);
         } else if (precond->type == LMMC_PRECOND_ILU0 || precond->type == LMMC_PRECOND_ILUT) {
             lmmc_ilu_impl_destroy((lmmc_precond_ilu_impl_t*)precond->impl);

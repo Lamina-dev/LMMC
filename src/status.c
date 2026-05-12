@@ -1,3 +1,4 @@
+#include "lmmc/config.h"
 #include "lmmc/status.h"
 
 const char* lmmc_status_string(lmmc_status_t status) {

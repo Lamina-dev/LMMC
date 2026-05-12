@@ -31,9 +31,9 @@ int main(void) {
         goto cleanup;
     }
 
-    a_dense.data[0] = 4.0; a_dense.data[1] = 1.0; a_dense.data[2] = 0.0;
-    a_dense.data[3] = 2.0; a_dense.data[4] = 3.0; a_dense.data[5] = 1.0;
-    a_dense.data[6] = 0.0; a_dense.data[7] = 1.0; a_dense.data[8] = 2.0;
+    LMMC_REAL_SET_D(&a_dense.data[0], 4.0); LMMC_REAL_SET_D(&a_dense.data[1], 1.0); LMMC_REAL_SET_D(&a_dense.data[2], 0.0);
+    LMMC_REAL_SET_D(&a_dense.data[3], 2.0); LMMC_REAL_SET_D(&a_dense.data[4], 3.0); LMMC_REAL_SET_D(&a_dense.data[5], 1.0);
+    LMMC_REAL_SET_D(&a_dense.data[6], 0.0); LMMC_REAL_SET_D(&a_dense.data[7], 1.0); LMMC_REAL_SET_D(&a_dense.data[8], 2.0);
 
     st = lmmc_sparse_from_dense(&a_dense, 1e-14, &a_sparse);
     if (st != LMMC_STATUS_OK) {
@@ -52,9 +52,9 @@ int main(void) {
         goto cleanup;
     }
 
-    b.data[0] = 6.0;
-    b.data[1] = 11.0;
-    b.data[2] = 8.0;
+    LMMC_REAL_SET_D(&b.data[0], 6.0);
+    LMMC_REAL_SET_D(&b.data[1], 11.0);
+    LMMC_REAL_SET_D(&b.data[2], 8.0);
 
     st = lmmc_precond_create_jacobi(&a_sparse, &jacobi);
     if (st != LMMC_STATUS_OK) {
@@ -179,7 +179,7 @@ int main(void) {
         for (i = 0; i < n_large; ++i) {
             large_sparse.row_ptr[i] = i;
             large_sparse.col_idx[i] = i;
-            large_sparse.values[i] = 1.0;
+            LMMC_REAL_SET_D(&large_sparse.values[i], 1.0);
         }
         large_sparse.row_ptr[n_large] = n_large;
 
@@ -204,8 +204,8 @@ int main(void) {
         goto cleanup;
     }
     x_nan.data[0] = NAN;
-    x_nan.data[1] = 0.0;
-    x_nan.data[2] = 0.0;
+    LMMC_REAL_SET_D(&x_nan.data[1], 0.0);
+    LMMC_REAL_SET_D(&x_nan.data[2], 0.0);
 
     st = lmmc_bicgstab_solve(&a_sparse, &b, &jacobi, &cfg, &x_nan, &result);
     if (st != LMMC_STATUS_NUMERICAL_FAILURE) {
@@ -234,8 +234,8 @@ int main(void) {
         goto cleanup;
     }
 
-    zero_b.data[0] = 1.0;
-    zero_b.data[1] = 1.0;
+    LMMC_REAL_SET_D(&zero_b.data[0], 1.0);
+    LMMC_REAL_SET_D(&zero_b.data[1], 1.0);
 
     {
         lmmc_precond_t ilu0_fail = {0};
