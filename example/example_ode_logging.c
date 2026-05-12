@@ -21,25 +21,37 @@ static lmmc_status_t decay_rhs(lmmc_real_t t, const lmmc_real_t* y, lmmc_real_t*
 }
 
 int main(void) {
-    lmmc_ode_config_t cfg;
-    lmmc_ode_result_t res;
-    lmmc_real_t y[1] = {1.0}; // Initial condition y(0) = 1
-    lmmc_status_t st;
+    lmmc_ode_config_t cfg = {0};
+    lmmc_ode_result_t res = {0};
+    lmmc_real_t y[1];
+    LMMC_REAL_INIT(&y[0]); LMMC_REAL_SET_D(&y[0], 1.0);
+    lmmc_status_t st = LMMC_STATUS_OK;
 
-    lmmc_ode_default_config(0.0, 1.0, 1, &cfg);
-    
+    st = lmmc_ode_default_config(0.0, 1.0, 1, &cfg);
+    if (st != LMMC_STATUS_OK) return 1;
+
     printf("--- Part 1: ODE RK4 with Verbose Logging ---\n");
     cfg.verbose = 1;
     cfg.initial_step = 0.2;
     st = lmmc_ode_rk4_solve(decay_rhs, NULL, 1, 0.0, 1.0, y, &cfg, &res);
-    printf("Status: %s, Steps: %zu, Final y: %.6f\n\n", lmmc_status_string(st), res.num_steps, y[0]);
+    printf("Status: %s", lmmc_status_string(st));
+    if (st == LMMC_STATUS_OK) {
+        printf(", Steps: %zu, Final y: %.6f\n\n", res.num_steps, y[0]);
+    } else {
+        printf("\n\n");
+    }
 
     printf("--- Part 2: ODE RK45 with Custom Callback ---\n");
-    y[0] = 1.0; // Reset
+    LMMC_REAL_SET_D(&y[0], 1.0); // Reset
     cfg.verbose = 0;
     cfg.log_cb = my_ode_logger;
     st = lmmc_ode_rk45_solve(decay_rhs, NULL, 1, 0.0, 1.0, y, &cfg, &res);
-    printf("Status: %s, Steps: %zu, Final y: %.6f\n", lmmc_status_string(st), res.num_steps, y[0]);
+    printf("Status: %s", lmmc_status_string(st));
+    if (st == LMMC_STATUS_OK) {
+        printf(", Steps: %zu, Final y: %.6f\n", res.num_steps, y[0]);
+    } else {
+        printf("\n");
+    }
 
     return 0;
 }

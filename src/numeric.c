@@ -113,7 +113,7 @@ lmmc_status_t lmmc_nan(lmmc_real_t* out_nan) {
 
 lmmc_status_t lmmc_eps(lmmc_real_t* out_eps) {
     if (out_eps == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
-    LMMC_REAL_SET_D(out_eps, DBL_EPSILON);
+    LMMC_REAL_SET_D(out_eps, LMMC_REAL_EPSILON);
     return LMMC_STATUS_OK;
 }
 

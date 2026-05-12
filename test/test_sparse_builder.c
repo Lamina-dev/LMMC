@@ -5,6 +5,7 @@
 int main(void) {
     lmmc_sparse_builder_t* builder = NULL;
     lmmc_sparse_mat_t sparse = {0};
+    lmmc_mat_t dense = {0};
     lmmc_status_t st;
 
     printf("Testing Sparse Builder (COO -> CSR)...\n");
@@ -43,9 +44,10 @@ int main(void) {
     printf("Matrix built successfully with %zu non-zeros.\n", sparse.nnz);
 
     /* 5. Convert to dense for easy visual verification */
-    lmmc_mat_t dense;
-    lmmc_mat_create(3, 3, &dense);
-    lmmc_sparse_to_dense(&sparse, &dense);
+    st = lmmc_mat_create(3, 3, &dense);
+    if (st != LMMC_STATUS_OK) { goto cleanup; }
+    st = lmmc_sparse_to_dense(&sparse, &dense);
+    if (st != LMMC_STATUS_OK) { goto cleanup; }
 
     printf("Dense representation:\n");
     for (size_t i = 0; i < 3; ++i) {

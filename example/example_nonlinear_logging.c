@@ -19,16 +19,38 @@ static double my_derivative(lmmc_real_t x, void* user_data) {
 }
 
 int main(void) {
-    lmmc_nonlinear_config_t cfg;
-    lmmc_nonlinear_result_t res;
-    lmmc_status_t st;
+    lmmc_nonlinear_config_t cfg = {0};
+    lmmc_nonlinear_result_t res = {0};
+    lmmc_status_t st = LMMC_STATUS_OK;
 
-    lmmc_nonlinear_default_config(&cfg);
-    
+    st = lmmc_nonlinear_default_config(&cfg);
+    if (st != LMMC_STATUS_OK) {
+        printf("Failed to init config\n");
+        return 1;
+    }
+
     printf("--- Part 1: Default Verbose Logging ---\n");
     cfg.verbose = 1;
     st = lmmc_newton_solve(my_function, my_derivative, NULL, 1.0, &cfg, &res);
-    printf("Final Status: %s, Iterations: %zu\n\n", lmmc_status_string(st), res.num_iter);
+    printf("Final Status: %s", lmmc_status_string(st));
+    if (st == LMMC_STATUS_OK) {
+        printf(", Iterations: %zu\n\n", res.num_iter);
+    } else {
+        printf("\n\n");
+    }
+
+    printf("--- Part 2: Custom Callback Logging ---\n");
+    cfg.verbose = 0;
+    cfg.log_cb = my_nonlinear_logger;
+    cfg.log_user_data = "CustomLog";
+    
+    st = lmmc_newton_solve(my_function, my_derivative, NULL, 2.0, &cfg, &res);
+    printf("Final Status: %s", lmmc_status_string(st));
+    if (st == LMMC_STATUS_OK) {
+        printf(", Iterations: %zu\n\n", res.num_iter);
+    } else {
+        printf("\n\n");
+    }
 
     printf("--- Part 2: Custom Callback Logging ---\n");
     cfg.verbose = 0; // Disable built-in printf
@@ -36,7 +58,12 @@ int main(void) {
     cfg.log_user_data = (void*)"CustomSolver";
     
     st = lmmc_newton_solve(my_function, my_derivative, NULL, 2.0, &cfg, &res);
-    printf("Final Status: %s, Iterations: %zu, Root: %.10f\n", lmmc_status_string(st), res.num_iter, res.root);
+    printf("Final Status: %s", lmmc_status_string(st));
+    if (st == LMMC_STATUS_OK) {
+        printf(", Iterations: %zu, Root: %.10f\n", res.num_iter, res.root);
+    } else {
+        printf("\n");
+    }
 
     return 0;
 }

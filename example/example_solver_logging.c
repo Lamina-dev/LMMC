@@ -2,7 +2,7 @@
 #include "lmmc/lmmc.h"
 
 // 1. Define a custom logging callback
-void my_solver_logger(size_t iter, double residual_norm, void* user_data) {
+void my_solver_logger(size_t iter, lmmc_real_t residual_norm, void* user_data) {
     const char* prefix = (const char*)user_data;
     printf("[%s] Step %zu: Residual = %.4e\n", prefix, iter, residual_norm);
 }
@@ -19,9 +19,12 @@ int main(void) {
 
     // 2. Setup a simple 10x10 Poisson-like problem (tridiagonal)
     const size_t n = 10;
-    lmmc_mat_create(n, n, &a_dense);
-    lmmc_vec_create(n, &b);
-    lmmc_vec_create(n, &x);
+    st = lmmc_mat_create(n, n, &a_dense);
+    if (st != LMMC_STATUS_OK) return 1;
+    st = lmmc_vec_create(n, &b);
+    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&a_dense); return 1; }
+    st = lmmc_vec_create(n, &x);
+    if (st != LMMC_STATUS_OK) { lmmc_vec_destroy(&b); lmmc_mat_destroy(&a_dense); return 1; }
 
     for (size_t i = 0; i < n; ++i) {
         a_dense.data[i * n + i] = 2.0;
@@ -30,10 +33,17 @@ int main(void) {
         b.data[i] = 1.0; // RHS
     }
 
-    lmmc_sparse_from_dense(&a_dense, 1e-14, &a);
+    st = lmmc_sparse_from_dense(&a_dense, 1e-14, &a);
+    if (st != LMMC_STATUS_OK) {
+        lmmc_vec_destroy(&x); lmmc_vec_destroy(&b); lmmc_mat_destroy(&a_dense);
+        return 1;
+    }
 
-    // 3. Configure solver with the logger
-    lmmc_itersolve_default_config(n, &cfg);
+    st = lmmc_itersolve_default_config(n, &cfg);
+    if (st != LMMC_STATUS_OK) {
+        lmmc_sparse_destroy(&a); lmmc_vec_destroy(&x); lmmc_vec_destroy(&b); lmmc_mat_destroy(&a_dense);
+        return 1;
+    }
     cfg.log_cb = my_solver_logger;
     cfg.log_user_data = (void*)"CG-Poisson";
     cfg.max_iter = 100;
