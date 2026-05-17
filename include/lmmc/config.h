@@ -22,6 +22,12 @@ typedef double lmmc_real_t;
 #define LMMC_REAL_SQRT(res, a)      (*(res) = sqrt(*(a)))
 #define LMMC_REAL_ABS(res, a)       (*(res) = fabs(*(a)))
 
+#define LMMC_REAL_EXP(res, a)       (*(res) = exp(*(a)))
+#define LMMC_REAL_LOG(res, a)       (*(res) = log(*(a)))
+#define LMMC_REAL_SIN(res, a)       (*(res) = sin(*(a)))
+#define LMMC_REAL_COS(res, a)       (*(res) = cos(*(a)))
+#define LMMC_REAL_TAN(res, a)       (*(res) = tan(*(a)))
+
 #define LMMC_REAL_CMP(a, b)         ((*(a) > *(b)) ? 1 : ((*(a) < *(b)) ? -1 : 0))
 #define LMMC_REAL_IS_FINITE(x)      isfinite(*(x))
 

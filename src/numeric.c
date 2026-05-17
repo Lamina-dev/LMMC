@@ -481,6 +481,42 @@ lmmc_status_t lmmc_fft_radix4_inverse(lmmc_real_t* real, lmmc_real_t* imag, size
     return lmmc_fft_radix4(real, imag, n, 1);
 }
 
+lmmc_status_t lmmc_lambertw(lmmc_real_t z, lmmc_real_t* out_res) {
+    if (!out_res) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (z < -LMMC_INV_PI) return LMMC_STATUS_NUMERICAL_FAILURE;
+    if (z == 0.0) { *out_res = 0.0; return LMMC_STATUS_OK; }
+
+    lmmc_real_t w = 0.0;
+    if (z > 2.0) {
+        lmmc_real_t lnz;
+        LMMC_REAL_LOG(&lnz, &z);
+        w = lnz - log(lnz); 
+    } else if (z < -0.3) {
+        w = -1.0; 
+    } else {
+        w = z; 
+    }
+
+    const int max_iter = 100;
+    for (int i = 0; i < max_iter; ++i) {
+        lmmc_real_t expw;
+        LMMC_REAL_EXP(&expw, &w);
+        lmmc_real_t w_expw = w * expw;
+        lmmc_real_t diff = w_expw - z;
+        lmmc_real_t abs_diff;
+        LMMC_REAL_ABS(&abs_diff, &diff);
+        if (abs_diff < 1e-12) {
+            *out_res = w;
+            return LMMC_STATUS_OK;
+        }
+        lmmc_real_t f_prime = expw * (w + 1.0);
+        lmmc_real_t step = diff / f_prime;
+        w -= step;
+    }
+    *out_res = w;
+    return LMMC_STATUS_OK;
+}
+
 lmmc_status_t lmmc_double_nearly_equal_tol(
     lmmc_real_t a,
     lmmc_real_t b,

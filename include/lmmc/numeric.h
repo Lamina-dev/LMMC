@@ -72,6 +72,8 @@ lmmc_status_t lmmc_fft_radix4(lmmc_real_t* real, lmmc_real_t* imag, size_t n, in
 lmmc_status_t lmmc_fft_radix4_forward(lmmc_real_t* real, lmmc_real_t* imag, size_t n);
 lmmc_status_t lmmc_fft_radix4_inverse(lmmc_real_t* real, lmmc_real_t* imag, size_t n);
 
+lmmc_status_t lmmc_lambertw(lmmc_real_t z, lmmc_real_t* out_res);
+
 #ifdef __cplusplus
 }
 #endif
