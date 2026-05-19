@@ -61,6 +61,7 @@ endif()
 
 set(LMMC_SOURCES
     src/dense.c
+    src/init.c
     src/itersolve.c
     src/linear_algebra.c
     src/nonlinear.c
@@ -93,7 +94,15 @@ foreach(_lmmc_target IN LISTS LMMC_LIB_TARGETS)
     )
 endforeach()
 
-if(LAMMP_STATIC_LIBRARY)
+if(TARGET LammpCore)
+    # LammpCore is already a CMake target (e.g. built via add_subdirectory
+    # from the parent project).  Link directly against it.
+    foreach(_lmmc_target IN LISTS LMMC_LIB_TARGETS)
+        target_link_libraries(${_lmmc_target} PUBLIC LammpCore)
+        target_compile_definitions(${_lmmc_target} PRIVATE LMMC_USE_LAMMP_ALLOC=1)
+    endforeach()
+    message(STATUS "LMMC: linking against LammpCore CMake target")
+elseif(LAMMP_STATIC_LIBRARY)
     if(NOT EXISTS "${LAMMP_STATIC_LIBRARY}")
         message(FATAL_ERROR "LAMMP_STATIC_LIBRARY does not exist: ${LAMMP_STATIC_LIBRARY}")
     endif()

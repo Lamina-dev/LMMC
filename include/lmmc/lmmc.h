@@ -1,6 +1,7 @@
 #ifndef LMMC_H
 #define LMMC_H
 
+#include "lmmc/init.h"
 #include "lmmc/status.h"
 #include "lmmc/dense.h"
 #include "lmmc/precond.h"
