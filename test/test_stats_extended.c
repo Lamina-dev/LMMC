@@ -1,3 +1,9 @@
+/**
+ * @file test_stats_extended.c
+ * @brief 针对 LMMC 中 stats extended 相关接口的单元测试。
+ *
+ * @internal
+ */
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -14,7 +20,7 @@ int main(void) {
     lmmc_mat_t cov_mat = {0};
     lmmc_mat_t corr_mat = {0};
 
-    /* ===== Requirement 15.1: factorial known values ===== */
+
     {
         lmmc_real_t val = 0.0;
 
@@ -31,7 +37,7 @@ int main(void) {
         if (!lmmc_test_nearly_equal(val, 2432902008176640000.0, 1e6)) { rc = 1; goto done; }
     }
 
-    /* ===== Requirement 15.2: nCr known values ===== */
+
     {
         lmmc_real_t val = 0.0;
 
@@ -41,14 +47,14 @@ int main(void) {
         lmmc_stats_nCr(&val, 20, 10);
         if (!lmmc_test_nearly_equal(val, 184756.0, 1e-6)) { rc = 1; goto done; }
 
-        /* C(n, 0) = 1 for various n */
+
         lmmc_stats_nCr(&val, 5, 0);
         if (!lmmc_test_nearly_equal(val, 1.0, 1e-12)) { rc = 1; goto done; }
 
         lmmc_stats_nCr(&val, 100, 0);
         if (!lmmc_test_nearly_equal(val, 1.0, 1e-12)) { rc = 1; goto done; }
 
-        /* C(n, n) = 1 for various n */
+
         lmmc_stats_nCr(&val, 5, 5);
         if (!lmmc_test_nearly_equal(val, 1.0, 1e-12)) { rc = 1; goto done; }
 
@@ -56,7 +62,7 @@ int main(void) {
         if (!lmmc_test_nearly_equal(val, 1.0, 1e-12)) { rc = 1; goto done; }
     }
 
-    /* ===== Requirement 15.3: nPr known values ===== */
+
     {
         lmmc_real_t val = 0.0;
 
@@ -67,7 +73,7 @@ int main(void) {
         if (!lmmc_test_nearly_equal(val, 30240.0, 1e-6)) { rc = 1; goto done; }
     }
 
-    /* ===== Requirement 15.4: constant vector variance = 0 ===== */
+
     {
         lmmc_status_t st;
         lmmc_real_t var = 0.0;
@@ -75,7 +81,7 @@ int main(void) {
         st = lmmc_vec_create(50, &v1);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-        /* Fill with constant value 7.5 */
+
         for (size_t i = 0; i < 50; i++) {
             LMMC_REAL_SET_D(&v1.data[i], 7.5);
         }
@@ -89,7 +95,7 @@ int main(void) {
         memset(&v1, 0, sizeof(v1));
     }
 
-    /* ===== Requirement 15.5: negative correlation = -1 ===== */
+
     {
         lmmc_status_t st;
         lmmc_real_t corr = 0.0;
@@ -99,7 +105,7 @@ int main(void) {
         st = lmmc_vec_create(5, &v2);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-        /* x = [1, 2, 3, 4, 5], y = [-1, -2, -3, -4, -5] => perfect negative correlation */
+
         for (size_t i = 0; i < 5; i++) {
             LMMC_REAL_SET_D(&v1.data[i], (double)(i + 1));
             LMMC_REAL_SET_D(&v2.data[i], -(double)(i + 1));
@@ -121,7 +127,7 @@ int main(void) {
         memset(&v1, 0, sizeof(v1));
     }
 
-    /* ===== Requirement 15.7: large vector (size=1000) numerical stability ===== */
+
     {
         lmmc_status_t st;
         lmmc_real_t mean_val = 0.0;
@@ -131,18 +137,18 @@ int main(void) {
         st = lmmc_vec_create(n, &big_v1);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-        /* Fill with values 1, 2, ..., 1000 */
+
         for (size_t i = 0; i < n; i++) {
             LMMC_REAL_SET_D(&big_v1.data[i], (double)(i + 1));
         }
 
-        /* Mean of 1..1000 = 500.5 */
+
         st = lmmc_vec_mean(&big_v1, &mean_val);
         if (st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(mean_val, 500.5, 1e-10)) {
             rc = 1; goto done;
         }
 
-        /* Population variance of 1..n = (n^2 - 1) / 12 = (1000000 - 1) / 12 = 83333.25 */
+
         st = lmmc_vec_variance_population(&big_v1, &var_val);
         if (st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(var_val, 83333.25, 1e-6)) {
             rc = 1; goto done;
@@ -152,7 +158,7 @@ int main(void) {
         memset(&big_v1, 0, sizeof(big_v1));
     }
 
-    /* ===== Requirement 15.8: covariance matrix symmetry ===== */
+
     {
         lmmc_status_t st;
         const size_t rows = 10;
@@ -163,7 +169,7 @@ int main(void) {
         st = lmmc_mat_create(cols, cols, &cov_mat);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-        /* Fill data matrix with some values */
+
         for (size_t i = 0; i < rows; i++) {
             for (size_t j = 0; j < cols; j++) {
                 double val = (double)(i * cols + j) * 0.7 + (double)(j * j) * 1.3;
@@ -174,7 +180,7 @@ int main(void) {
         st = lmmc_mat_covariance_population(&data, &cov_mat);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-        /* Verify symmetry: Cov[i][j] == Cov[j][i] */
+
         for (size_t i = 0; i < cols; i++) {
             for (size_t j = 0; j < cols; j++) {
                 double cij = cov_mat.data[i * cols + j];
@@ -185,7 +191,7 @@ int main(void) {
             }
         }
 
-        /* Also verify with sample covariance */
+
         st = lmmc_mat_covariance_sample(&data, &cov_mat);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
@@ -205,7 +211,7 @@ int main(void) {
         memset(&data, 0, sizeof(data));
     }
 
-    /* ===== Requirement 15.9: correlation matrix diagonal = 1 ===== */
+
     {
         lmmc_status_t st;
         const size_t rows = 10;
@@ -216,7 +222,7 @@ int main(void) {
         st = lmmc_mat_create(cols, cols, &corr_mat);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-        /* Fill with non-constant columns (important: each column must have variance > 0) */
+
         for (size_t i = 0; i < rows; i++) {
             for (size_t j = 0; j < cols; j++) {
                 double val = (double)(i + 1) * (double)(j + 1) + (double)(i * i) * 0.1;
@@ -227,7 +233,7 @@ int main(void) {
         st = lmmc_mat_correlation_population(&data, &corr_mat);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-        /* Verify diagonal elements are 1.0 */
+
         for (size_t i = 0; i < cols; i++) {
             double diag_val = corr_mat.data[i * cols + i];
             if (!lmmc_test_nearly_equal(diag_val, 1.0, 1e-12)) {
@@ -235,7 +241,7 @@ int main(void) {
             }
         }
 
-        /* Also verify with sample correlation */
+
         st = lmmc_mat_correlation_sample(&data, &corr_mat);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
@@ -252,9 +258,9 @@ int main(void) {
         memset(&data, 0, sizeof(data));
     }
 
-    /* ===== Requirement 15.10: nCr(n, r) with r > n returns 0 ===== */
+
     {
-        lmmc_real_t val = 999.0; /* initialize to non-zero to verify it gets set to 0 */
+        lmmc_real_t val = 999.0;
 
         lmmc_stats_nCr(&val, 5, 6);
         if (!lmmc_test_nearly_equal(val, 0.0, 1e-12)) { rc = 1; goto done; }

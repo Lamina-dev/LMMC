@@ -1,3 +1,7 @@
+/**
+ * @file dense.c
+ * @brief 稠密矩阵 / 向量运算实现。
+ */
 #include <math.h>
 #include <string.h>
 #include "memory_bridge.h"
@@ -136,18 +140,17 @@ lmmc_status_t lmmc_mat_mul(const lmmc_mat_t* a, const lmmc_mat_t* b, lmmc_mat_t*
     const lmmc_real_t* restrict a_data = a->data;
     const lmmc_real_t* restrict b_data = b->data;
     lmmc_real_t* restrict c_data = c->data;
-    
+
     size_t a_stride = a->stride;
     size_t b_stride = b->stride;
     size_t c_stride = c->stride;
-    
+
     size_t M = a->rows;
     size_t K_dim = a->cols;
     size_t N = b->cols;
 
 #ifdef LMMC_USE_BLAS
-    /* BLAS path: only when all matrices are row-major contiguous
-     * (stride == cols). Falls through to pure C implementation otherwise. */
+
     if (a_stride == a->cols && b_stride == b->cols && c_stride == c->cols) {
         lmmc_blas_dgemm(M, N, K_dim,
                         (lmmc_real_t)1.0,
@@ -179,7 +182,7 @@ lmmc_status_t lmmc_mat_mul(const lmmc_mat_t* a, const lmmc_mat_t* b, lmmc_mat_t*
                     for (size_t k = kk; k < k_end; ++k) {
                         lmmc_real_t a_ik; LMMC_REAL_INIT(&a_ik);
                         LMMC_REAL_SET(&a_ik, &a_data[i * a_stride + k]);
-                        
+
                         size_t j = jj;
                         for (; j + 3 < j_end; j += 4) {
                             LMMC_REAL_MUL(&tmp_mul, &a_ik, &b_data[k * b_stride + j]);
@@ -364,9 +367,6 @@ lmmc_status_t lmmc_mat_vec_mul(const lmmc_mat_t* a, const lmmc_vec_t* x, lmmc_ve
     return LMMC_STATUS_OK;
 }
 
-/* ========================================================================
- * BLAS Level 1 向量运算
- * ======================================================================== */
 
 lmmc_status_t lmmc_vec_norm2(const lmmc_vec_t* x, lmmc_real_t* out_norm) {
     if (x == NULL || out_norm == NULL || x->data == NULL) {
@@ -377,7 +377,7 @@ lmmc_status_t lmmc_vec_norm2(const lmmc_vec_t* x, lmmc_real_t* out_norm) {
     }
 
 #ifdef LMMC_USE_BLAS
-    /* BLAS path: vectors are always contiguous (incx = 1) */
+
     *out_norm = lmmc_blas_dnrm2(x->size, x->data, 1);
     return LMMC_STATUS_OK;
 #else
@@ -454,7 +454,7 @@ lmmc_status_t lmmc_vec_axpy(lmmc_real_t alpha, const lmmc_vec_t* x, lmmc_vec_t* 
     }
 
 #ifdef LMMC_USE_BLAS
-    /* BLAS path: vectors are always contiguous (incx = incy = 1) */
+
     lmmc_blas_daxpy(x->size, alpha, x->data, 1, y->data, 1);
     return LMMC_STATUS_OK;
 #else
@@ -561,9 +561,6 @@ lmmc_status_t lmmc_vec_iamax(const lmmc_vec_t* x, size_t* out_idx) {
     return LMMC_STATUS_OK;
 }
 
-/* ========================================================================
- * 矩阵基本运算
- * ======================================================================== */
 
 lmmc_status_t lmmc_mat_add(const lmmc_mat_t* a, const lmmc_mat_t* b, lmmc_mat_t* c) {
     if (a == NULL || b == NULL || c == NULL ||
@@ -687,13 +684,13 @@ lmmc_status_t lmmc_mat_det(const lmmc_mat_t* a, lmmc_real_t* out_det) {
 
     size_t n = a->rows;
 
-    /* Special case: 1x1 matrix */
+
     if (n == 1) {
         LMMC_REAL_SET(out_det, &a->data[0]);
         return LMMC_STATUS_OK;
     }
 
-    /* Special case: 2x2 matrix */
+
     if (n == 2) {
         lmmc_real_t ad; LMMC_REAL_INIT(&ad);
         lmmc_real_t bc; LMMC_REAL_INIT(&bc);
@@ -710,8 +707,7 @@ lmmc_status_t lmmc_mat_det(const lmmc_mat_t* a, lmmc_real_t* out_det) {
         return LMMC_STATUS_OK;
     }
 
-    /* General case: LU decomposition with partial pivoting */
-    /* Allocate a working copy of the matrix */
+
     size_t n_elem = n * n;
     size_t n_bytes = n_elem * sizeof(lmmc_real_t);
     lmmc_real_t* lu = (lmmc_real_t*)lmmc_alloc(n_bytes);
@@ -719,14 +715,14 @@ lmmc_status_t lmmc_mat_det(const lmmc_mat_t* a, lmmc_real_t* out_det) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
 
-    /* Copy matrix data into working array (row-major, stride = n) */
+
     for (size_t i = 0; i < n; ++i) {
         for (size_t j = 0; j < n; ++j) {
             lu[i * n + j] = a->data[i * a->stride + j];
         }
     }
 
-    int sign = 1; /* Track sign from row swaps */
+    int sign = 1;
 
     lmmc_real_t abs_val; LMMC_REAL_INIT(&abs_val);
     lmmc_real_t max_val; LMMC_REAL_INIT(&max_val);
@@ -735,7 +731,7 @@ lmmc_status_t lmmc_mat_det(const lmmc_mat_t* a, lmmc_real_t* out_det) {
     lmmc_real_t tmp_sub; LMMC_REAL_INIT(&tmp_sub);
 
     for (size_t k = 0; k < n; ++k) {
-        /* Find pivot: row with maximum absolute value in column k */
+
         size_t pivot_row = k;
         LMMC_REAL_ABS(&max_val, &lu[k * n + k]);
 
@@ -747,7 +743,7 @@ lmmc_status_t lmmc_mat_det(const lmmc_mat_t* a, lmmc_real_t* out_det) {
             }
         }
 
-        /* Check for singular matrix (zero pivot) */
+
         lmmc_real_t zero; LMMC_REAL_INIT(&zero);
         LMMC_REAL_SET_D(&zero, 0.0);
         if (LMMC_REAL_CMP(&max_val, &zero) == 0) {
@@ -763,7 +759,7 @@ lmmc_status_t lmmc_mat_det(const lmmc_mat_t* a, lmmc_real_t* out_det) {
         }
         LMMC_REAL_CLEAR(&zero);
 
-        /* Swap rows if needed */
+
         if (pivot_row != k) {
             for (size_t j = 0; j < n; ++j) {
                 lmmc_real_t tmp = lu[k * n + j];
@@ -773,7 +769,7 @@ lmmc_status_t lmmc_mat_det(const lmmc_mat_t* a, lmmc_real_t* out_det) {
             sign = -sign;
         }
 
-        /* Eliminate below pivot */
+
         for (size_t i = k + 1; i < n; ++i) {
             LMMC_REAL_DIV(&factor, &lu[i * n + k], &lu[k * n + k]);
             LMMC_REAL_SET(&lu[i * n + k], &factor);
@@ -786,7 +782,7 @@ lmmc_status_t lmmc_mat_det(const lmmc_mat_t* a, lmmc_real_t* out_det) {
         }
     }
 
-    /* Determinant = sign * product of diagonal elements of U */
+
     lmmc_real_t det; LMMC_REAL_INIT(&det);
     LMMC_REAL_SET_D(&det, (double)sign);
 

@@ -1,15 +1,9 @@
 /**
  * @file test_dense_unit.c
- * @brief Unit tests for dense module: error codes and known-result verification.
+ * @brief 针对 LMMC 中 dense unit 相关接口的单元测试。
  *
- * Tests:
- * 1. Vector error cases (NULL pointers, dimension mismatches)
- * 2. Matrix error cases (dimension mismatches, non-square matrices)
- * 3. Known-result tests (small vectors/matrices with exact expected values)
- *
- * Validates: Requirements 2.9, 2.10, 3.7, 3.8
+ * @internal
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -30,11 +24,7 @@ static int test_failures = 0;
 
 #define TOL 1e-12
 
-/* ========================================================================
- * 1. Vector Error Cases
- * ======================================================================== */
 
-/** lmmc_vec_norm2(NULL, ...) returns LMMC_STATUS_INVALID_ARGUMENT */
 static int test_vec_norm2_null(void)
 {
     lmmc_real_t result;
@@ -44,7 +34,7 @@ static int test_vec_norm2_null(void)
     return 0;
 }
 
-/** lmmc_vec_axpy with mismatched sizes returns LMMC_STATUS_DIMENSION_MISMATCH */
+
 static int test_vec_axpy_dimension_mismatch(void)
 {
     lmmc_vec_t x, y;
@@ -61,7 +51,7 @@ static int test_vec_axpy_dimension_mismatch(void)
     return 0;
 }
 
-/** lmmc_vec_copy with mismatched sizes returns LMMC_STATUS_DIMENSION_MISMATCH */
+
 static int test_vec_copy_dimension_mismatch(void)
 {
     lmmc_vec_t src, dst;
@@ -77,7 +67,7 @@ static int test_vec_copy_dimension_mismatch(void)
     return 0;
 }
 
-/** lmmc_vec_swap with mismatched sizes returns LMMC_STATUS_DIMENSION_MISMATCH */
+
 static int test_vec_swap_dimension_mismatch(void)
 {
     lmmc_vec_t x, y;
@@ -93,11 +83,7 @@ static int test_vec_swap_dimension_mismatch(void)
     return 0;
 }
 
-/* ========================================================================
- * 2. Matrix Error Cases
- * ======================================================================== */
 
-/** lmmc_mat_add with mismatched dimensions returns LMMC_STATUS_DIMENSION_MISMATCH */
 static int test_mat_add_dimension_mismatch(void)
 {
     lmmc_mat_t a, b, c;
@@ -115,7 +101,7 @@ static int test_mat_add_dimension_mismatch(void)
     return 0;
 }
 
-/** lmmc_mat_trace on non-square matrix returns LMMC_STATUS_INVALID_ARGUMENT */
+
 static int test_mat_trace_non_square(void)
 {
     lmmc_mat_t a;
@@ -130,7 +116,7 @@ static int test_mat_trace_non_square(void)
     return 0;
 }
 
-/** lmmc_mat_det on non-square matrix returns LMMC_STATUS_INVALID_ARGUMENT */
+
 static int test_mat_det_non_square(void)
 {
     lmmc_mat_t a;
@@ -145,11 +131,7 @@ static int test_mat_det_non_square(void)
     return 0;
 }
 
-/* ========================================================================
- * 3. Known-Result Tests
- * ======================================================================== */
 
-/** norm2 of [3, 4] = 5 */
 static int test_vec_norm2_known(void)
 {
     lmmc_vec_t v;
@@ -167,7 +149,7 @@ static int test_vec_norm2_known(void)
     return 0;
 }
 
-/** asum of [-1, 2, -3] = 6 */
+
 static int test_vec_asum_known(void)
 {
     lmmc_vec_t v;
@@ -186,7 +168,7 @@ static int test_vec_asum_known(void)
     return 0;
 }
 
-/** iamax of [1, -5, 3] = 1 (index of -5) */
+
 static int test_vec_iamax_known(void)
 {
     lmmc_vec_t v;
@@ -205,7 +187,7 @@ static int test_vec_iamax_known(void)
     return 0;
 }
 
-/** trace of [[1,2],[3,4]] = 5 */
+
 static int test_mat_trace_known(void)
 {
     lmmc_mat_t m;
@@ -225,7 +207,7 @@ static int test_mat_trace_known(void)
     return 0;
 }
 
-/** det of [[1,2],[3,4]] = -2 */
+
 static int test_mat_det_known(void)
 {
     lmmc_mat_t m;
@@ -245,9 +227,6 @@ static int test_mat_det_known(void)
     return 0;
 }
 
-/* ========================================================================
- * Main
- * ======================================================================== */
 
 int main(void)
 {
@@ -256,7 +235,7 @@ int main(void)
     printf("=== Dense Module Unit Tests ===\n");
     printf("  Validates: Requirements 2.9, 2.10, 3.7, 3.8\n\n");
 
-    /* --- Vector Error Cases --- */
+
     printf("--- Vector Error Cases ---\n");
 
     if (test_vec_norm2_null()) { rc = 1; printf("  [FAIL] vec_norm2 NULL\n"); }
@@ -271,7 +250,7 @@ int main(void)
     if (test_vec_swap_dimension_mismatch()) { rc = 1; printf("  [FAIL] vec_swap dimension mismatch\n"); }
     else { printf("  [PASS] vec_swap dimension mismatch returns DIMENSION_MISMATCH\n"); }
 
-    /* --- Matrix Error Cases --- */
+
     printf("\n--- Matrix Error Cases ---\n");
 
     if (test_mat_add_dimension_mismatch()) { rc = 1; printf("  [FAIL] mat_add dimension mismatch\n"); }
@@ -283,7 +262,7 @@ int main(void)
     if (test_mat_det_non_square()) { rc = 1; printf("  [FAIL] mat_det non-square\n"); }
     else { printf("  [PASS] mat_det non-square returns INVALID_ARGUMENT\n"); }
 
-    /* --- Known-Result Tests --- */
+
     printf("\n--- Known-Result Tests ---\n");
 
     if (test_vec_norm2_known()) { rc = 1; printf("  [FAIL] norm2 known result\n"); }
@@ -301,7 +280,7 @@ int main(void)
     if (test_mat_det_known()) { rc = 1; printf("  [FAIL] det known result\n"); }
     else { printf("  [PASS] det([[1,2],[3,4]]) = -2\n"); }
 
-    /* --- Summary --- */
+
     printf("\n");
     if (rc == 0) {
         printf("All dense module unit tests PASSED.\n");

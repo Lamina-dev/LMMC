@@ -1,3 +1,9 @@
+/**
+ * @file test_lu.c
+ * @brief 针对 LMMC 中 lu 相关接口的单元测试。
+ *
+ * @internal
+ */
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"

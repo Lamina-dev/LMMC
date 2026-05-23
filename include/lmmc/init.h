@@ -1,3 +1,11 @@
+/**
+ * @file init.h
+ * @brief LMMC 库初始化与底层栈管理接口。
+ *
+ * LMMC 在内部使用 LAMMP 提供的栈分配器以减少堆分配开销。
+ * 调用任何 LMMC 接口前必须先 ::lmmc_init ，使用完毕后调用
+ * ::lmmc_deinit 释放。两者支持嵌套调用计数。
+ */
 #ifndef LMMC_INIT_H
 #define LMMC_INIT_H
 
@@ -8,38 +16,26 @@ extern "C" {
 #endif
 
 /**
- * @brief Initialize LMMC and underlying LAMMP global resources.
+ * @brief 初始化 LMMC 库。
  *
- * Must be called once before any LMMC or LAMMP operation.
- * Thread-safe with reference counting — each init() must be paired
- * with a matching deinit().
- *
- * In the current LAMMP version this initialises the internal
- * operation stack.  When LAMMP is updated to provide explicit
- * lmmp_global_init_() / lmmp_global_deinit(), this function will
- * call those instead.
+ * 内部维护引用计数，多次调用是安全的；只有首次调用真正完成初始化。
+ * 必须在调用其他 LMMC 接口之前完成至少一次。
  */
 void lmmc_init(void);
 
 /**
- * @brief Deinitialize LMMC and release LAMMP global resources.
+ * @brief 反初始化 LMMC 库。
  *
- * Paired with lmmc_init().  When the reference count reaches zero
- * the underlying LAMMP resources are freed.
+ * 与 ::lmmc_init 配对使用，引用计数归零时执行真正的清理。
  */
 void lmmc_deinit(void);
 
 /**
- * @brief Reset / trim the LAMMP internal stack back to the given
- *        size, releasing any excess memory.
+ * @brief 重置内部栈分配器到指定容量。
  *
- * This is a thin wrapper around lmmp_stack_reset().  When the new
- * LAMMP ships with proper stack management inside
- * lmmp_global_init_() / lmmp_global_deinit(), this wrapper may
- * become a no-op and should be removed from callers.
+ * 通常用于在大规模运算之间释放栈上残留分配，或调整可用栈尺寸。
  *
- * @param size  Target stack size in bytes (e.g. 327680 for 320 KiB).
- *              Pass 0 to free the entire stack.
+ * @param size 新的栈容量（字节数）。
  */
 void lmmc_stack_reset(size_t size);
 
@@ -47,4 +43,4 @@ void lmmc_stack_reset(size_t size);
 }
 #endif
 
-#endif /* LMMC_INIT_H */
+#endif

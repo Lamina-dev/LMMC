@@ -1,19 +1,9 @@
 /**
  * @file test_random_extended.c
- * @brief Extended tests for the random module.
+ * @brief 针对 LMMC 中 random extended 相关接口的单元测试。
  *
- * Covers:
- * - Same seed reproducibility (Req 13.1)
- * - uniform(0,1) statistical properties (Req 13.2)
- * - normal(0,1) statistical properties (Req 13.3)
- * - exponential(rate=2) statistical properties (Req 13.4)
- * - shuffle permutation property (Req 13.5)
- * - shuffle single-element invariance (Req 13.6)
- * - Error handling: a>=b, rate<=0, stddev<0, NULL (Req 13.7-13.10)
- *
- * Validates: Requirements 13.1-13.10
+ * @internal
  */
-
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -34,10 +24,7 @@ int main(void)
 {
     int rc = 0;
 
-    /* ================================================================
-     * Test 1: Same seed reproducibility (Req 13.1)
-     * Two RNG instances with the same seed produce identical sequences.
-     * ================================================================ */
+
     {
         lmmc_rng_t* rng1 = NULL;
         lmmc_rng_t* rng2 = NULL;
@@ -58,7 +45,7 @@ int main(void)
             if (v1 != v2) { rc = 1; lmmc_rng_destroy(rng1); lmmc_rng_destroy(rng2); goto done; }
         }
 
-        /* Also verify uniform produces same values */
+
         lmmc_rng_seed(rng1, 99999);
         lmmc_rng_seed(rng2, 99999);
         for (i = 0; i < 50; i++) {
@@ -72,10 +59,7 @@ int main(void)
         lmmc_rng_destroy(rng2);
     }
 
-    /* ================================================================
-     * Test 2: uniform(0,1) statistical properties (Req 13.2)
-     * Mean ≈ 0.5 (error < 0.02), all values in [0,1].
-     * ================================================================ */
+
     {
         lmmc_rng_t* rng = NULL;
         lmmc_status_t st;
@@ -100,10 +84,7 @@ int main(void)
         lmmc_rng_destroy(rng);
     }
 
-    /* ================================================================
-     * Test 3: normal(0,1) statistical properties (Req 13.3)
-     * Mean ≈ 0 (error < 0.05), stddev ≈ 1 (error < 0.05).
-     * ================================================================ */
+
     {
         lmmc_rng_t* rng = NULL;
         lmmc_status_t st;
@@ -133,10 +114,7 @@ int main(void)
         lmmc_rng_destroy(rng);
     }
 
-    /* ================================================================
-     * Test 4: exponential(rate=2) statistical properties (Req 13.4)
-     * Mean ≈ 0.5 (error < 0.05), all values >= 0.
-     * ================================================================ */
+
     {
         lmmc_rng_t* rng = NULL;
         lmmc_status_t st;
@@ -161,10 +139,7 @@ int main(void)
         lmmc_rng_destroy(rng);
     }
 
-    /* ================================================================
-     * Test 5: shuffle permutation property (Req 13.5)
-     * All elements still present after shuffle.
-     * ================================================================ */
+
     {
         lmmc_rng_t* rng = NULL;
         lmmc_status_t st;
@@ -179,7 +154,7 @@ int main(void)
         st = lmmc_rng_shuffle(rng, arr, 10, sizeof(int));
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_rng_destroy(rng); goto done; }
 
-        /* Sort the shuffled array and compare with original sorted */
+
         qsort(arr, 10, sizeof(int), cmp_int);
         for (i = 0; i < 10; i++) {
             if (arr[i] != sorted_orig[i]) { rc = 1; lmmc_rng_destroy(rng); goto done; }
@@ -188,10 +163,7 @@ int main(void)
         lmmc_rng_destroy(rng);
     }
 
-    /* ================================================================
-     * Test 6: shuffle single-element invariance (Req 13.6)
-     * Array of length 1 remains unchanged.
-     * ================================================================ */
+
     {
         lmmc_rng_t* rng = NULL;
         lmmc_status_t st;
@@ -208,9 +180,7 @@ int main(void)
         lmmc_rng_destroy(rng);
     }
 
-    /* ================================================================
-     * Test 7: Error handling - uniform a >= b (Req 13.7)
-     * ================================================================ */
+
     {
         lmmc_rng_t* rng = NULL;
         lmmc_status_t st;
@@ -220,20 +190,18 @@ int main(void)
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
         lmmc_rng_seed(rng, 1);
 
-        /* a == b */
+
         st = lmmc_rng_uniform(rng, 5.0, 5.0, &val);
         if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; lmmc_rng_destroy(rng); goto done; }
 
-        /* a > b */
+
         st = lmmc_rng_uniform(rng, 10.0, 3.0, &val);
         if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; lmmc_rng_destroy(rng); goto done; }
 
         lmmc_rng_destroy(rng);
     }
 
-    /* ================================================================
-     * Test 8: Error handling - exponential rate <= 0 (Req 13.8)
-     * ================================================================ */
+
     {
         lmmc_rng_t* rng = NULL;
         lmmc_status_t st;
@@ -243,20 +211,18 @@ int main(void)
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
         lmmc_rng_seed(rng, 2);
 
-        /* rate = 0 */
+
         st = lmmc_rng_exponential(rng, 0.0, &val);
         if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; lmmc_rng_destroy(rng); goto done; }
 
-        /* rate < 0 */
+
         st = lmmc_rng_exponential(rng, -1.0, &val);
         if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; lmmc_rng_destroy(rng); goto done; }
 
         lmmc_rng_destroy(rng);
     }
 
-    /* ================================================================
-     * Test 9: Error handling - normal stddev < 0 (Req 13.9)
-     * ================================================================ */
+
     {
         lmmc_rng_t* rng = NULL;
         lmmc_status_t st;
@@ -272,9 +238,7 @@ int main(void)
         lmmc_rng_destroy(rng);
     }
 
-    /* ================================================================
-     * Test 10: Error handling - NULL pointer (Req 13.10)
-     * ================================================================ */
+
     {
         lmmc_status_t st;
 

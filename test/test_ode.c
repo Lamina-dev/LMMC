@@ -1,3 +1,9 @@
+/**
+ * @file test_ode.c
+ * @brief 针对 LMMC 中 ode 相关接口的单元测试。
+ *
+ * @internal
+ */
 #include <math.h>
 #include <stdio.h>
 #include "lmmc/lmmc.h"

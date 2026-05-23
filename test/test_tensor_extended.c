@@ -1,3 +1,9 @@
+/**
+ * @file test_tensor_extended.c
+ * @brief 针对 LMMC 中 tensor extended 相关接口的单元测试。
+ *
+ * @internal
+ */
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -34,7 +40,7 @@ int main(void) {
     lmmc_mat_t sum_ax2 = {0};
     lmmc_status_t st;
 
-    /* Create 2x3x4 tensors for extended tests */
+
     st = lmmc_tensor3_create(2, 3, 4, &a);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
     st = lmmc_tensor3_create(2, 3, 4, &b);
@@ -42,7 +48,7 @@ int main(void) {
     st = lmmc_tensor3_create(2, 3, 4, &out);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-    /* Fill tensors with known values: a[i][j][k] = i*12 + j*4 + k + 1 */
+
     for (size_t i = 0; i < 2; ++i) {
         for (size_t j = 0; j < 3; ++j) {
             for (size_t k = 0; k < 4; ++k) {
@@ -55,7 +61,7 @@ int main(void) {
         }
     }
 
-    /* ===== Test 1: Element-wise addition (Req 16.1) ===== */
+
     st = lmmc_tensor_add(&a, &b, &out);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
     for (size_t i = 0; i < 2; ++i) {
@@ -70,7 +76,7 @@ int main(void) {
         }
     }
 
-    /* ===== Test 2: Element-wise multiplication (Req 16.2) ===== */
+
     st = lmmc_tensor_mul(&a, &b, &out);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
     for (size_t i = 0; i < 2; ++i) {
@@ -85,14 +91,14 @@ int main(void) {
         }
     }
 
-    /* ===== Test 3: Division by zero handling (Req 16.3) ===== */
+
     {
         lmmc_tensor_t b_with_zero = {0};
         st = lmmc_tensor3_create(2, 3, 4, &b_with_zero);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
         st = lmmc_tensor_fill(&b_with_zero, 2.0);
         if (st != LMMC_STATUS_OK) { lmmc_tensor_destroy(&b_with_zero); rc = 1; goto done; }
-        /* Set one element to zero */
+
         st = lmmc_tensor_set(&b_with_zero, 0, 0, 0, 0.0);
         if (st != LMMC_STATUS_OK) { lmmc_tensor_destroy(&b_with_zero); rc = 1; goto done; }
         st = lmmc_tensor_div(&a, &b_with_zero, &out);
@@ -100,11 +106,11 @@ int main(void) {
         lmmc_tensor_destroy(&b_with_zero);
     }
 
-    /* ===== Test 4: Scale alpha=0 gives all zeros, alpha=1 unchanged (Req 16.4) ===== */
+
     st = lmmc_tensor3_create(2, 3, 4, &scaled);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-    /* alpha = 0 -> all zeros */
+
     st = lmmc_tensor_scale(&a, 0.0, &scaled);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
     for (size_t i = 0; i < 2; ++i) {
@@ -117,7 +123,7 @@ int main(void) {
         }
     }
 
-    /* alpha = 1 -> unchanged */
+
     st = lmmc_tensor_scale(&a, 1.0, &scaled);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
     for (size_t i = 0; i < 2; ++i) {
@@ -131,11 +137,7 @@ int main(void) {
         }
     }
 
-    /* ===== Test 5: Sum along each axis (Req 16.5) ===== */
-    /* For a 2x3x4 tensor:
-       sum_axis(0) -> 3x4 matrix
-       sum_axis(1) -> 2x4 matrix
-       sum_axis(2) -> 2x3 matrix */
+
     st = lmmc_mat_create(3, 4, &sum_ax0);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
     st = lmmc_mat_create(2, 4, &sum_ax1);
@@ -145,7 +147,7 @@ int main(void) {
 
     st = lmmc_tensor_sum_axis(&a, 0, &sum_ax0);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-    /* Verify: sum along axis 0 means sum_ax0[j][k] = a[0][j][k] + a[1][j][k] */
+
     for (size_t j = 0; j < 3; ++j) {
         for (size_t k = 0; k < 4; ++k) {
             double v0, v1;
@@ -159,7 +161,7 @@ int main(void) {
 
     st = lmmc_tensor_sum_axis(&a, 1, &sum_ax1);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-    /* Verify: sum along axis 1 means sum_ax1[i][k] = sum_j a[i][j][k] */
+
     for (size_t i = 0; i < 2; ++i) {
         for (size_t k = 0; k < 4; ++k) {
             double expected = 0.0;
@@ -175,7 +177,7 @@ int main(void) {
 
     st = lmmc_tensor_sum_axis(&a, 2, &sum_ax2);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-    /* Verify: sum along axis 2 means sum_ax2[i][j] = sum_k a[i][j][k] */
+
     for (size_t i = 0; i < 2; ++i) {
         for (size_t j = 0; j < 3; ++j) {
             double expected = 0.0;
@@ -189,19 +191,18 @@ int main(void) {
         }
     }
 
-    /* ===== Test 6: reshape_view preserves element count (Req 16.6) ===== */
-    /* 2x3x4 = 24 elements -> reshape to 4x6x1 = 24 elements */
+
     st = lmmc_tensor_reshape_view(&a, 4, 6, 1, &reshaped);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-    /* Verify total elements match */
+
     if (reshaped.dim0 * reshaped.dim1 * reshaped.dim2 != a.dim0 * a.dim1 * a.dim2) {
         rc = 1; goto done;
     }
-    /* Verify data is shared (not a copy) */
+
     if (reshaped.owns_data != 0) { rc = 1; goto done; }
     if (reshaped.data != a.data) { rc = 1; goto done; }
 
-    /* Reshape to 1x24x1 */
+
     {
         lmmc_tensor_t reshaped2 = {0};
         st = lmmc_tensor_reshape_view(&a, 1, 24, 1, &reshaped2);
@@ -210,12 +211,11 @@ int main(void) {
         lmmc_tensor_destroy(&reshaped2);
     }
 
-    /* ===== Test 7: slice_view range verification (Req 16.7) ===== */
-    /* Slice a[0:2, 1:3, 0:2] -> 2x2x2 view */
+
     st = lmmc_tensor_slice_view(&a, 0, 2, 1, 3, 0, 2, &sliced);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
     if (sliced.dim0 != 2 || sliced.dim1 != 2 || sliced.dim2 != 2) { rc = 1; goto done; }
-    /* Verify elements match the original */
+
     for (size_t i = 0; i < 2; ++i) {
         for (size_t j = 0; j < 2; ++j) {
             for (size_t k = 0; k < 2; ++k) {
@@ -227,20 +227,20 @@ int main(void) {
         }
     }
 
-    /* Slice out of bounds should fail (Req 16.8) */
+
     {
         lmmc_tensor_t bad_slice = {0};
         st = lmmc_tensor_slice_view(&a, 0, 5, 0, 1, 0, 1, &bad_slice);
         if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; goto done; }
     }
 
-    /* ===== Test 8: 1x1x1 tensor boundary (Req 16.9) ===== */
+
     st = lmmc_tensor3_create(1, 1, 1, &t1x1x1);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
     st = lmmc_tensor_set(&t1x1x1, 0, 0, 0, 42.0);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-    /* 1x1x1 addition */
+
     st = lmmc_tensor3_create(1, 1, 1, &t1_b);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
     st = lmmc_tensor_set(&t1_b, 0, 0, 0, 8.0);
@@ -256,7 +256,7 @@ int main(void) {
         if (!lmmc_test_nearly_equal(v, 50.0, 1e-12)) { rc = 1; goto done; }
     }
 
-    /* 1x1x1 multiplication */
+
     st = lmmc_tensor_mul(&t1x1x1, &t1_b, &t1_out);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
     {
@@ -265,7 +265,7 @@ int main(void) {
         if (!lmmc_test_nearly_equal(v, 336.0, 1e-12)) { rc = 1; goto done; }
     }
 
-    /* 1x1x1 scale */
+
     st = lmmc_tensor_scale(&t1x1x1, 3.0, &t1_out);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
     {
@@ -274,7 +274,7 @@ int main(void) {
         if (!lmmc_test_nearly_equal(v, 126.0, 1e-12)) { rc = 1; goto done; }
     }
 
-    /* 1x1x1 sum, max, min */
+
     {
         double s, mx, mn;
         st = lmmc_tensor_sum(&t1x1x1, &s);
@@ -288,7 +288,7 @@ int main(void) {
         if (!lmmc_test_nearly_equal(mn, 42.0, 1e-12)) { rc = 1; goto done; }
     }
 
-    /* 1x1x1 norm */
+
     {
         double norm;
         st = lmmc_tensor_norm_fro(&t1x1x1, &norm);
@@ -296,8 +296,7 @@ int main(void) {
         if (!lmmc_test_nearly_equal(norm, 42.0, 1e-12)) { rc = 1; goto done; }
     }
 
-    /* ===== Test 9: Frobenius norm (Req 16.10) ===== */
-    /* All-zero tensor: norm = 0 */
+
     st = lmmc_tensor3_create(2, 3, 4, &zeros);
     if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
     st = lmmc_tensor_fill(&zeros, 0.0);
@@ -309,7 +308,7 @@ int main(void) {
         if (!lmmc_test_nearly_equal(norm, 0.0, 1e-12)) { rc = 1; goto done; }
     }
 
-    /* All-ones tensor: norm = sqrt(dim0*dim1*dim2) */
+
     {
         lmmc_tensor_t ones = {0};
         st = lmmc_tensor3_create(3, 4, 5, &ones);
@@ -327,10 +326,10 @@ int main(void) {
         lmmc_tensor_destroy(&ones);
     }
 
-    /* ===== Test 10: sum/max/min reductions (Req 16.11) ===== */
+
     {
         double sum_val, max_val, min_val;
-        /* Manual computation for tensor a (2x3x4): values are 1..24 */
+
         double expected_sum = 0.0;
         double expected_max = -1e300;
         double expected_min = 1e300;
@@ -359,18 +358,18 @@ int main(void) {
         if (!lmmc_test_nearly_equal(min_val, expected_min, 1e-12)) { rc = 1; goto done; }
     }
 
-    /* ===== Test 11: reshape dimension mismatch error (Req 16.12) ===== */
+
     {
         lmmc_tensor_t bad_reshape = {0};
-        /* 2x3x4 = 24 elements, try reshape to 2x3x5 = 30 elements -> should fail */
+
         st = lmmc_tensor_reshape_view(&a, 2, 3, 5, &bad_reshape);
         if (st != LMMC_STATUS_DIMENSION_MISMATCH) { rc = 1; goto done; }
 
-        /* Try reshape to 5x5x1 = 25 elements -> should fail */
+
         st = lmmc_tensor_reshape_view(&a, 5, 5, 1, &bad_reshape);
         if (st != LMMC_STATUS_DIMENSION_MISMATCH) { rc = 1; goto done; }
 
-        /* Try reshape to 1x1x1 = 1 element -> should fail */
+
         st = lmmc_tensor_reshape_view(&a, 1, 1, 1, &bad_reshape);
         if (st != LMMC_STATUS_DIMENSION_MISMATCH) { rc = 1; goto done; }
     }

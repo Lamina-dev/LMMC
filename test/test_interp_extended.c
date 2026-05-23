@@ -1,19 +1,9 @@
 /**
  * @file test_interp_extended.c
- * @brief Extended tests for cubic spline and Lagrange interpolation.
+ * @brief 针对 LMMC 中 interp extended 相关接口的单元测试。
  *
- * Tests cover:
- * - Cubic spline: sin(x) 20-node accuracy (error < 1e-4)
- * - Cubic spline: linear function exactness (error < 1e-12)
- * - Lagrange: Runge function Chebyshev vs equidistant nodes comparison
- * - 3-node Lagrange quadratic polynomial exactness
- * - Exact return at nodes (cspline and lagrange)
- * - Insufficient nodes error handling (cspline < 3, lagrange < 2)
- * - 100-node cubic spline continuity verification
- *
- * Validates: Requirements 7.1-7.8
+ * @internal
  */
-
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,9 +25,6 @@ static int test_failures = 0;
     } \
 } while (0)
 
-/* ========================================================================
- * Test: Cubic spline sin(x) 20-node accuracy (Requirement 7.1)
- * ======================================================================== */
 
 static int test_cspline_sin_20_nodes(void)
 {
@@ -47,7 +34,7 @@ static int test_cspline_sin_20_nodes(void)
     lmmc_status_t st;
     size_t i;
 
-    /* Generate 20 equidistant nodes on [0, 2*pi] */
+
     for (i = 0; i < n; i++) {
         xs[i] = (lmmc_real_t)i * 2.0 * LMMC_CONST_PI / (lmmc_real_t)(n - 1);
         ys[i] = sin(xs[i]);
@@ -56,7 +43,7 @@ static int test_cspline_sin_20_nodes(void)
     st = lmmc_interp_cspline_create(xs, ys, n, &spline);
     CHECK(st == LMMC_STATUS_OK, "cspline create with 20 sin nodes should succeed");
 
-    /* Test at 50 intermediate points */
+
     for (i = 0; i < 50; i++) {
         lmmc_real_t query_x = (lmmc_real_t)(i + 1) * 2.0 * LMMC_CONST_PI / 51.0;
         lmmc_real_t result;
@@ -73,9 +60,6 @@ static int test_cspline_sin_20_nodes(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Cubic spline linear function exactness (Requirement 7.2)
- * ======================================================================== */
 
 static int test_cspline_linear_exact(void)
 {
@@ -84,7 +68,7 @@ static int test_cspline_linear_exact(void)
     lmmc_interp_cspline_t* spline = NULL;
     lmmc_status_t st;
     size_t i;
-    /* f(x) = 3.5x - 2.7 */
+
     const lmmc_real_t a = 3.5, b = -2.7;
 
     for (i = 0; i < n; i++) {
@@ -95,7 +79,7 @@ static int test_cspline_linear_exact(void)
     st = lmmc_interp_cspline_create(xs, ys, n, &spline);
     CHECK(st == LMMC_STATUS_OK, "cspline create for linear function should succeed");
 
-    /* Test at many intermediate points */
+
     for (i = 0; i < 50; i++) {
         lmmc_real_t query_x = (lmmc_real_t)i * 9.0 / 50.0;
         lmmc_real_t result;
@@ -112,9 +96,6 @@ static int test_cspline_linear_exact(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Lagrange Runge function Chebyshev vs equidistant (Requirement 7.3)
- * ======================================================================== */
 
 static int test_lagrange_runge_chebyshev_vs_equidistant(void)
 {
@@ -127,15 +108,13 @@ static int test_lagrange_runge_chebyshev_vs_equidistant(void)
     size_t i;
     double max_err_equi = 0.0, max_err_cheb = 0.0;
 
-    /* Runge function: f(x) = 1/(1 + 25*x^2) on [-1, 1] */
 
-    /* Equidistant nodes */
     for (i = 0; i < n; i++) {
         xs_equi[i] = -1.0 + 2.0 * (lmmc_real_t)i / (lmmc_real_t)(n - 1);
         ys_equi[i] = 1.0 / (1.0 + 25.0 * xs_equi[i] * xs_equi[i]);
     }
 
-    /* Chebyshev nodes: x_k = cos((2k+1)*pi/(2n)) */
+
     for (i = 0; i < n; i++) {
         xs_cheb[i] = cos((2.0 * (lmmc_real_t)i + 1.0) * LMMC_CONST_PI / (2.0 * (lmmc_real_t)n));
         ys_cheb[i] = 1.0 / (1.0 + 25.0 * xs_cheb[i] * xs_cheb[i]);
@@ -147,7 +126,7 @@ static int test_lagrange_runge_chebyshev_vs_equidistant(void)
     st = lmmc_interp_lagrange_create(xs_cheb, ys_cheb, n, &lag_cheb);
     CHECK(st == LMMC_STATUS_OK, "lagrange create with Chebyshev nodes should succeed");
 
-    /* Evaluate at 100 test points and compare max errors */
+
     for (i = 0; i < 100; i++) {
         lmmc_real_t x = -0.95 + 1.9 * (lmmc_real_t)i / 99.0;
         lmmc_real_t exact = 1.0 / (1.0 + 25.0 * x * x);
@@ -167,7 +146,7 @@ static int test_lagrange_runge_chebyshev_vs_equidistant(void)
         if (err_cheb > max_err_cheb) max_err_cheb = err_cheb;
     }
 
-    /* Chebyshev nodes should give significantly better accuracy */
+
     CHECK(max_err_cheb < max_err_equi,
           "Chebyshev max error (%.6e) should be less than equidistant max error (%.6e)",
           max_err_cheb, max_err_equi);
@@ -177,20 +156,17 @@ static int test_lagrange_runge_chebyshev_vs_equidistant(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: 3-node Lagrange quadratic polynomial exactness (Requirement 7.4)
- * ======================================================================== */
 
 static int test_lagrange_3node_quadratic(void)
 {
-    /* f(x) = 2x^2 - 3x + 1 */
+
     lmmc_real_t xs[] = {-1.0, 0.0, 2.0};
     lmmc_real_t ys[3];
     lmmc_interp_lagrange_t* lag = NULL;
     lmmc_status_t st;
     size_t i;
 
-    /* Compute y values from the polynomial */
+
     for (i = 0; i < 3; i++) {
         ys[i] = 2.0 * xs[i] * xs[i] - 3.0 * xs[i] + 1.0;
     }
@@ -198,7 +174,7 @@ static int test_lagrange_3node_quadratic(void)
     st = lmmc_interp_lagrange_create(xs, ys, 3, &lag);
     CHECK(st == LMMC_STATUS_OK, "lagrange create with 3 nodes should succeed");
 
-    /* Test at many points - should be exact for quadratic */
+
     for (i = 0; i <= 20; i++) {
         lmmc_real_t x = -1.0 + 3.0 * (lmmc_real_t)i / 20.0;
         lmmc_real_t expected = 2.0 * x * x - 3.0 * x + 1.0;
@@ -215,9 +191,6 @@ static int test_lagrange_3node_quadratic(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Exact return at nodes - cspline (Requirement 7.5)
- * ======================================================================== */
 
 static int test_cspline_exact_at_nodes(void)
 {
@@ -227,7 +200,7 @@ static int test_cspline_exact_at_nodes(void)
     lmmc_status_t st;
     size_t i;
 
-    /* Use arbitrary non-trivial data */
+
     for (i = 0; i < n; i++) {
         xs[i] = (lmmc_real_t)i * 0.5;
         ys[i] = sin(xs[i]) + 0.1 * cos(3.0 * xs[i]);
@@ -249,9 +222,6 @@ static int test_cspline_exact_at_nodes(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Exact return at nodes - lagrange (Requirement 7.5)
- * ======================================================================== */
 
 static int test_lagrange_exact_at_nodes(void)
 {
@@ -261,7 +231,7 @@ static int test_lagrange_exact_at_nodes(void)
     lmmc_status_t st;
     size_t i;
 
-    /* Use arbitrary non-trivial data */
+
     for (i = 0; i < n; i++) {
         xs[i] = -2.0 + (lmmc_real_t)i * 0.7;
         ys[i] = exp(-xs[i] * xs[i]);
@@ -283,9 +253,6 @@ static int test_lagrange_exact_at_nodes(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Insufficient nodes error handling (Requirement 7.6)
- * ======================================================================== */
 
 static int test_insufficient_nodes_cspline(void)
 {
@@ -294,7 +261,7 @@ static int test_insufficient_nodes_cspline(void)
     lmmc_interp_cspline_t* spline = NULL;
     lmmc_status_t st;
 
-    /* cspline requires at least 3 nodes */
+
     st = lmmc_interp_cspline_create(xs, ys, 2, &spline);
     CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
           "cspline with n=2 should return INVALID_ARGUMENT, got %d", (int)st);
@@ -317,8 +284,7 @@ static int test_insufficient_nodes_lagrange(void)
     lmmc_interp_lagrange_t* lag = NULL;
     lmmc_status_t st;
 
-    /* lagrange requires at least 1 node (but design says < 2 should fail for this test) */
-    /* Based on existing test, n=0 fails but n=1 succeeds. Requirement 7.6 says lagrange < 2 */
+
     st = lmmc_interp_lagrange_create(xs, ys, 0, &lag);
     CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
           "lagrange with n=0 should return INVALID_ARGUMENT, got %d", (int)st);
@@ -326,9 +292,6 @@ static int test_insufficient_nodes_lagrange(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: 100-node cubic spline continuity (Requirement 7.8)
- * ======================================================================== */
 
 static int test_cspline_100_nodes_continuity(void)
 {
@@ -349,7 +312,7 @@ static int test_cspline_100_nodes_continuity(void)
         CHECK(0, "memory allocation failed");
     }
 
-    /* Generate 100 nodes from a complex function on [0, 10] */
+
     for (i = 0; i < n; i++) {
         xs[i] = (lmmc_real_t)i * 10.0 / (lmmc_real_t)(n - 1);
         ys[i] = sin(xs[i]) * exp(-0.1 * xs[i]);
@@ -358,8 +321,7 @@ static int test_cspline_100_nodes_continuity(void)
     st = lmmc_interp_cspline_create(xs, ys, n, &spline);
     CHECK(st == LMMC_STATUS_OK, "cspline create with 100 nodes should succeed");
 
-    /* Verify continuity: check that the function is smooth at internal knots
-     * by verifying first derivative continuity (left derivative ≈ right derivative) */
+
     for (i = 1; i < n - 1; i++) {
         lmmc_real_t x_knot = xs[i];
         lmmc_real_t y_left, y_right, y_center;
@@ -386,9 +348,6 @@ static int test_cspline_100_nodes_continuity(void)
     return 0;
 }
 
-/* ========================================================================
- * Main
- * ======================================================================== */
 
 int main(void)
 {

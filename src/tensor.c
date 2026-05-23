@@ -1,3 +1,7 @@
+/**
+ * @file tensor.c
+ * @brief 三阶张量结构与基本运算实现。
+ */
 #include <math.h>
 #include <string.h>
 #include "memory_bridge.h"

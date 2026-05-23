@@ -1,3 +1,9 @@
+/**
+ * @file test_lammp_ext.c
+ * @brief 针对 LMMC 中 lammp ext 相关接口的单元测试。
+ *
+ * @internal
+ */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -57,7 +63,7 @@ static int lmmp_bigint_to_text(mp_srcptr limbs, mp_size_t limb_count, int base, 
             buffer[i] = buffer[wrote - 1 - i];
             buffer[wrote - 1 - i] = t;
         }
-        // lmmp_to_str_ emits digits as numeric values; map them to ASCII.
+
         for (i = 0; i < wrote; ++i) {
             mp_byte_t d = buffer[i];
             if (d >= (mp_byte_t)base) {

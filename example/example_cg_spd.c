@@ -1,3 +1,7 @@
+/**
+ * @file example_cg_spd.c
+ * @brief 演示 LMMC 中 cg spd 相关接口的使用。
+ */
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 

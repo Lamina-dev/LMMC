@@ -1,3 +1,7 @@
+/**
+ * @file linear_algebra.c
+ * @brief 稠密 LU / Cholesky / QR 分解与求解实现。
+ */
 #include <math.h>
 #include <string.h>
 #include "memory_bridge.h"
@@ -159,18 +163,18 @@ lmmc_status_t lmmc_lu_solve(const lmmc_mat_t* lu, const size_t* pivots, const lm
             LMMC_REAL_SUB(&x->data[i], &x->data[i], &tmp);
             LMMC_REAL_CLEAR(&tmp);
         }
-        
+
         lmmc_abs_to(&abs_lu, &lu->data[i * lu->stride + i]);
-        
+
         if (LMMC_REAL_CMP(&abs_lu, &eps) <= 0) {
             LMMC_REAL_CLEAR(&abs_lu);
             LMMC_REAL_CLEAR(&eps);
             return LMMC_STATUS_SINGULAR_MATRIX;
         }
-        
+
         LMMC_REAL_DIV(&x->data[i], &x->data[i], &lu->data[i * lu->stride + i]);
     }
-    
+
     LMMC_REAL_CLEAR(&abs_lu);
     LMMC_REAL_CLEAR(&eps);
 
@@ -303,7 +307,7 @@ lmmc_status_t lmmc_qr_decompose_inplace(lmmc_mat_t* a, lmmc_real_t* tau, size_t 
         lmmc_real_t sigma;
         lmmc_real_t alpha;
         lmmc_real_t zero;
-        
+
         LMMC_REAL_INIT(&sigma);
         LMMC_REAL_SET_D(&sigma, 0.0);
         LMMC_REAL_INIT(&alpha);
@@ -337,7 +341,7 @@ lmmc_status_t lmmc_qr_decompose_inplace(lmmc_mat_t* a, lmmc_real_t* tau, size_t 
             lmmc_real_t v0;
             lmmc_real_t alpha_sq;
             lmmc_real_t sum;
-            
+
             LMMC_REAL_INIT(&norm);
             LMMC_REAL_INIT(&beta);
             LMMC_REAL_INIT(&v0);
@@ -347,7 +351,7 @@ lmmc_status_t lmmc_qr_decompose_inplace(lmmc_mat_t* a, lmmc_real_t* tau, size_t 
             LMMC_REAL_MUL(&alpha_sq, &alpha, &alpha);
             LMMC_REAL_ADD(&sum, &alpha_sq, &sigma);
             LMMC_REAL_SQRT(&norm, &sum);
-            
+
             if (LMMC_REAL_CMP(&alpha, &zero) <= 0) {
                 LMMC_REAL_SET(&beta, &norm);
             } else {
@@ -387,7 +391,7 @@ lmmc_status_t lmmc_qr_decompose_inplace(lmmc_mat_t* a, lmmc_real_t* tau, size_t 
                 }
                 LMMC_REAL_CLEAR(&dot);
             }
-            
+
             LMMC_REAL_CLEAR(&sum);
             LMMC_REAL_CLEAR(&alpha_sq);
             LMMC_REAL_CLEAR(&v0);
@@ -421,7 +425,7 @@ lmmc_status_t lmmc_qr_solve(const lmmc_mat_t* qr, const lmmc_real_t* tau, const 
     if (y == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
-    
+
     for (k = 0; k < m; ++k) {
         LMMC_REAL_INIT(&y[k]);
         LMMC_REAL_SET(&y[k], &b->data[k]);
@@ -460,7 +464,7 @@ lmmc_status_t lmmc_qr_solve(const lmmc_mat_t* qr, const lmmc_real_t* tau, const 
     for (k = n; k-- > 0;) {
         size_t j = 0;
         lmmc_real_t rhs;
-        
+
         LMMC_REAL_INIT(&rhs);
         LMMC_REAL_SET(&rhs, &y[k]);
         for (j = k + 1; j < n; ++j) {
@@ -470,9 +474,9 @@ lmmc_status_t lmmc_qr_solve(const lmmc_mat_t* qr, const lmmc_real_t* tau, const 
             LMMC_REAL_SUB(&rhs, &rhs, &tmp);
             LMMC_REAL_CLEAR(&tmp);
         }
-        
+
         lmmc_abs_to(&abs_qr, &qr->data[k * qr->stride + k]);
-        
+
         if (LMMC_REAL_CMP(&abs_qr, &eps) <= 0) {
             size_t c = 0;
             LMMC_REAL_CLEAR(&abs_qr);
@@ -484,11 +488,11 @@ lmmc_status_t lmmc_qr_solve(const lmmc_mat_t* qr, const lmmc_real_t* tau, const 
             lmmc_free(y);
             return LMMC_STATUS_SINGULAR_MATRIX;
         }
-        
+
         LMMC_REAL_DIV(&x->data[k], &rhs, &qr->data[k * qr->stride + k]);
         LMMC_REAL_CLEAR(&rhs);
     }
-    
+
     LMMC_REAL_CLEAR(&abs_qr);
     LMMC_REAL_CLEAR(&eps);
 

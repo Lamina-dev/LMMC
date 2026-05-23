@@ -1,14 +1,9 @@
 /**
  * @file test_random_rng.c
- * @brief Property-based test for RNG reproducibility.
+ * @brief 针对 LMMC 中 random rng 相关接口的单元测试。
  *
- * Property 22: RNG 可重现性
- *   For any 64-bit seed s, two independently created and seeded RNG instances
- *   should produce the exact same sequence of random numbers.
- *
- * Validates: Requirements 16.1, 16.2, 16.5
+ * @internal
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -17,10 +12,10 @@
 #include "lmmc/random.h"
 #include "lmmc/status.h"
 
-/* Number of values to compare in each sequence */
+
 #define SEQUENCE_LENGTH 200
 
-/* Number of random seed iterations */
+
 #define NUM_ITERATIONS 100
 
 static int test_failures = 0;
@@ -33,7 +28,7 @@ static int test_failures = 0;
     } \
 } while (0)
 
-/* Simple PRNG helper to generate random uint64_t values for seeds */
+
 static uint64_t rand_u64(void)
 {
     uint64_t val = 0;
@@ -44,15 +39,7 @@ static uint64_t rand_u64(void)
     return val;
 }
 
-/* ========================================================================
- * Property 22: RNG Reproducibility
- * Validates: Requirements 16.1, 16.2, 16.5
- * ======================================================================== */
 
-/**
- * Test: Two RNGs seeded with the same seed produce identical next_u64
- * sequences (200 values).
- */
 static int test_same_seed_same_sequence(uint64_t seed)
 {
     lmmc_rng_t* rng1 = NULL;
@@ -72,7 +59,7 @@ static int test_same_seed_same_sequence(uint64_t seed)
     st = lmmc_rng_seed(rng2, seed);
     CHECK(st == LMMC_STATUS_OK, "Failed to seed rng2 with %llu", (unsigned long long)seed);
 
-    /* Generate SEQUENCE_LENGTH values and compare */
+
     for (i = 0; i < SEQUENCE_LENGTH; i++) {
         uint64_t v1 = lmmc_rng_next_u64(rng1);
         uint64_t v2 = lmmc_rng_next_u64(rng2);
@@ -87,9 +74,7 @@ static int test_same_seed_same_sequence(uint64_t seed)
     return 0;
 }
 
-/**
- * Test: Two RNGs seeded with different seeds produce different sequences.
- */
+
 static int test_different_seeds_different_sequences(void)
 {
     lmmc_rng_t* rng1 = NULL;
@@ -112,7 +97,7 @@ static int test_different_seeds_different_sequences(void)
     st = lmmc_rng_seed(rng2, seed2);
     CHECK(st == LMMC_STATUS_OK, "Failed to seed rng2");
 
-    /* At least one value in the first SEQUENCE_LENGTH should differ */
+
     found_diff = 0;
     for (i = 0; i < SEQUENCE_LENGTH; i++) {
         uint64_t v1 = lmmc_rng_next_u64(rng1);
@@ -132,9 +117,7 @@ static int test_different_seeds_different_sequences(void)
     return 0;
 }
 
-/**
- * Test: Multiple pairs of different seeds produce different sequences.
- */
+
 static int test_different_seeds_random_pairs(void)
 {
     int iter;
@@ -148,7 +131,7 @@ static int test_different_seeds_random_pairs(void)
         int i;
         int found_diff;
 
-        /* Skip if seeds happen to be the same */
+
         if (seed1 == seed2) continue;
 
         st = lmmc_rng_create(&rng1);
@@ -184,9 +167,7 @@ static int test_different_seeds_random_pairs(void)
     return 0;
 }
 
-/**
- * Test: Re-seeding an RNG resets its state and produces the same sequence again.
- */
+
 static int test_reseed_resets_state(void)
 {
     lmmc_rng_t* rng = NULL;
@@ -199,7 +180,7 @@ static int test_reseed_resets_state(void)
     st = lmmc_rng_create(&rng);
     CHECK(st == LMMC_STATUS_OK, "Failed to create rng");
 
-    /* First run: seed and generate sequence */
+
     st = lmmc_rng_seed(rng, seed);
     CHECK(st == LMMC_STATUS_OK, "Failed to seed rng (first time)");
 
@@ -207,21 +188,21 @@ static int test_reseed_resets_state(void)
         first_run[i] = lmmc_rng_next_u64(rng);
     }
 
-    /* Advance the RNG further to change its state */
+
     for (i = 0; i < 1000; i++) {
         (void)lmmc_rng_next_u64(rng);
     }
 
-    /* Re-seed with the same seed */
+
     st = lmmc_rng_seed(rng, seed);
     CHECK(st == LMMC_STATUS_OK, "Failed to re-seed rng");
 
-    /* Second run: generate sequence again */
+
     for (i = 0; i < SEQUENCE_LENGTH; i++) {
         second_run[i] = lmmc_rng_next_u64(rng);
     }
 
-    /* Compare */
+
     for (i = 0; i < SEQUENCE_LENGTH; i++) {
         CHECK(first_run[i] == second_run[i],
               "reseed: index=%d, first=%llu, second=%llu",
@@ -232,10 +213,7 @@ static int test_reseed_resets_state(void)
     return 0;
 }
 
-/**
- * Test: Multiple specific seeds tested for reproducibility.
- * Seeds: 0, 1, UINT64_MAX, and several random values.
- */
+
 static int test_multiple_specific_seeds(void)
 {
     uint64_t seeds[] = {
@@ -261,9 +239,7 @@ static int test_multiple_specific_seeds(void)
     return 0;
 }
 
-/**
- * Test: Random seeds tested for reproducibility (property-based).
- */
+
 static int test_random_seeds_reproducibility(void)
 {
     int iter;
@@ -280,9 +256,6 @@ static int test_random_seeds_reproducibility(void)
     return 0;
 }
 
-/* ========================================================================
- * Main
- * ======================================================================== */
 
 int main(void)
 {

@@ -1,23 +1,9 @@
 /**
  * @file test_eigen_sym_property.c
- * @brief Property-based tests for symmetric eigenvalue decomposition.
+ * @brief 针对 LMMC 中 eigen sym property 相关接口的单元测试。
  *
- * Property 8: 对称特征值分解重构
- *   For any real symmetric matrix A, the returned eigenvalues lambda
- *   and eigenvector matrix V should satisfy:
- *     - A ≈ V * diag(lambda) * V^T   (reconstruction)
- *     - V^T * V ≈ I                  (orthogonality)
- *     - lambda sorted in ascending order
- *
- * Validates: Requirements 5.1, 5.4, 5.5
- *
- * Strategy:
- *   Generate 100+ random real symmetric matrices of sizes 2x2 through 6x6
- *   by sampling a random matrix M and forming A = (M + M^T) / 2.
- *   For each matrix, run lmmc_eigen_symmetric and verify the three
- *   properties within a tolerance scaled by matrix norm and dimension.
+ * @internal
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -28,10 +14,10 @@
 #include "lmmc/eigen.h"
 #include "lmmc/status.h"
 
-/* Number of random iterations (>= 100 as required) */
+
 #define NUM_ITERATIONS 120
 
-/* Base tolerance; effective tolerance scales with ||A|| and n */
+
 #define BASE_TOL 1e-9
 
 static int test_failures = 0;
@@ -44,20 +30,19 @@ static int test_failures = 0;
     } \
 } while (0)
 
-/* Generate a random double in [-range, range] */
+
 static double rand_double(double range)
 {
     return ((double)rand() / (double)RAND_MAX) * 2.0 * range - range;
 }
 
-/* Pick random size in [min_n, max_n] */
+
 static size_t rand_size(size_t min_n, size_t max_n)
 {
     return min_n + (size_t)(rand() % (int)(max_n - min_n + 1));
 }
 
-/* Generate a random symmetric matrix A = (M + M^T) / 2,
- * where entries of M are uniformly random in [-range, range]. */
+
 static void make_random_symmetric(lmmc_mat_t* A, double range)
 {
     size_t n = A->rows;
@@ -72,7 +57,7 @@ static void make_random_symmetric(lmmc_mat_t* A, double range)
     }
 }
 
-/* Frobenius norm of a square dense matrix (row-major, stride == cols). */
+
 static double mat_fro_norm(const lmmc_mat_t* A)
 {
     size_t n = A->rows;
@@ -86,18 +71,7 @@ static double mat_fro_norm(const lmmc_mat_t* A)
     return sqrt(sum);
 }
 
-/* ========================================================================
- * Property 8: 对称特征值分解重构
- * Validates: Requirements 5.1, 5.4, 5.5
- * ======================================================================== */
 
-/**
- * For each random symmetric matrix A:
- *   1. Compute eigen-decomposition via lmmc_eigen_symmetric.
- *   2. Reconstruction: ||A - V*diag(lambda)*V^T||_F < tol * (||A||_F + 1) * n
- *   3. Orthogonality:  ||V^T*V - I||_F           < tol * n
- *   4. Eigenvalues sorted ascending: lambda[i] <= lambda[i+1]
- */
 static int test_eigen_sym_property(void)
 {
     int iter;
@@ -109,8 +83,7 @@ static int test_eigen_sym_property(void)
         CHECK(st == LMMC_STATUS_OK,
               "mat_create failed (iter=%d, n=%zu)", iter, n);
 
-        /* Mix scales across iterations to exercise both small and moderate
-         * magnitudes without getting too close to ill-conditioned regimes. */
+
         double range = (iter % 4 == 0) ? 1.0
                      : (iter % 4 == 1) ? 10.0
                      : (iter % 4 == 2) ? 0.1
@@ -126,7 +99,7 @@ static int test_eigen_sym_property(void)
               "eigen_symmetric failed status=%d (iter=%d, n=%zu)",
               (int)st, iter, n);
 
-        /* --- Verify ascending order of eigenvalues --- */
+
         for (size_t i = 0; i + 1 < n; ++i) {
             CHECK(res.eigenvalues.data[i] <= res.eigenvalues.data[i + 1] + tol,
                   "eigenvalues not ascending: lambda[%zu]=%.15g > lambda[%zu]=%.15g (iter=%d, n=%zu)",
@@ -135,12 +108,11 @@ static int test_eigen_sym_property(void)
                   iter, n);
         }
 
-        /* V is stored as an n x n matrix; column k is the k-th eigenvector.
-         * V[i,k] = eigenvectors.data[i * n + k]. */
+
         const lmmc_real_t* V = res.eigenvectors.data;
         const lmmc_real_t* lam = res.eigenvalues.data;
 
-        /* --- Verify reconstruction: A ≈ V * diag(lambda) * V^T --- */
+
         for (size_t i = 0; i < n; ++i) {
             for (size_t j = 0; j < n; ++j) {
                 double sum = 0.0;
@@ -155,8 +127,7 @@ static int test_eigen_sym_property(void)
             }
         }
 
-        /* --- Verify orthogonality: V^T * V ≈ I ---
-         * (V^T * V)[i,j] = sum_k V[k,i] * V[k,j] = sum_k data[k*n+i] * data[k*n+j] */
+
         double ortho_tol = BASE_TOL * (double)n;
         for (size_t i = 0; i < n; ++i) {
             for (size_t j = 0; j < n; ++j) {
@@ -179,12 +150,7 @@ static int test_eigen_sym_property(void)
     return 0;
 }
 
-/* ========================================================================
- * Edge case: 2x2 matrices specifically.
- *
- * Smallest size in the property range; ensures that even pathological 2x2
- * structures (near-zero off-diagonal, equal diagonals, etc.) are covered.
- * ======================================================================== */
+
 static int test_eigen_sym_2x2_focused(void)
 {
     int iter;
@@ -193,7 +159,7 @@ static int test_eigen_sym_2x2_focused(void)
         lmmc_mat_t A;
         lmmc_mat_create(2, 2, &A);
 
-        /* Random 2x2 symmetric */
+
         double a = rand_double(10.0);
         double b = rand_double(10.0);
         double d = rand_double(10.0);
@@ -204,7 +170,7 @@ static int test_eigen_sym_2x2_focused(void)
         lmmc_status_t st = lmmc_eigen_symmetric(&A, &res);
         CHECK(st == LMMC_STATUS_OK, "2x2 eigen failed (iter=%d)", iter);
 
-        /* Closed-form eigenvalues: (a+d ± sqrt((a-d)^2 + 4b^2))/2 */
+
         double trace = a + d;
         double disc = sqrt((a - d) * (a - d) + 4.0 * b * b);
         double lam1 = (trace - disc) / 2.0;
@@ -225,15 +191,12 @@ static int test_eigen_sym_2x2_focused(void)
     return 0;
 }
 
-/* ========================================================================
- * Main
- * ======================================================================== */
+
 int main(void)
 {
     int rc = 0;
 
-    /* Use a fixed seed for reproducibility in CI; comment out for fully
-     * random runs. We use time() for broader coverage across runs. */
+
     srand((unsigned int)time(NULL));
 
     printf("=== Property 8: 对称特征值分解重构 ===\n");

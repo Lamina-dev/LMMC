@@ -1,3 +1,9 @@
+/**
+ * @file test_logging_ext.c
+ * @brief 针对 LMMC 中 logging ext 相关接口的单元测试。
+ *
+ * @internal
+ */
 #include <stdio.h>
 #include <assert.h>
 #include "lmmc/lmmc.h"
@@ -30,12 +36,12 @@ static lmmc_real_t test_fn(lmmc_real_t x, void* user_data) {
     lmmc_real_t five; LMMC_REAL_INIT(&five); LMMC_REAL_SET_D(&five, 5.0);
     LMMC_REAL_SUB(&result, &x, &five);
     LMMC_REAL_CLEAR(&five);
-    return result; // root is 5
+    return result;
 }
 
 static lmmc_status_t test_rhs(lmmc_real_t t, const lmmc_real_t* y, lmmc_real_t* y_prime, size_t dim, void* user_data) {
     (void)t; (void)user_data;
-    for (size_t i = 0; i < dim; ++i) LMMC_REAL_SET_D(&y_prime[i], 1.0); // y' = 1 -> y = t
+    for (size_t i = 0; i < dim; ++i) LMMC_REAL_SET_D(&y_prime[i], 1.0);
     return LMMC_STATUS_OK;
 }
 
@@ -48,16 +54,16 @@ int main(void) {
         ctx.count = 0;
         LMMC_REAL_INIT(&ctx.last_val);
         LMMC_REAL_SET_D(&ctx.last_val, 0.0);
-        
+
         lmmc_status_t st_cfg = lmmc_nonlinear_default_config(&cfg);
         assert(st_cfg == LMMC_STATUS_OK);
         cfg.log_cb = test_nonlinear_cb;
         cfg.log_user_data = &ctx;
-        
+
         lmmc_status_t st = lmmc_bisection_solve(test_fn, NULL, 0.0, 10.0, &cfg, &res);
         assert(st == LMMC_STATUS_OK);
         assert(ctx.count > 0);
-        assert(ctx.count >= res.num_iter); // initial + steps
+        assert(ctx.count >= res.num_iter);
         printf("Nonlinear Logging Callback Test Passed (%zu calls)\n", ctx.count);
     }
 
@@ -72,16 +78,16 @@ int main(void) {
         lmmc_real_t y[1];
         LMMC_REAL_INIT(&y[0]);
         LMMC_REAL_SET_D(&y[0], 0.0);
-        
+
         lmmc_status_t st_cfg = lmmc_ode_default_config(0.0, 1.0, 1, &cfg);
         assert(st_cfg == LMMC_STATUS_OK);
         cfg.log_cb = test_ode_cb;
         cfg.log_user_data = &ctx;
         cfg.initial_step = 0.1;
-        
+
         lmmc_status_t st = lmmc_ode_euler_solve(test_rhs, NULL, 1, 0.0, 1.0, y, &cfg, &res);
         assert(st == LMMC_STATUS_OK);
-        // Let's just check ctx.count > 0 for now to be safe about exact counts.
+
         assert(ctx.count > 0);
         printf("ODE Logging Callback Test Passed (%zu calls)\n", ctx.count);
     }

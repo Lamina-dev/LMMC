@@ -1,3 +1,7 @@
+/**
+ * @file example_tensor_benchmark.c
+ * @brief 演示 LMMC 中 tensor benchmark 相关接口的使用。
+ */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>

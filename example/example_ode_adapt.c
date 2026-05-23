@@ -1,3 +1,7 @@
+/**
+ * @file example_ode_adapt.c
+ * @brief 演示 LMMC 中 ode adapt 相关接口的使用。
+ */
 #include <math.h>
 #include <stdio.h>
 #include "lmmc/lmmc.h"

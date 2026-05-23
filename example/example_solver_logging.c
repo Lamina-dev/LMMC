@@ -1,7 +1,11 @@
+/**
+ * @file example_solver_logging.c
+ * @brief 演示 LMMC 中 solver logging 相关接口的使用。
+ */
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 
-// 1. Define a custom logging callback
+
 void my_solver_logger(size_t iter, lmmc_real_t residual_norm, void* user_data) {
     const char* prefix = (const char*)user_data;
     printf("[%s] Step %zu: Residual = %.4e\n", prefix, iter, residual_norm);
@@ -17,7 +21,7 @@ int main(void) {
 
     printf("=== LMMC Solver Logging Example ===\n\n");
 
-    // 2. Setup a simple 10x10 Poisson-like problem (tridiagonal)
+
     const size_t n = 10;
     st = lmmc_mat_create(n, n, &a_dense);
     if (st != LMMC_STATUS_OK) return 1;
@@ -30,7 +34,7 @@ int main(void) {
         a_dense.data[i * n + i] = 2.0;
         if (i > 0) a_dense.data[i * n + (i - 1)] = -1.0;
         if (i < n - 1) a_dense.data[i * n + (i + 1)] = -1.0;
-        b.data[i] = 1.0; // RHS
+        b.data[i] = 1.0;
     }
 
     st = lmmc_sparse_from_dense(&a_dense, 1e-14, &a);
@@ -57,11 +61,11 @@ int main(void) {
         printf("Final residual: %.4e\n\n", res.final_residual_norm);
     }
 
-    // 4. Demonstrate "verbose" built-in logging
-    cfg.log_cb = NULL; // Disable custom logger
-    cfg.verbose = 1;   // Enable built-in stdout logging
-    lmmc_vec_fill(&x, 0.0); // Reset x
-    
+
+    cfg.log_cb = NULL;
+    cfg.verbose = 1;
+    lmmc_vec_fill(&x, 0.0);
+
     printf("Starting BiCGSTAB solve with built-in verbose logging:\n");
     st = lmmc_bicgstab_solve(&a, &b, NULL, &cfg, &x, &res);
 
@@ -70,7 +74,7 @@ int main(void) {
         printf("Final residual: %.4e\n\n", res.final_residual_norm);
     }
 
-    // Cleanup
+
     lmmc_vec_destroy(&x);
     lmmc_vec_destroy(&b);
     lmmc_sparse_destroy(&a);

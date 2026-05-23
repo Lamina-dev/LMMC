@@ -1,9 +1,9 @@
 /**
  * @file test_sparse_extended.c
- * @brief Extended tests for sparse matrix module.
- * Requirements: 14.1, 14.2, 14.3, 14.4, 14.5, 14.6, 14.7, 14.8, 14.9, 14.10, 14.11, 14.12, 14.13, 14.14
+ * @brief 针对 LMMC 中 sparse extended 相关接口的单元测试。
+ *
+ * @internal
  */
-
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
@@ -13,7 +13,7 @@
 #define TEST_EPS_TIGHT   1e-12
 #define TEST_EPS_NORMAL  1e-10
 
-/* Helper: build a sparse matrix from dense data */
+
 static lmmc_status_t helper_build_sparse(const double* data, size_t rows, size_t cols,
                                           lmmc_sparse_mat_t* out) {
     lmmc_mat_t dense = {0};
@@ -27,7 +27,7 @@ static lmmc_status_t helper_build_sparse(const double* data, size_t rows, size_t
     return st;
 }
 
-/* Helper: build a sparse CSC matrix from dense data */
+
 static lmmc_status_t helper_build_sparse_csc(const double* data, size_t rows, size_t cols,
                                               lmmc_sparse_mat_t* out) {
     lmmc_sparse_builder_t* builder = NULL;
@@ -52,7 +52,7 @@ int main(void) {
 
     printf("Starting sparse extended tests...\n");
 
-    /* ===== Test 1: CSR -> CSC -> CSR roundtrip (Req 14.1) ===== */
+
     printf("Test 1: CSR->CSC->CSR roundtrip\n");
     {
         double data[] = {
@@ -71,7 +71,7 @@ int main(void) {
         st = lmmc_sparse_to_csr(&csc, &csr_back);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_sparse_destroy(&csc); lmmc_sparse_destroy(&csr); goto done; }
 
-        /* Verify roundtrip: same nnz, row_ptr, col_idx, values */
+
         if (csr_back.nnz != csr.nnz || csr_back.rows != csr.rows || csr_back.cols != csr.cols) {
             rc = 1; lmmc_sparse_destroy(&csr_back); lmmc_sparse_destroy(&csc); lmmc_sparse_destroy(&csr); goto done;
         }
@@ -91,7 +91,7 @@ int main(void) {
         lmmc_sparse_destroy(&csr);
     }
 
-    /* ===== Test 2: Dense -> Sparse -> Dense roundtrip (Req 14.2) ===== */
+
     printf("Test 2: Dense->Sparse->Dense roundtrip\n");
     {
         double data[] = {
@@ -125,7 +125,7 @@ int main(void) {
         lmmc_mat_destroy(&dense_orig);
     }
 
-    /* ===== Test 3: SpMV vs dense multiplication (Req 14.3) ===== */
+
     printf("Test 3: SpMV vs dense\n");
     {
         double a_data[] = {
@@ -174,7 +174,7 @@ int main(void) {
         if (rc != 0) goto done;
     }
 
-    /* ===== Test 4: SpGEMM vs dense multiplication (Req 14.4) ===== */
+
     printf("Test 4: SpGEMM vs dense\n");
     {
         double a_data[] = {
@@ -198,7 +198,7 @@ int main(void) {
         st = lmmc_sparse_mat_mat_mul_sparse(&sa, &sb, &sc);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_sparse_destroy(&sb); lmmc_sparse_destroy(&sa); goto done; }
 
-        /* Dense multiplication for reference */
+
         st = lmmc_mat_create(3, 3, &da);
         if (st != LMMC_STATUS_OK) { rc = 1; goto test4_cleanup; }
         st = lmmc_mat_create(3, 3, &db);
@@ -233,7 +233,7 @@ int main(void) {
         if (rc != 0) goto done;
     }
 
-    /* ===== Test 5: Transpose roundtrip (A^T)^T = A (Req 14.5) ===== */
+
     printf("Test 5: Transpose roundtrip\n");
     {
         double data[] = {
@@ -253,7 +253,7 @@ int main(void) {
         st = lmmc_sparse_transpose(&trans, &trans_trans);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_sparse_destroy(&trans); lmmc_sparse_destroy(&orig); goto done; }
 
-        /* Compare via dense conversion */
+
         st = lmmc_mat_create(3, 3, &d_orig);
         if (st != LMMC_STATUS_OK) { rc = 1; goto test5_cleanup; }
         st = lmmc_mat_create(3, 3, &d_tt);
@@ -278,7 +278,7 @@ int main(void) {
         if (rc != 0) goto done;
     }
 
-    /* ===== Test 6: Sparse addition C = alpha*A + beta*B (Req 14.6) ===== */
+
     printf("Test 6: Sparse addition\n");
     {
         double a_data[] = {
@@ -299,7 +299,7 @@ int main(void) {
         st = helper_build_sparse(b_data, 3, 3, &sb);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_sparse_destroy(&sa); goto done; }
 
-        /* C = 1.0*A + 1.0*B */
+
         st = lmmc_sparse_add(1.0, &sa, 1.0, &sb, &sc);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_sparse_destroy(&sb); lmmc_sparse_destroy(&sa); goto done; }
 
@@ -308,7 +308,7 @@ int main(void) {
         st = lmmc_sparse_to_dense(&sc, &dc_sparse);
         if (st != LMMC_STATUS_OK) { rc = 1; goto test6_cleanup; }
 
-        /* Expected: A + B element-wise */
+
         double expected[] = {1.0, 6.0, 2.0, 7.0, 3.0, 8.0, 4.0, 9.0, 5.0};
         for (size_t i = 0; i < 9; i++) {
             if (!lmmc_test_nearly_equal(dc_sparse.data[i], expected[i], TEST_EPS_TIGHT)) {
@@ -323,7 +323,7 @@ int main(void) {
         if (rc != 0) goto done;
     }
 
-    /* ===== Test 7: Empty matrix operations (Req 14.7) ===== */
+
     printf("Test 7: Empty matrix operations\n");
     {
         lmmc_mat_t zero_dense = {0};
@@ -332,14 +332,14 @@ int main(void) {
 
         st = lmmc_mat_create(3, 3, &zero_dense);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-        /* All zeros by default from lmmc_mat_create */
+
 
         st = lmmc_sparse_from_dense(&zero_dense, 0.0, &zero_sparse);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_mat_destroy(&zero_dense); goto done; }
 
         if (zero_sparse.nnz != 0) { rc = 1; lmmc_sparse_destroy(&zero_sparse); lmmc_mat_destroy(&zero_dense); goto done; }
 
-        /* SpMV with empty matrix should give zero vector */
+
         st = lmmc_vec_create(3, &x);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_sparse_destroy(&zero_sparse); lmmc_mat_destroy(&zero_dense); goto done; }
         st = lmmc_vec_fill(&x, 5.0);
@@ -356,7 +356,7 @@ int main(void) {
             }
         }
 
-        /* Transpose of empty matrix */
+
         lmmc_sparse_mat_t zero_t = {0};
         st = lmmc_sparse_transpose(&zero_sparse, &zero_t);
         if (st != LMMC_STATUS_OK) { rc = 1; goto test7_cleanup; }
@@ -371,10 +371,10 @@ int main(void) {
         if (rc != 0) goto done;
     }
 
-    /* ===== Test 8: Diagonal matrix SpMV (Req 14.8) ===== */
+
     printf("Test 8: Diagonal SpMV\n");
     {
-        /* Diagonal matrix: diag(2, 3, 4) */
+
         double diag_data[] = {
             2.0, 0.0, 0.0,
             0.0, 3.0, 0.0,
@@ -397,7 +397,7 @@ int main(void) {
         st = lmmc_sparse_mat_vec_mul(&diag_sparse, &x, &y);
         if (st != LMMC_STATUS_OK) { rc = 1; goto test8_cleanup; }
 
-        /* Expected: element-wise scaling: [2*1, 3*2, 4*3] = [2, 6, 12] */
+
         if (!lmmc_test_nearly_equal(y.data[0], 2.0, TEST_EPS_TIGHT) ||
             !lmmc_test_nearly_equal(y.data[1], 6.0, TEST_EPS_TIGHT) ||
             !lmmc_test_nearly_equal(y.data[2], 12.0, TEST_EPS_TIGHT)) {
@@ -410,7 +410,7 @@ int main(void) {
         if (rc != 0) goto done;
     }
 
-    /* ===== Test 9: COO duplicate index accumulation (Req 14.9) ===== */
+
     printf("Test 9: COO duplicate accumulation\n");
     {
         lmmc_sparse_coo_t coo = {0};
@@ -420,13 +420,13 @@ int main(void) {
         st = lmmc_sparse_coo_create(3, 3, 8, &coo);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-        /* Add duplicates at (0,0): 1.0 + 2.0 + 3.0 = 6.0 */
+
         lmmc_sparse_coo_add_entry(&coo, 0, 0, 1.0);
         lmmc_sparse_coo_add_entry(&coo, 0, 0, 2.0);
         lmmc_sparse_coo_add_entry(&coo, 0, 0, 3.0);
-        /* Add (1,1) = 5.0 */
+
         lmmc_sparse_coo_add_entry(&coo, 1, 1, 5.0);
-        /* Add duplicates at (2,2): 4.0 + 6.0 = 10.0 */
+
         lmmc_sparse_coo_add_entry(&coo, 2, 2, 4.0);
         lmmc_sparse_coo_add_entry(&coo, 2, 2, 6.0);
 
@@ -434,10 +434,10 @@ int main(void) {
         lmmc_sparse_coo_destroy(&coo);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-        /* Duplicates should be accumulated: nnz should be 3 */
+
         if (sparse.nnz != 3) { rc = 1; lmmc_sparse_destroy(&sparse); goto done; }
 
-        /* Verify via dense conversion */
+
         st = lmmc_mat_create(3, 3, &dense);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_sparse_destroy(&sparse); goto done; }
         st = lmmc_sparse_to_dense(&sparse, &dense);
@@ -453,7 +453,7 @@ int main(void) {
         if (rc != 0) goto done;
     }
 
-    /* ===== Test 10: COO -> CSR and COO -> CSC consistency (Req 14.10) ===== */
+
     printf("Test 10: COO->CSR/CSC consistency\n");
     {
         lmmc_sparse_coo_t coo = {0};
@@ -463,11 +463,7 @@ int main(void) {
         st = lmmc_sparse_coo_create(3, 3, 8, &coo);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-        /* Build matrix:
-         * [1 0 2]
-         * [0 3 0]
-         * [4 0 5]
-         */
+
         lmmc_sparse_coo_add_entry(&coo, 0, 0, 1.0);
         lmmc_sparse_coo_add_entry(&coo, 0, 2, 2.0);
         lmmc_sparse_coo_add_entry(&coo, 1, 1, 3.0);
@@ -480,7 +476,7 @@ int main(void) {
         st = lmmc_sparse_coo_to_csc(&coo, &csc);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_sparse_destroy(&csr); lmmc_sparse_coo_destroy(&coo); goto done; }
 
-        /* Both should represent the same matrix - compare via dense */
+
         st = lmmc_mat_create(3, 3, &d_csr);
         if (st != LMMC_STATUS_OK) { rc = 1; goto test10_cleanup; }
         st = lmmc_mat_create(3, 3, &d_csc);
@@ -505,13 +501,10 @@ int main(void) {
         if (rc != 0) goto done;
     }
 
-    /* ===== Test 11: Sparse LU solve (Req 14.11) ===== */
+
     printf("Test 11: Sparse LU solve\n");
     {
-        /* Use a simple diagonal matrix where LU is trivial:
-         * A = diag(2, 3, 4)
-         * x_true = [1, 2, 3], b = [2, 6, 12]
-         */
+
         double a_data[] = {
             2.0, 0.0, 0.0,
             0.0, 3.0, 0.0,
@@ -553,16 +546,16 @@ int main(void) {
         if (rc != 0) goto done;
     }
 
-    /* ===== Test 12: Sparse Cholesky solve (Req 14.12) ===== */
+
     printf("Test 12: Sparse Cholesky solve\n");
     {
-        /* A = [4 1 0; 1 4 1; 0 1 4] (SPD tridiagonal) */
+
         double a_data[] = {
             4.0, 1.0, 0.0,
             1.0, 4.0, 1.0,
             0.0, 1.0, 4.0
         };
-        /* x_true = [1, 2, 3], b = A*x = [4+2+0, 1+8+3, 0+2+12] = [6, 12, 14] */
+
         lmmc_sparse_mat_t a_csc = {0};
         lmmc_sparse_chol_t* chol = NULL;
         lmmc_vec_t b = {0}, x = {0};
@@ -599,17 +592,17 @@ int main(void) {
         if (rc != 0) goto done;
     }
 
-    /* ===== Test 13: Dimension mismatch errors (Req 14.13) ===== */
+
     printf("Test 13: Dimension mismatch\n");
     {
-        double a_data[] = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0}; /* 2x3 */
+        double a_data[] = {1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
         lmmc_sparse_mat_t sa = {0};
         lmmc_vec_t x_bad = {0}, y_bad = {0};
 
         st = helper_build_sparse(a_data, 2, 3, &sa);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-        /* SpMV dimension mismatch: A is 2x3, x is size 2 (should be 3) */
+
         st = lmmc_vec_create(2, &x_bad);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_sparse_destroy(&sa); goto done; }
         st = lmmc_vec_create(2, &y_bad);
@@ -620,9 +613,9 @@ int main(void) {
             rc = 1; goto test13_cleanup;
         }
 
-        /* SpGEMM dimension mismatch: A is 2x3, B is 2x3 (should be 3xN) */
+
         lmmc_sparse_mat_t sb = {0}, sc = {0};
-        double b_data[] = {1.0, 0.0, 0.0, 1.0, 0.0, 0.0}; /* 2x3 */
+        double b_data[] = {1.0, 0.0, 0.0, 1.0, 0.0, 0.0};
         st = helper_build_sparse(b_data, 2, 3, &sb);
         if (st != LMMC_STATUS_OK) { rc = 1; goto test13_cleanup; }
 
@@ -639,10 +632,10 @@ int main(void) {
         if (rc != 0) goto done;
     }
 
-    /* ===== Test 14: Frobenius norm (Req 14.14) ===== */
+
     printf("Test 14: Frobenius norm\n");
     {
-        /* A = [3 0; 0 4] -> Frobenius norm = sqrt(9+16) = 5 */
+
         double data[] = {3.0, 0.0, 0.0, 4.0};
         lmmc_sparse_mat_t sparse = {0};
         lmmc_real_t norm_sparse = 0.0;
@@ -659,7 +652,7 @@ int main(void) {
 
         lmmc_sparse_destroy(&sparse);
 
-        /* Also verify against dense norm for a more complex matrix */
+
         double data2[] = {
             1.0, 2.0, 0.0,
             0.0, 3.0, 4.0,

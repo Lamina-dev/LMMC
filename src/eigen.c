@@ -1,6 +1,6 @@
 /**
  * @file eigen.c
- * @brief Eigenvalue decomposition and SVD implementations.
+ * @brief 特征值、奇异值、伪逆与条件数算法实现。
  */
 #include <math.h>
 #include <string.h>
@@ -25,8 +25,7 @@ static lmmc_status_t householder_tridiag(lmmc_mat_t *a, lmmc_real_t *diag, lmmc_
         if (sigma == 0.0) {
             offdiag[k] = alpha_val; diag[k] = MAT_ELEM(a, k, k);
             if (taus) taus[k] = 0.0;
-            /* Zero the strictly-lower entries in column k so accumulate_Q
-             * does not pick up garbage. */
+
             for (i = k + 2; i < n; i++) MAT_ELEM(a, i, k) = 0.0;
             continue;
         }
@@ -77,19 +76,13 @@ static lmmc_status_t accumulate_Q(const lmmc_mat_t *a, const lmmc_real_t *taus, 
     size_t n = a->rows; size_t i, j, k;
     for (i = 0; i < n; i++) for (j = 0; j < n; j++) MAT_ELEM(Q, i, j) = (i == j) ? 1.0 : 0.0;
     if (n <= 2) return LMMC_STATUS_OK;
-    /* Build Q = H_0 * H_1 * ... * H_{n-3} so that T = Q^T A Q.
-     * Iterate k = n-3, n-4, ..., 0 applying H_k from the LEFT to Q so that
-     * after k = 0 we have Q = H_0 (H_1 (... (H_{n-3} I) ...)) = H_0 ... H_{n-3}. */
+
     for (k = n - 3; ; k--) {
         lmmc_real_t tau = taus ? taus[k] : 0.0;
         if (tau != 0.0) {
-            /* Apply H_k from the left: Q := H_k * Q.
-             * H_k acts only on rows k+1, k+2, ..., n-1.
-             * For each column j of Q:
-             *   s = sum_{i=k+1..n-1} v[i-k-1] * Q[i, j], with v[0] = 1.
-             *   Q[i, j] -= tau * v[i-k-1] * s   for i = k+1 .. n-1. */
+
             for (j = 0; j < n; j++) {
-                lmmc_real_t s = MAT_ELEM(Q, k + 1, j); /* v[0] = 1 */
+                lmmc_real_t s = MAT_ELEM(Q, k + 1, j);
                 for (i = k + 2; i < n; i++) s += MAT_ELEM(a, i, k) * MAT_ELEM(Q, i, j);
                 s *= tau;
                 MAT_ELEM(Q, k + 1, j) -= s;
@@ -187,24 +180,17 @@ lmmc_status_t lmmc_eigen_symmetric(const lmmc_mat_t *a, lmmc_eigen_sym_result_t 
     lmmc_free(taus);
     lmmc_mat_destroy(&work);
     if (status != LMMC_STATUS_OK) { lmmc_free(offdiag); lmmc_vec_destroy(&out_result->eigenvalues); lmmc_mat_destroy(&out_result->eigenvectors); return status; }
-    /*
-     * Make off-diagonal non-negative via a diagonal similarity D = diag(s_0, s_1, ...).
-     * Choose s_0 = 1 and s_{i+1} = s_i * sign(offdiag[i]), then
-     *   T' = D * T * D  has  offdiag'[i] = |offdiag[i]|  and  diag'[i] = diag[i].
-     * The corresponding eigenvector accumulator is  Q' = Q * D, i.e. column i of
-     * out_result->eigenvectors is scaled by s_i. With this, tridiag_ql below
-     * solves T' = (Q')^T * A * Q' so the final eigenvectors are correct.
-     */
+
     {
         size_t ii, jj;
         lmmc_real_t s = 1.0;
         for (ii = 0; ii < n - 1; ii++) {
             lmmc_real_t off = offdiag[ii];
-            lmmc_real_t sign_next = (off >= 0.0) ? s : -s;  /* s_{ii+1} = s_ii * sign(off) */
-            offdiag[ii] = (off >= 0.0) ? off : -off;        /* |offdiag[ii]| */
+            lmmc_real_t sign_next = (off >= 0.0) ? s : -s;
+            offdiag[ii] = (off >= 0.0) ? off : -off;
             s = sign_next;
             if (sign_next < 0.0) {
-                /* Flip sign of column (ii+1) of Q. */
+
                 for (jj = 0; jj < n; jj++) {
                     MAT_ELEM(&out_result->eigenvectors, jj, ii + 1) =
                         -MAT_ELEM(&out_result->eigenvectors, jj, ii + 1);
@@ -225,20 +211,7 @@ void lmmc_eigen_sym_result_destroy(lmmc_eigen_sym_result_t *result) {
     lmmc_mat_destroy(&result->eigenvectors);
 }
 
-/* ============================================================
- * Real eigenvalues of a general matrix via the characteristic
- * polynomial (Faddeev–LeVerrier) and Bairstow's method.
- *
- * This delivers all n eigenvalues — including real-or-complex
- * conjugate pairs — directly as roots of det(λI − A) = 0.
- * It is numerically modest but reliable for n ≲ 20 and avoids
- * the bookkeeping of a full implicit-shift QR.  For larger n
- * the same code still runs but accuracy degrades; the property
- * tests exercise sizes ≤ 6 which is comfortably within range.
- * ============================================================ */
 
-/* Solve x^2 + p x + q = 0 robustly, output two complex roots in
- * (re_a, im_a), (re_b, im_b). */
 static void quad_solve(lmmc_real_t p, lmmc_real_t q,
                        lmmc_real_t *re_a, lmmc_real_t *im_a,
                        lmmc_real_t *re_b, lmmc_real_t *im_b)
@@ -257,19 +230,12 @@ static void quad_solve(lmmc_real_t p, lmmc_real_t q,
     }
 }
 
-/* Bairstow's method: extract one quadratic factor x^2 + p x + q from
- * the polynomial whose coefficients are c[0..deg], with c[0] the
- * leading coefficient.  Updates c[] in place to the deflated
- * (deg-2)-degree quotient and returns the (p, q) pair via *p, *q.
- * Returns 0 on success, non-zero on failure to converge. */
+
 static int bairstow_step(lmmc_real_t *c, size_t deg, lmmc_real_t *p_out,
                          lmmc_real_t *q_out)
 {
     if (deg < 2) return -1;
-    /* Working coefficients (length deg+1). Synthetic division gives
-     * b[i] = c[i] - p*b[i-1] - q*b[i-2], with b[-1]=b[-2]=0.
-     * We then need partial derivatives via:
-     *   f[i] = b[i] - p*f[i-1] - q*f[i-2]. */
+
     lmmc_real_t *b = (lmmc_real_t *)lmmc_alloc((deg + 1) * sizeof(lmmc_real_t));
     lmmc_real_t *f = (lmmc_real_t *)lmmc_alloc((deg + 1) * sizeof(lmmc_real_t));
     if (!b || !f) {
@@ -281,8 +247,7 @@ static int bairstow_step(lmmc_real_t *c, size_t deg, lmmc_real_t *p_out,
     lmmc_real_t p = (deg >= 1) ? (c[1] / c[0]) : 0.0;
     lmmc_real_t q = (deg >= 2) ? (c[2] / c[0]) : 0.0;
 
-    /* Bairstow's method can stall for poor (p,q) starts; if convergence
-     * fails, restart with a few diverse seed pairs. */
+
     lmmc_real_t starts[][2] = {
         { 0.0, 0.0 },
         { 1.0, 1.0 },
@@ -292,7 +257,7 @@ static int bairstow_step(lmmc_real_t *c, size_t deg, lmmc_real_t *p_out,
         { 0.3, -0.7 },
     };
     int n_starts = (int)(sizeof(starts) / sizeof(starts[0]));
-    int start_idx = -1; /* use the canonical p,q first; restart when needed */
+    int start_idx = -1;
 
     const int max_iter = 200;
     int restarts_left = n_starts;
@@ -308,11 +273,7 @@ static int bairstow_step(lmmc_real_t *c, size_t deg, lmmc_real_t *p_out,
         for (size_t i = 2; i + 1 <= deg; i++) {
             f[i] = b[i] - p * f[i - 1] - q * f[i - 2];
         }
-        /* Newton step for Bairstow:
-         *   [f[d-2]   f[d-3]] [dp]   [b[d-1]]
-         *   [f[d-1]   f[d-2]] [dq] = [b[d]  ]
-         * (standard formulation; see Press et al. NR §9.5)
-         * f[d-3] is interpreted as 0 when d < 3. */
+
         lmmc_real_t f_dm1 = (deg >= 1) ? f[deg - 1] : 0.0;
         lmmc_real_t f_dm2 = (deg >= 2) ? f[deg - 2] : 0.0;
         lmmc_real_t f_dm3 = (deg >= 3) ? f[deg - 3] : 0.0;
@@ -320,7 +281,7 @@ static int bairstow_step(lmmc_real_t *c, size_t deg, lmmc_real_t *p_out,
         lmmc_real_t a21 = f_dm1, a22 = f_dm2;
         lmmc_real_t det_a = a11 * a22 - a12 * a21;
         if (det_a == 0.0) {
-            /* Perturb to escape stagnation. */
+
             p += 1.0; q -= 1.0;
             continue;
         }
@@ -332,11 +293,11 @@ static int bairstow_step(lmmc_real_t *c, size_t deg, lmmc_real_t *p_out,
         q += dq;
         if (lmmc_abs(dp) + lmmc_abs(dq) <
             1e-14 * (lmmc_abs(p) + lmmc_abs(q) + 1.0)) {
-            /* Convergence: also require residuals to be small. */
+
             if (lmmc_abs(b[deg]) + lmmc_abs(b[deg - 1]) <
                 1e-10 * (lmmc_abs(c[0]) + lmmc_abs(c[deg]) + 1.0)) {
                 *p_out = p; *q_out = q;
-                /* Deflate: the quotient has coefficients b[0..deg-2]. */
+
                 for (size_t i = 0; i + 2 <= deg; i++) c[i] = b[i];
                 lmmc_free(b);
                 lmmc_free(f);
@@ -344,7 +305,7 @@ static int bairstow_step(lmmc_real_t *c, size_t deg, lmmc_real_t *p_out,
             }
         }
     }
-    /* Restart with another seed if available, else give up. */
+
     if (restarts_left <= 0) break;
     start_idx++;
     if (start_idx >= n_starts) break;
@@ -357,28 +318,25 @@ static int bairstow_step(lmmc_real_t *c, size_t deg, lmmc_real_t *p_out,
     return -3;
 }
 
-/* Compute the characteristic polynomial of A (size n) via the
- * Faddeev–LeVerrier algorithm.  Output: poly[0..n] holds coefficients
- * with poly[0] leading (x^n) so poly[n] is the constant term.  Sign
- * convention: poly = det(λI − A). */
+
 static lmmc_status_t char_poly_faddeev_leverrier(const lmmc_mat_t *a,
                                                  lmmc_real_t *poly)
 {
     size_t n = a->rows;
-    /* Working matrices M = I, A_copy, M_next. */
+
     lmmc_mat_t M, AM;
     lmmc_status_t st;
     st = lmmc_mat_create(n, n, &M);
     if (st != LMMC_STATUS_OK) return st;
     st = lmmc_mat_create(n, n, &AM);
     if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&M); return st; }
-    /* M = I */
+
     for (size_t i = 0; i < n; i++)
         for (size_t j = 0; j < n; j++)
             MAT_ELEM(&M, i, j) = (i == j) ? 1.0 : 0.0;
-    poly[0] = 1.0; /* leading x^n coefficient */
+    poly[0] = 1.0;
     for (size_t k = 1; k <= n; k++) {
-        /* AM = A * M */
+
         for (size_t i = 0; i < n; i++) {
             for (size_t j = 0; j < n; j++) {
                 lmmc_real_t s = 0.0;
@@ -387,12 +345,12 @@ static lmmc_status_t char_poly_faddeev_leverrier(const lmmc_mat_t *a,
                 MAT_ELEM(&AM, i, j) = s;
             }
         }
-        /* c_k = -trace(AM) / k */
+
         lmmc_real_t tr = 0.0;
         for (size_t i = 0; i < n; i++) tr += MAT_ELEM(&AM, i, i);
         lmmc_real_t ck = -tr / (lmmc_real_t)k;
         poly[k] = ck;
-        /* M = AM + ck * I */
+
         for (size_t i = 0; i < n; i++) {
             for (size_t j = 0; j < n; j++) {
                 MAT_ELEM(&M, i, j) = MAT_ELEM(&AM, i, j) + ((i == j) ? ck : 0.0);
@@ -404,9 +362,7 @@ static lmmc_status_t char_poly_faddeev_leverrier(const lmmc_mat_t *a,
     return LMMC_STATUS_OK;
 }
 
-/* Find all roots of poly[0..deg] (poly[0] leading coefficient) and
- * write them into (re[0..deg-1], im[0..deg-1]).  Uses Bairstow's
- * method with linear deflation for any odd remainder. */
+
 static lmmc_status_t poly_roots(lmmc_real_t *poly, size_t deg,
                                 lmmc_real_t *re, lmmc_real_t *im)
 {
@@ -419,19 +375,19 @@ static lmmc_status_t poly_roots(lmmc_real_t *poly, size_t deg,
         lmmc_real_t p, q;
         int rc = bairstow_step(c, deg, &p, &q);
         if (rc != 0) { lmmc_free(c); return LMMC_STATUS_CONVERGENCE_FAILED; }
-        /* Roots of x^2 + p*x + q = 0. */
+
         quad_solve(p, q, &re[out], &im[out], &re[out + 1], &im[out + 1]);
         out += 2;
         deg -= 2;
     }
 
     if (deg == 2) {
-        /* Solve directly: c[0]*x^2 + c[1]*x + c[2] = 0 → x^2 + (c[1]/c[0])*x + (c[2]/c[0]) = 0 */
+
         lmmc_real_t p = c[1] / c[0], q = c[2] / c[0];
         quad_solve(p, q, &re[out], &im[out], &re[out + 1], &im[out + 1]);
         out += 2;
     } else if (deg == 1) {
-        /* c[0]*x + c[1] = 0 */
+
         re[out] = -c[1] / c[0];
         im[out] = 0.0;
         out += 1;
@@ -465,20 +421,19 @@ lmmc_status_t lmmc_eigen_general(const lmmc_mat_t *a, lmmc_eigen_gen_result_t *o
     if (status != LMMC_STATUS_OK) { lmmc_vec_destroy(&out_result->real_parts); return status; }
 
     if (n == 2) {
-        /* Closed form. */
+
         lmmc_real_t a00 = MAT_ELEM(a, 0, 0), a01 = MAT_ELEM(a, 0, 1);
         lmmc_real_t a10 = MAT_ELEM(a, 1, 0), a11 = MAT_ELEM(a, 1, 1);
         lmmc_real_t tr = a00 + a11;
         lmmc_real_t det = a00 * a11 - a01 * a10;
-        /* Roots of x^2 - tr*x + det = 0 → use quad_solve with p=-tr, q=det. */
+
         quad_solve(-tr, det,
                    &out_result->real_parts.data[0], &out_result->imag_parts.data[0],
                    &out_result->real_parts.data[1], &out_result->imag_parts.data[1]);
         return LMMC_STATUS_OK;
     }
 
-    /* General path: characteristic polynomial via Faddeev–LeVerrier,
-     * then Bairstow root finding. */
+
     lmmc_real_t *poly = (lmmc_real_t *)lmmc_alloc((n + 1) * sizeof(lmmc_real_t));
     if (!poly) {
         lmmc_vec_destroy(&out_result->real_parts);
@@ -504,10 +459,7 @@ lmmc_status_t lmmc_eigen_general(const lmmc_mat_t *a, lmmc_eigen_gen_result_t *o
     return LMMC_STATUS_OK;
 }
 
-/* Helper: 2x2 eigenvalues from a real matrix [[a, b], [c, d]] (modifies
- * out arrays at positions p and p+1; returns void). Uses LAPACK-style
- * formulation (cf. dlanv2) that returns real eigenvalues when they are
- * real, otherwise a conjugate pair. */
+
 static void hqr_eig2(lmmc_real_t a, lmmc_real_t b,
                      lmmc_real_t c, lmmc_real_t d,
                      lmmc_real_t *re_p, lmmc_real_t *im_p,
@@ -518,7 +470,7 @@ static void hqr_eig2(lmmc_real_t a, lmmc_real_t b,
     lmmc_real_t disc = tr * tr - 4.0 * det;
     if (disc >= 0.0) {
         lmmc_real_t s = sqrt(disc);
-        /* Numerically stable: pick larger root first. */
+
         lmmc_real_t lam1 = (tr >= 0.0) ? (tr + s) * 0.5 : (tr - s) * 0.5;
         lmmc_real_t lam2 = (lam1 != 0.0) ? (det / lam1) : ((tr - s) * 0.5);
         *re_p = lam1; *im_p = 0.0;
@@ -533,42 +485,8 @@ static void hqr_eig2(lmmc_real_t a, lmmc_real_t b,
 void lmmc_eigen_gen_result_destroy(lmmc_eigen_gen_result_t *result) {
     if (!result) return; lmmc_vec_destroy(&result->real_parts); lmmc_vec_destroy(&result->imag_parts);
 }
-/* ============================================================
- * SVD implementation
- *
- * Strategy: Golub-Kahan bidiagonalization + implicit-shift QR.
- *
- *   1. For an m x n matrix A with m >= n, apply alternating
- *      Householder transformations from the left and from the
- *      right to reduce A to an upper bidiagonal matrix B with
- *      diagonal d[0..n-1] and superdiagonal e[0..n-2].
- *      The left transforms are accumulated into U (m x m),
- *      and the right transforms into V (n x n).
- *
- *      A = U * B * V^T  with B upper bidiagonal.
- *
- *   2. Apply the implicit-shift QR algorithm of Demmel-Kahan
- *      (LAPACK routine DBDSQR) to drive the superdiagonal of B
- *      to zero. Each step computes a Wilkinson shift from the
- *      trailing 2x2 block of B^T B and chases the resulting bulge
- *      down the bidiagonal using Givens rotations applied
- *      alternately from the right (into V) and the left (into U).
- *
- *   3. Make singular values non-negative (flip the sign of any
- *      negative one and negate the corresponding column of U) and
- *      sort in descending order, reordering columns of U and V.
- *
- *   4. Output U (m x m), sigma (length n, descending) and Vt
- *      (n x n). For m < n, the procedure is applied to A^T and
- *      the factors are remapped: A^T = U' S V'^T means
- *      A = V' S^T U'^T, so U_A = V', sigma_A = sigma' (length m),
- *      Vt_A = U'^T.
- * ============================================================ */
 
-/* Apply a Givens rotation (c, s) from the right to columns p and q of an
- * (rows x cols_total) matrix M.  Updates M_{:,p} := c*M_{:,p} + s*M_{:,q}
- * and M_{:,q} := -s*M_{:,p_old} + c*M_{:,q}.
- */
+
 static void givens_right(lmmc_mat_t *M, size_t rows, size_t p, size_t q,
                          lmmc_real_t c, lmmc_real_t s) {
     size_t i;
@@ -580,11 +498,7 @@ static void givens_right(lmmc_mat_t *M, size_t rows, size_t p, size_t q,
     }
 }
 
-/* Compute Householder reflector: given a column slice x[0..len-1], compute
- * a vector v (overwriting x with v[1..] and setting x[0]=1) and scalar tau
- * such that (I - tau v v^T) x = beta * e_1.  Stores beta in *beta_out.
- * If x is already a multiple of e_1 (or zero), sets tau = 0 and beta = x[0].
- */
+
 static void householder_make(lmmc_real_t *x, size_t len, lmmc_real_t *tau_out,
                              lmmc_real_t *beta_out) {
     size_t i;
@@ -595,12 +509,11 @@ static void householder_make(lmmc_real_t *x, size_t len, lmmc_real_t *tau_out,
     lmmc_real_t alpha = x[0];
     if (sigma == 0.0) { *tau_out = 0.0; *beta_out = alpha; return; }
     lmmc_real_t mu = sqrt(alpha * alpha + sigma);
-    /* Choose beta = -sign(alpha) * mu (sign(0) = +1) so v[0] = alpha - beta
-     * has no cancellation (both summands have the same sign). */
+
     lmmc_real_t beta = (alpha >= 0.0) ? -mu : mu;
-    lmmc_real_t v0 = alpha - beta; /* never near zero */
+    lmmc_real_t v0 = alpha - beta;
     *beta_out = beta;
-    /* Normalize so v[0] = 1; tau scales accordingly: tau = 2/(1 + sigma/v0^2). */
+
     lmmc_real_t v0_sq = v0 * v0;
     *tau_out = 2.0 * v0_sq / (sigma + v0_sq);
     lmmc_real_t inv = 1.0 / v0;
@@ -608,19 +521,14 @@ static void householder_make(lmmc_real_t *x, size_t len, lmmc_real_t *tau_out,
     x[0] = 1.0;
 }
 
-/* Apply Householder reflector (I - tau v v^T) to the columns indexed by
- * column range [j0, j1) of rows [i0, i0+len), in place.
- *   M_{i0..i0+len-1, j} -= tau * v * (v^T M_{i0..,j})
- * v is given by v[0]=1 and v[1..len-1] = stored values; passed in as vec
- * with vec[0]=1 implicitly handled.
- */
+
 static void householder_apply_left(lmmc_mat_t *M, size_t i0, size_t len,
                                    size_t j0, size_t j1,
                                    const lmmc_real_t *v, lmmc_real_t tau) {
     size_t i, j;
     if (tau == 0.0) return;
     for (j = j0; j < j1; j++) {
-        lmmc_real_t s = MAT_ELEM(M, i0, j); /* v[0] = 1 */
+        lmmc_real_t s = MAT_ELEM(M, i0, j);
         for (i = 1; i < len; i++) s += v[i] * MAT_ELEM(M, i0 + i, j);
         s *= tau;
         MAT_ELEM(M, i0, j) -= s;
@@ -628,10 +536,7 @@ static void householder_apply_left(lmmc_mat_t *M, size_t i0, size_t len,
     }
 }
 
-/* Apply Householder reflector from the right to rows [i0, i1), columns
- * [j0, j0+len), in place.
- *   M_{i, j0..j0+len-1} -= tau * (M_{i, j0..} v) * v^T
- */
+
 static void householder_apply_right(lmmc_mat_t *M, size_t i0, size_t i1,
                                     size_t j0, size_t len,
                                     const lmmc_real_t *v, lmmc_real_t tau) {
@@ -646,10 +551,7 @@ static void householder_apply_right(lmmc_mat_t *M, size_t i0, size_t i1,
     }
 }
 
-/* Construct a Givens rotation that zeros b: returns (c, s) such that
- *   [ c  s] [a]   [r]
- *   [-s  c] [b] = [0],   r = sqrt(a^2 + b^2).
- */
+
 static void givens_compute(lmmc_real_t a, lmmc_real_t b,
                            lmmc_real_t *c, lmmc_real_t *s, lmmc_real_t *r) {
     if (b == 0.0) { *c = (a >= 0.0) ? 1.0 : -1.0; *s = 0.0; *r = lmmc_abs(a); }
@@ -662,18 +564,11 @@ static void givens_compute(lmmc_real_t a, lmmc_real_t b,
     }
 }
 
-/* Implicit-shift QR step on an upper bidiagonal matrix B with diagonal
- * d[lo..hi] and superdiagonal e[lo..hi-1].  Updates U (left, m x m) and V
- * (right, n x n) by accumulating the Givens rotations.
- */
+
 static void bidiag_qr_step(lmmc_real_t *d, lmmc_real_t *e,
                            size_t lo, size_t hi,
                            lmmc_mat_t *U, lmmc_mat_t *V) {
-    /* Compute Wilkinson shift from trailing 2x2 of B^T B:
-     *   T = [d[hi-1]^2 + e[hi-2]^2,   d[hi-1]*e[hi-1];
-     *        d[hi-1]*e[hi-1],          d[hi]^2 + e[hi-1]^2]
-     * where e[hi-2] is 0 if hi-1 == lo.
-     */
+
     lmmc_real_t f, g;
     {
         lmmc_real_t emm = (hi >= lo + 2) ? e[hi - 2] : 0.0;
@@ -696,7 +591,7 @@ static void bidiag_qr_step(lmmc_real_t *d, lmmc_real_t *e,
     size_t i;
     for (i = lo; i < hi; i++) {
         lmmc_real_t c, s, r;
-        /* Right Givens to eliminate g (acts on columns i, i+1 of B and V). */
+
         givens_compute(f, g, &c, &s, &r);
         if (i > lo) e[i - 1] = r;
         f = c * d[i] + s * e[i];
@@ -705,7 +600,7 @@ static void bidiag_qr_step(lmmc_real_t *d, lmmc_real_t *e,
         d[i + 1] = c * d[i + 1];
         if (V) givens_right(V, V->rows, i, i + 1, c, s);
 
-        /* Left Givens to eliminate g (acts on rows i, i+1 of B and U). */
+
         givens_compute(f, g, &c, &s, &r);
         d[i] = r;
         f = c * e[i] + s * d[i + 1];
@@ -719,11 +614,7 @@ static void bidiag_qr_step(lmmc_real_t *d, lmmc_real_t *e,
     e[hi - 1] = f;
 }
 
-/* Reduce A (m x n, m >= n) to upper bidiagonal form B by alternating
- * Householder transforms from the left and right. On return, d[0..n-1]
- * is the diagonal of B, e[0..n-2] the superdiagonal, U is the
- * accumulated product of left reflectors (m x m), V the accumulated
- * product of right reflectors (n x n). */
+
 static lmmc_status_t bidiagonalize(const lmmc_mat_t *a,
                                    lmmc_real_t *d, lmmc_real_t *e,
                                    lmmc_mat_t *U, lmmc_mat_t *V) {
@@ -732,7 +623,7 @@ static lmmc_status_t bidiagonalize(const lmmc_mat_t *a,
     size_t i, j, k;
     lmmc_status_t status;
 
-    /* Working copy A_work = A. */
+
     lmmc_mat_t W;
     status = lmmc_mat_create(m, n, &W);
     if (status != LMMC_STATUS_OK) return status;
@@ -740,7 +631,7 @@ static lmmc_status_t bidiagonalize(const lmmc_mat_t *a,
         for (j = 0; j < n; j++)
             MAT_ELEM(&W, i, j) = MAT_ELEM(a, i, j);
 
-    /* U <- I_m, V <- I_n. */
+
     for (i = 0; i < m; i++)
         for (j = 0; j < m; j++) MAT_ELEM(U, i, j) = (i == j) ? 1.0 : 0.0;
     for (i = 0; i < n; i++)
@@ -750,17 +641,17 @@ static lmmc_status_t bidiagonalize(const lmmc_mat_t *a,
     if (!vbuf) { lmmc_mat_destroy(&W); return LMMC_STATUS_ALLOCATION_FAILED; }
 
     for (k = 0; k < n; k++) {
-        /* Left reflector: zero W[k+1..m-1, k]. */
+
         size_t len = m - k;
         for (i = 0; i < len; i++) vbuf[i] = MAT_ELEM(&W, k + i, k);
         lmmc_real_t tau, beta;
         householder_make(vbuf, len, &tau, &beta);
         d[k] = beta;
-        /* Apply to remaining columns of W. */
+
         if (k + 1 < n) {
             householder_apply_left(&W, k, len, k + 1, n, vbuf, tau);
         }
-        /* Apply to U from the right: U[:, k..m-1] := U[:, k..m-1] (I - tau v v^T). */
+
         if (tau != 0.0) {
             size_t r;
             for (r = 0; r < m; r++) {
@@ -772,17 +663,17 @@ static lmmc_status_t bidiagonalize(const lmmc_mat_t *a,
             }
         }
 
-        /* Right reflector: zero W[k, k+2..n-1]. */
+
         if (k + 1 < n) {
             size_t rlen = n - k - 1;
             for (j = 0; j < rlen; j++) vbuf[j] = MAT_ELEM(&W, k, k + 1 + j);
             householder_make(vbuf, rlen, &tau, &beta);
             e[k] = beta;
-            /* Apply to remaining rows of W. */
+
             if (k + 1 < m) {
                 householder_apply_right(&W, k + 1, m, k + 1, rlen, vbuf, tau);
             }
-            /* Apply to V from the right: V[:, k+1..n-1] := V[:, k+1..n-1] (I - tau v v^T). */
+
             if (tau != 0.0) {
                 size_t r;
                 for (r = 0; r < n; r++) {
@@ -801,9 +692,7 @@ static lmmc_status_t bidiagonalize(const lmmc_mat_t *a,
     return LMMC_STATUS_OK;
 }
 
-/* Core SVD for m >= n: bidiagonalize A then drive superdiagonal to zero
- * via implicit-shift QR, accumulating singular vectors. Outputs U (m x m),
- * sigma (length n), Vt (n x n). */
+
 static lmmc_status_t svd_tall(const lmmc_mat_t *a,
                               lmmc_mat_t *out_U,
                               lmmc_vec_t *out_sigma,
@@ -836,20 +725,19 @@ static lmmc_status_t svd_tall(const lmmc_mat_t *a,
     if (!d || !e) { status = LMMC_STATUS_ALLOCATION_FAILED; goto fail; }
     for (i = 0; i < n; i++) { d[i] = 0.0; e[i] = 0.0; }
 
-    /* Step 1: bidiagonalization. */
+
     status = bidiagonalize(a, d, e, out_U, &V);
     if (status != LMMC_STATUS_OK) goto fail;
-    /* e has length n-1; e[n-1] will not be used. */
+
     if (n >= 1) e[n - 1] = 0.0;
 
-    /* Step 2: implicit-shift QR on the bidiagonal. */
+
     {
         const size_t max_iter_total = 30 * n + 30;
         size_t iter = 0;
         size_t hi = (n == 0) ? 0 : n - 1;
         while (n >= 1) {
-            /* Find smallest hi such that e[hi-1] is non-negligible; deflate
-             * trailing zero superdiagonals. */
+
             while (hi > 0) {
                 lmmc_real_t thr = LMMC_REAL_EPSILON *
                                   (lmmc_abs(d[hi - 1]) + lmmc_abs(d[hi]));
@@ -860,9 +748,9 @@ static lmmc_status_t svd_tall(const lmmc_mat_t *a,
                     break;
                 }
             }
-            if (hi == 0) break; /* Fully diagonal. */
+            if (hi == 0) break;
 
-            /* Find largest lo such that e[lo-1] is negligible (block start). */
+
             size_t lo = hi;
             while (lo > 0) {
                 lmmc_real_t thr = LMMC_REAL_EPSILON *
@@ -873,13 +761,11 @@ static lmmc_status_t svd_tall(const lmmc_mat_t *a,
                 }
                 lo--;
             }
-            /* Handle a zero diagonal element d[k] in [lo..hi-1] by chasing
-             * the row out via left Givens rotations.  This decouples the
-             * trailing block. */
+
             int handled = 0;
             for (k = lo; k < hi; k++) {
                 if (d[k] == 0.0) {
-                    /* Use left Givens rotations to zero e[k..hi-1] row. */
+
                     lmmc_real_t f = e[k];
                     e[k] = 0.0;
                     for (i = k + 1; i <= hi; i++) {
@@ -906,7 +792,7 @@ static lmmc_status_t svd_tall(const lmmc_mat_t *a,
         }
     }
 
-    /* Step 3: make singular values non-negative. */
+
     for (i = 0; i < n; i++) {
         if (d[i] < 0.0) {
             d[i] = -d[i];
@@ -914,12 +800,11 @@ static lmmc_status_t svd_tall(const lmmc_mat_t *a,
         }
     }
 
-    /* Step 4: sort singular values descending; permute U columns and V
-     * columns accordingly. */
+
     order = (size_t *)lmmc_alloc(n * sizeof(size_t));
     if (!order) { status = LMMC_STATUS_ALLOCATION_FAILED; goto fail; }
     for (i = 0; i < n; i++) order[i] = i;
-    /* Selection sort. */
+
     for (i = 0; i + 1 < n; i++) {
         size_t mx = i;
         for (j = i + 1; j < n; j++) {
@@ -928,15 +813,15 @@ static lmmc_status_t svd_tall(const lmmc_mat_t *a,
         if (mx != i) { size_t tmp = order[i]; order[i] = order[mx]; order[mx] = tmp; }
     }
 
-    /* Output sigma (length n). */
+
     for (i = 0; i < n; i++) out_sigma->data[i] = d[order[i]];
 
-    /* Output Vt: row i of Vt = column order[i] of V. */
+
     for (i = 0; i < n; i++)
         for (k = 0; k < n; k++)
             MAT_ELEM(out_Vt, i, k) = MAT_ELEM(&V, k, order[i]);
 
-    /* Apply permutation to first n columns of U. */
+
     {
         lmmc_real_t *col_buf = (lmmc_real_t *)lmmc_alloc(m * n * sizeof(lmmc_real_t));
         if (!col_buf) { status = LMMC_STATUS_ALLOCATION_FAILED; goto fail; }
@@ -980,24 +865,21 @@ lmmc_status_t lmmc_svd(const lmmc_mat_t *a, lmmc_svd_result_t *out_result) {
         return svd_tall(a, &out_result->U, &out_result->sigma, &out_result->Vt);
     }
 
-    /* m < n: compute SVD of A^T (n x m, satisfies rows >= cols) and
-     * derive A's SVD by transposing the factors:
-     *   A^T = U' * S * V'^T  =>  A = V' * S^T * U'^T
-     * So: U_A = V'  (m x m),  sigma_A = sigma',  Vt_A = U'^T  (n x n). */
+
     lmmc_mat_t A_T;
     status = lmmc_mat_create(n, m, &A_T);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_mat_transpose_to(a, &A_T);
     if (status != LMMC_STATUS_OK) { lmmc_mat_destroy(&A_T); return status; }
 
-    lmmc_mat_t Up; /* n x n */
-    lmmc_vec_t sp; /* m */
-    lmmc_mat_t Vtp; /* m x m */
+    lmmc_mat_t Up;
+    lmmc_vec_t sp;
+    lmmc_mat_t Vtp;
     status = svd_tall(&A_T, &Up, &sp, &Vtp);
     lmmc_mat_destroy(&A_T);
     if (status != LMMC_STATUS_OK) return status;
 
-    /* Allocate output matrices and copy. */
+
     status = lmmc_mat_create(m, m, &out_result->U);
     if (status != LMMC_STATUS_OK) goto cleanup_tmp;
     status = lmmc_vec_create(m, &out_result->sigma);
@@ -1009,19 +891,19 @@ lmmc_status_t lmmc_svd(const lmmc_mat_t *a, lmmc_svd_result_t *out_result) {
         goto cleanup_tmp;
     }
 
-    /* U_A = (Vtp)^T : (Vtp is m x m), so U_A[i,j] = Vtp[j,i]. */
+
     {
         size_t i, j;
         for (i = 0; i < m; i++)
             for (j = 0; j < m; j++)
                 MAT_ELEM(&out_result->U, i, j) = MAT_ELEM(&Vtp, j, i);
     }
-    /* sigma_A = sigma' */
+
     {
         size_t i;
         for (i = 0; i < m; i++) out_result->sigma.data[i] = sp.data[i];
     }
-    /* Vt_A = (Up)^T : Up is n x n, so Vt_A[i,j] = Up[j,i]. */
+
     {
         size_t i, j;
         for (i = 0; i < n; i++)
@@ -1055,7 +937,7 @@ lmmc_status_t lmmc_pinv(const lmmc_mat_t *a, lmmc_real_t tol, lmmc_mat_t *out_pi
     if (status != LMMC_STATUS_OK) return status;
 
     size_t p = (m < n) ? m : n;
-    /* Default tolerance: eps * max(m,n) * sigma_max. */
+
     lmmc_real_t sigma_max = (p > 0) ? svd.sigma.data[0] : 0.0;
     lmmc_real_t use_tol = tol;
     if (use_tol <= 0.0) {
@@ -1063,8 +945,7 @@ lmmc_status_t lmmc_pinv(const lmmc_mat_t *a, lmmc_real_t tol, lmmc_mat_t *out_pi
         use_tol = LMMC_REAL_EPSILON * mn * sigma_max;
     }
 
-    /* A^+ = V * S^+ * U^T, so (A^+)[i, j] = sum_k Vt[k, i] * (1/sigma_k) * U[j, k]
-     * for sigma_k > use_tol. */
+
     size_t i, j, k;
     for (i = 0; i < n; i++) {
         for (j = 0; j < m; j++) {

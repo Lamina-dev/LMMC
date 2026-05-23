@@ -1,14 +1,9 @@
 /**
  * @file test_dense_extended.c
- * @brief Extended tests for the dense matrix/vector module.
+ * @brief 针对 LMMC 中 dense extended 相关接口的单元测试。
  *
- * Covers: multi-size matrix multiplication, identity matrix properties,
- * non-square matrix multiplication, extreme values, transpose roundtrip,
- * determinant, trace, axpy, swap, vector norms, Frobenius norm.
- *
- * Requirements: 5.1-5.12
+ * @internal
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -24,9 +19,7 @@ int main(void) {
     int rc = 0;
     lmmc_status_t st;
 
-    /* ================================================================
-     * Requirement 5.1: Multi-size matrix multiplication (1x1..100x100)
-     * ================================================================ */
+
     {
         size_t sizes[] = {1, 2, 3, 10, 100};
         size_t num_sizes = sizeof(sizes) / sizeof(sizes[0]);
@@ -41,7 +34,7 @@ int main(void) {
             st = lmmc_mat_create(n, n, &c);
             if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&a); lmmc_mat_destroy(&b); rc = 1; goto done; }
 
-            /* Fill A with i+j+1, B with identity */
+
             for (size_t i = 0; i < n; i++) {
                 for (size_t j = 0; j < n; j++) {
                     a.data[i * n + j] = (lmmc_real_t)(i + j + 1);
@@ -49,7 +42,7 @@ int main(void) {
                 }
             }
 
-            /* C = A * I should equal A */
+
             st = lmmc_mat_mul(&a, &b, &c);
             if (st != LMMC_STATUS_OK) { rc = 1; lmmc_mat_destroy(&a); lmmc_mat_destroy(&b); lmmc_mat_destroy(&c); goto done; }
 
@@ -66,9 +59,7 @@ int main(void) {
         }
     }
 
-    /* ================================================================
-     * Requirement 5.2: Identity matrix property: A*I = I*A = A
-     * ================================================================ */
+
     {
         size_t n = 5;
         lmmc_mat_t a = {0}, eye = {0}, c1 = {0}, c2 = {0};
@@ -81,16 +72,16 @@ int main(void) {
         st = lmmc_mat_create(n, n, &c2);
         if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&a); lmmc_mat_destroy(&eye); lmmc_mat_destroy(&c1); rc = 1; goto done; }
 
-        /* Fill A with known values */
+
         for (size_t i = 0; i < n; i++)
             for (size_t j = 0; j < n; j++)
                 a.data[i * n + j] = (lmmc_real_t)((i + 1) * 10 + j + 1);
 
-        /* A*I = A */
+
         st = lmmc_mat_mul(&a, &eye, &c1);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_mat_destroy(&a); lmmc_mat_destroy(&eye); lmmc_mat_destroy(&c1); lmmc_mat_destroy(&c2); goto done; }
 
-        /* I*A = A */
+
         st = lmmc_mat_mul(&eye, &a, &c2);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_mat_destroy(&a); lmmc_mat_destroy(&eye); lmmc_mat_destroy(&c1); lmmc_mat_destroy(&c2); goto done; }
 
@@ -108,11 +99,9 @@ int main(void) {
         lmmc_mat_destroy(&c2);
     }
 
-    /* ================================================================
-     * Requirement 5.3: Non-square matrix multiplication & dimension error
-     * ================================================================ */
+
     {
-        /* Valid: (3x5) * (5x3) = (3x3) */
+
         lmmc_mat_t a35 = {0}, b53 = {0}, c33 = {0};
         st = lmmc_mat_create(3, 5, &a35);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
@@ -121,7 +110,7 @@ int main(void) {
         st = lmmc_mat_create(3, 3, &c33);
         if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&a35); lmmc_mat_destroy(&b53); rc = 1; goto done; }
 
-        /* Fill with simple values */
+
         for (size_t i = 0; i < 15; i++) a35.data[i] = (lmmc_real_t)(i + 1);
         for (size_t i = 0; i < 15; i++) b53.data[i] = (lmmc_real_t)(i + 1);
 
@@ -131,13 +120,13 @@ int main(void) {
             rc = 1; lmmc_mat_destroy(&a35); lmmc_mat_destroy(&b53); lmmc_mat_destroy(&c33); goto done;
         }
 
-        /* Verify C[0][0] = sum(A[0][k]*B[k][0], k=0..4) = 1*1+2*4+3*7+4*10+5*13 = 1+8+21+40+65 = 135 */
+
         if (!lmmc_test_nearly_equal(c33.data[0], 135.0, TEST_EPS_TIGHT)) {
             printf("5.3 FAIL: C[0][0] = %g, expected 135\n", c33.data[0]);
             rc = 1; lmmc_mat_destroy(&a35); lmmc_mat_destroy(&b53); lmmc_mat_destroy(&c33); goto done;
         }
 
-        /* Dimension mismatch: (3x5) * (3x3) should fail */
+
         lmmc_mat_t bad = {0};
         st = lmmc_mat_create(3, 3, &bad);
         if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&a35); lmmc_mat_destroy(&b53); lmmc_mat_destroy(&c33); rc = 1; goto done; }
@@ -154,9 +143,7 @@ int main(void) {
         lmmc_mat_destroy(&bad);
     }
 
-    /* ================================================================
-     * Requirement 5.4: Extreme values (1e300, 1e-300)
-     * ================================================================ */
+
     {
         lmmc_mat_t a = {0}, b = {0}, c = {0};
         st = lmmc_mat_create(2, 2, &a);
@@ -166,10 +153,10 @@ int main(void) {
         st = lmmc_mat_create(2, 2, &c);
         if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&a); lmmc_mat_destroy(&b); rc = 1; goto done; }
 
-        /* Test large values: scale by 1e300 */
+
         a.data[0] = 1e300; a.data[1] = 0.0;
         a.data[2] = 0.0;   a.data[3] = 1e300;
-        /* Identity */
+
         b.data[0] = 1.0; b.data[1] = 0.0;
         b.data[2] = 0.0; b.data[3] = 1.0;
 
@@ -181,7 +168,7 @@ int main(void) {
             rc = 1; lmmc_mat_destroy(&a); lmmc_mat_destroy(&b); lmmc_mat_destroy(&c); goto done;
         }
 
-        /* Test small values: scale by 1e-300 */
+
         a.data[0] = 1e-300; a.data[1] = 0.0;
         a.data[2] = 0.0;    a.data[3] = 1e-300;
 
@@ -193,7 +180,7 @@ int main(void) {
             rc = 1; lmmc_mat_destroy(&a); lmmc_mat_destroy(&b); lmmc_mat_destroy(&c); goto done;
         }
 
-        /* Verify no overflow/underflow: result should be finite */
+
         if (!isfinite(c.data[0]) || !isfinite(c.data[3])) {
             printf("5.4 FAIL: Non-finite result detected\n");
             rc = 1; lmmc_mat_destroy(&a); lmmc_mat_destroy(&b); lmmc_mat_destroy(&c); goto done;
@@ -204,11 +191,9 @@ int main(void) {
         lmmc_mat_destroy(&c);
     }
 
-    /* ================================================================
-     * Requirement 5.5: Transpose roundtrip: (A^T)^T = A
-     * ================================================================ */
+
     {
-        /* Test with non-square matrix 3x4 */
+
         lmmc_mat_t a = {0}, at = {0}, att = {0};
         st = lmmc_mat_create(3, 4, &a);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
@@ -236,7 +221,7 @@ int main(void) {
         lmmc_mat_destroy(&at);
         lmmc_mat_destroy(&att);
 
-        /* Also test square matrix 5x5 */
+
         lmmc_mat_t s = {0}, st2 = {0}, stt = {0};
         st = lmmc_mat_create(5, 5, &s);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
@@ -262,11 +247,9 @@ int main(void) {
         lmmc_mat_destroy(&stt);
     }
 
-    /* ================================================================
-     * Requirement 5.6: Determinant (identity det=1, singular det=0)
-     * ================================================================ */
+
     {
-        /* Identity matrix det = 1 */
+
         lmmc_mat_t eye = {0};
         st = lmmc_mat_identity(4, &eye);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
@@ -283,19 +266,19 @@ int main(void) {
         }
         lmmc_mat_destroy(&eye);
 
-        /* Singular matrix (row of zeros) det = 0 */
+
         lmmc_mat_t sing = {0};
         st = lmmc_mat_create(3, 3, &sing);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-        /* Row 0: [1, 2, 3], Row 1: [4, 5, 6], Row 2: [7, 8, 9] (linearly dependent) */
+
         sing.data[0] = 1; sing.data[1] = 2; sing.data[2] = 3;
         sing.data[3] = 4; sing.data[4] = 5; sing.data[5] = 6;
         sing.data[6] = 7; sing.data[7] = 8; sing.data[8] = 9;
 
         st = lmmc_mat_det(&sing, &det_val);
         if (st != LMMC_STATUS_OK) {
-            /* Some implementations may return error for singular matrix */
-            /* That's acceptable too */
+
+
         } else {
             if (!lmmc_test_nearly_equal(det_val, 0.0, TEST_EPS_NORMAL)) {
                 printf("5.6 FAIL: det(singular) = %g, expected 0.0\n", det_val);
@@ -305,17 +288,15 @@ int main(void) {
         lmmc_mat_destroy(&sing);
     }
 
-    /* ================================================================
-     * Requirement 5.7: Trace = sum of diagonal elements
-     * ================================================================ */
+
     {
         lmmc_mat_t a = {0};
         st = lmmc_mat_create(4, 4, &a);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-        /* Fill with known values */
+
         for (size_t i = 0; i < 16; i++) a.data[i] = (lmmc_real_t)(i + 1);
-        /* Diagonal: a[0]=1, a[5]=6, a[10]=11, a[15]=16, sum=34 */
+
 
         lmmc_real_t trace_val = 0.0;
         st = lmmc_mat_trace(&a, &trace_val);
@@ -332,7 +313,7 @@ int main(void) {
 
         lmmc_mat_destroy(&a);
 
-        /* Also test identity trace = n */
+
         lmmc_mat_t eye = {0};
         st = lmmc_mat_identity(7, &eye);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
@@ -346,9 +327,7 @@ int main(void) {
         lmmc_mat_destroy(&eye);
     }
 
-    /* ================================================================
-     * Requirement 5.8: axpy verification (alpha=0 y unchanged, alpha=1 = addition)
-     * ================================================================ */
+
     {
         size_t n = 5;
         lmmc_vec_t x = {0}, y = {0};
@@ -362,11 +341,11 @@ int main(void) {
             y.data[i] = (lmmc_real_t)(10 + i);
         }
 
-        /* Save original y */
+
         lmmc_real_t orig_y[5];
         memcpy(orig_y, y.data, n * sizeof(lmmc_real_t));
 
-        /* alpha=0: y should not change */
+
         st = lmmc_vec_axpy(0.0, &x, &y);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_vec_destroy(&x); lmmc_vec_destroy(&y); goto done; }
         for (size_t i = 0; i < n; i++) {
@@ -376,7 +355,7 @@ int main(void) {
             }
         }
 
-        /* alpha=1: y = x + y (addition) */
+
         st = lmmc_vec_axpy(1.0, &x, &y);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_vec_destroy(&x); lmmc_vec_destroy(&y); goto done; }
         for (size_t i = 0; i < n; i++) {
@@ -391,9 +370,7 @@ int main(void) {
         lmmc_vec_destroy(&y);
     }
 
-    /* ================================================================
-     * Requirement 5.10: swap verification
-     * ================================================================ */
+
     {
         size_t n = 6;
         lmmc_vec_t x = {0}, y = {0};
@@ -407,7 +384,7 @@ int main(void) {
             y.data[i] = (lmmc_real_t)(100 + i);
         }
 
-        /* Save originals */
+
         lmmc_real_t orig_x[6], orig_y[6];
         memcpy(orig_x, x.data, n * sizeof(lmmc_real_t));
         memcpy(orig_y, y.data, n * sizeof(lmmc_real_t));
@@ -427,12 +404,9 @@ int main(void) {
         lmmc_vec_destroy(&y);
     }
 
-    /* ================================================================
-     * Requirement 5.11: Vector norms (L2, inf, asum)
-     * Zero vector norms = 0, unit vector L2 norm = 1
-     * ================================================================ */
+
     {
-        /* Zero vector: all norms = 0 */
+
         size_t n = 5;
         lmmc_vec_t z = {0};
         st = lmmc_vec_create(n, &z);
@@ -455,12 +429,12 @@ int main(void) {
         }
         lmmc_vec_destroy(&z);
 
-        /* Unit vector: L2 norm = 1 */
+
         lmmc_vec_t u = {0};
         st = lmmc_vec_create(4, &u);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
         u.data[0] = 0.5; u.data[1] = 0.5; u.data[2] = 0.5; u.data[3] = 0.5;
-        /* L2 = sqrt(0.25*4) = 1.0 */
+
 
         st = lmmc_vec_norm2(&u, &norm2);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_vec_destroy(&u); goto done; }
@@ -469,7 +443,7 @@ int main(void) {
             rc = 1; lmmc_vec_destroy(&u); goto done;
         }
 
-        /* inf norm = 0.5 */
+
         st = lmmc_vec_norm_inf(&u, &norminf);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_vec_destroy(&u); goto done; }
         if (!lmmc_test_nearly_equal(norminf, 0.5, TEST_EPS_TIGHT)) {
@@ -477,7 +451,7 @@ int main(void) {
             rc = 1; lmmc_vec_destroy(&u); goto done;
         }
 
-        /* asum = 2.0 */
+
         st = lmmc_vec_asum(&u, &asum);
         if (st != LMMC_STATUS_OK) { rc = 1; lmmc_vec_destroy(&u); goto done; }
         if (!lmmc_test_nearly_equal(asum, 2.0, TEST_EPS_TIGHT)) {
@@ -487,7 +461,7 @@ int main(void) {
 
         lmmc_vec_destroy(&u);
 
-        /* Known vector: [3, -4] => L2=5, inf=4, asum=7 */
+
         lmmc_vec_t v = {0};
         st = lmmc_vec_create(2, &v);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
@@ -513,11 +487,9 @@ int main(void) {
         lmmc_vec_destroy(&v);
     }
 
-    /* ================================================================
-     * Requirement 5.12: Frobenius norm (identity = sqrt(n))
-     * ================================================================ */
+
     {
-        /* Identity matrix Frobenius norm = sqrt(n) */
+
         size_t sizes[] = {1, 2, 3, 5, 10};
         for (size_t si = 0; si < 5; si++) {
             size_t n = sizes[si];
@@ -537,7 +509,7 @@ int main(void) {
             lmmc_mat_destroy(&eye);
         }
 
-        /* Also verify: known matrix [[1,2],[3,4]] => sqrt(1+4+9+16) = sqrt(30) */
+
         lmmc_mat_t m = {0};
         st = lmmc_mat_create(2, 2, &m);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }

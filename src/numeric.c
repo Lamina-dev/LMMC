@@ -1,3 +1,7 @@
+/**
+ * @file numeric.c
+ * @brief 数值常量、特殊值、近似比较、FFT 与 LambertW 实现。
+ */
 #include <math.h>
 #include <string.h>
 #include <float.h>
@@ -236,7 +240,7 @@ lmmc_status_t lmmc_approx_eq(lmmc_real_t a, lmmc_real_t b, lmmc_real_t epsilon, 
 
     LMMC_REAL_INIT(&diff);
     LMMC_REAL_INIT(&zero);
-    
+
     LMMC_REAL_SET_D(&zero, 0.0);
     LMMC_REAL_SUB(&diff, &a, &b);
 
@@ -296,7 +300,7 @@ static lmmc_status_t lmmc_fft_radix4_core(lmmc_real_t* real, lmmc_real_t* imag, 
     while (len <= n) {
         size_t group = len;
         size_t quarter = group / 4;
-        
+
         lmmc_real_t angle_step, tmp1, tmp2, tmp3, tmp4;
         LMMC_REAL_INIT(&angle_step);
         LMMC_REAL_INIT(&tmp1);
@@ -320,7 +324,7 @@ static lmmc_status_t lmmc_fft_radix4_core(lmmc_real_t* real, lmmc_real_t* imag, 
                 lmmc_real_t ang1, ang2, ang3;
                 lmmc_real_t c1, s1, c2, s2, c3, s3;
                 double d_ang1, d_ang2, d_ang3;
-                
+
                 LMMC_REAL_INIT(&a0r); LMMC_REAL_INIT(&a0i);
                 LMMC_REAL_INIT(&a1r); LMMC_REAL_INIT(&a1i);
                 LMMC_REAL_INIT(&a2r); LMMC_REAL_INIT(&a2i);
@@ -400,7 +404,7 @@ static lmmc_status_t lmmc_fft_radix4_core(lmmc_real_t* real, lmmc_real_t* imag, 
         LMMC_REAL_INIT(&scale);
         LMMC_REAL_INIT(&tmp1);
         LMMC_REAL_INIT(&tmp2);
-        
+
         LMMC_REAL_SET_D(&tmp1, 1.0);
         LMMC_REAL_SET_D(&tmp2, (double)n);
         LMMC_REAL_DIV(&scale, &tmp1, &tmp2);
@@ -408,7 +412,7 @@ static lmmc_status_t lmmc_fft_radix4_core(lmmc_real_t* real, lmmc_real_t* imag, 
             LMMC_REAL_MUL(&real[i], &real[i], &scale);
             LMMC_REAL_MUL(&imag[i], &imag[i], &scale);
         }
-        
+
         LMMC_REAL_CLEAR(&scale);
         LMMC_REAL_CLEAR(&tmp1);
         LMMC_REAL_CLEAR(&tmp2);
@@ -490,11 +494,11 @@ lmmc_status_t lmmc_lambertw(lmmc_real_t z, lmmc_real_t* out_res) {
     if (z > 2.0) {
         lmmc_real_t lnz;
         LMMC_REAL_LOG(&lnz, &z);
-        w = lnz - log(lnz); 
+        w = lnz - log(lnz);
     } else if (z < -0.3) {
-        w = -1.0; 
+        w = -1.0;
     } else {
-        w = z; 
+        w = z;
     }
 
     const int max_iter = 100;
@@ -529,7 +533,7 @@ lmmc_status_t lmmc_double_nearly_equal_tol(
     if (out_equal == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    
+
     LMMC_REAL_INIT(&diff);
     LMMC_REAL_INIT(&scale);
     LMMC_REAL_INIT(&threshold);

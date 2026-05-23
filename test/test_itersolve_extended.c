@@ -1,11 +1,16 @@
+/**
+ * @file test_itersolve_extended.c
+ * @brief 针对 LMMC 中 itersolve extended 相关接口的单元测试。
+ *
+ * @internal
+ */
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"
 
-/* Helper: build SPD tridiagonal matrix using sparse builder.
-   diagonal=4, off-diagonal=-1 */
+
 static lmmc_status_t build_spd_tridiag(size_t n, lmmc_sparse_mat_t* out) {
     lmmc_sparse_builder_t* builder = NULL;
     lmmc_status_t st = lmmc_sparse_builder_create(n, n, 3 * n, &builder);
@@ -21,8 +26,7 @@ static lmmc_status_t build_spd_tridiag(size_t n, lmmc_sparse_mat_t* out) {
     return st;
 }
 
-/* Helper: build non-symmetric matrix using sparse builder.
-   diagonal=5, sub=-1, super=-2 */
+
 static lmmc_status_t build_nonsym(size_t n, lmmc_sparse_mat_t* out) {
     lmmc_sparse_builder_t* builder = NULL;
     lmmc_status_t st = lmmc_sparse_builder_create(n, n, 3 * n, &builder);
@@ -38,7 +42,7 @@ static lmmc_status_t build_nonsym(size_t n, lmmc_sparse_mat_t* out) {
     return st;
 }
 
-/* Helper: compute residual norm ||Ax - b|| */
+
 static double compute_residual(const lmmc_sparse_mat_t* A,
                                const lmmc_vec_t* x,
                                const lmmc_vec_t* b) {
@@ -54,14 +58,14 @@ static double compute_residual(const lmmc_sparse_mat_t* A,
     return sqrt(norm);
 }
 
-/* Helper: build ill-conditioned matrix (large condition number) */
+
 static lmmc_status_t build_illcond(size_t n, lmmc_sparse_mat_t* out) {
     lmmc_sparse_builder_t* builder = NULL;
     lmmc_status_t st = lmmc_sparse_builder_create(n, n, 3 * n, &builder);
     if (st != LMMC_STATUS_OK) return st;
 
     for (size_t i = 0; i < n; i++) {
-        /* diagonal decays: 1e-12 for first, large for last */
+
         double diag_val = (i == 0) ? 1e-12 : (double)(i + 1) * 100.0;
         lmmc_sparse_builder_add(builder, i, i, diag_val);
         if (i > 0) lmmc_sparse_builder_add(builder, i, i - 1, -1.0);
@@ -72,7 +76,7 @@ static lmmc_status_t build_illcond(size_t n, lmmc_sparse_mat_t* out) {
     return st;
 }
 
-/* Helper: compute RHS b = A * ones for a given sparse matrix */
+
 static void compute_rhs_ones(const lmmc_sparse_mat_t* A, lmmc_vec_t* b) {
     lmmc_vec_t ones = {0};
     lmmc_vec_create(A->rows, &ones);
@@ -85,7 +89,7 @@ int main(void) {
     int rc = 0;
     lmmc_status_t st;
 
-    /* ===== Requirement 8.1: CG on SPD tridiagonal matrix ===== */
+
     {
         const size_t n = 10;
         lmmc_sparse_mat_t A = {0};
@@ -98,7 +102,7 @@ int main(void) {
         lmmc_vec_create(n, &b);
         lmmc_vec_create(n, &x);
 
-        /* RHS = A * [1,1,...,1] so exact solution is all ones */
+
         compute_rhs_ones(&A, &b);
 
         lmmc_vec_fill(&x, 0.0);
@@ -123,7 +127,7 @@ int main(void) {
         if (rc) goto done;
     }
 
-    /* ===== Requirement 8.2: BiCGSTAB on non-symmetric matrix ===== */
+
     {
         const size_t n = 10;
         lmmc_sparse_mat_t A = {0};
@@ -160,7 +164,7 @@ int main(void) {
         if (rc) goto done;
     }
 
-    /* ===== Requirement 8.3: GMRES restart=30 on non-symmetric matrix ===== */
+
     {
         const size_t n = 10;
         lmmc_sparse_mat_t A = {0};
@@ -198,7 +202,7 @@ int main(void) {
         if (rc) goto done;
     }
 
-    /* ===== Requirement 8.4: Multi-size systems (5, 20, 100) ===== */
+
     {
         size_t sizes[] = {5, 20, 100};
         for (int si = 0; si < 3; si++) {
@@ -214,7 +218,7 @@ int main(void) {
             lmmc_vec_create(n, &x);
             compute_rhs_ones(&A, &b);
 
-            /* CG */
+
             lmmc_vec_fill(&x, 0.0);
             lmmc_itersolve_default_config(n, &cfg);
             cfg.max_iter = 500;
@@ -230,7 +234,7 @@ int main(void) {
             lmmc_sparse_destroy(&A);
         }
 
-        /* Also test BiCGSTAB and GMRES on non-symmetric multi-size */
+
         for (int si = 0; si < 3; si++) {
             size_t n = sizes[si];
             lmmc_sparse_mat_t A = {0};
@@ -244,7 +248,7 @@ int main(void) {
             lmmc_vec_create(n, &x);
             compute_rhs_ones(&A, &b);
 
-            /* BiCGSTAB */
+
             lmmc_vec_fill(&x, 0.0);
             lmmc_itersolve_default_config(n, &cfg);
             cfg.max_iter = 500;
@@ -255,7 +259,7 @@ int main(void) {
                 rc = 1; goto done;
             }
 
-            /* GMRES */
+
             lmmc_vec_fill(&x, 0.0);
             cfg.restart = 30;
             memset(&result, 0, sizeof(result));
@@ -272,7 +276,7 @@ int main(void) {
         }
     }
 
-    /* ===== Requirement 8.5: max_iter=1 reports non-convergence ===== */
+
     {
         const size_t n = 10;
         lmmc_sparse_mat_t A = {0};
@@ -290,7 +294,7 @@ int main(void) {
         lmmc_itersolve_default_config(n, &cfg);
         cfg.max_iter = 1;
 
-        /* CG with max_iter=1 should not converge */
+
         st = lmmc_cg_solve(&A, &b, NULL, &cfg, &x, &result);
         if (result.converged) {
             printf("8.5 CG max_iter=1 unexpectedly converged\n");
@@ -301,7 +305,7 @@ int main(void) {
             rc = 1;
         }
 
-        /* BiCGSTAB with max_iter=1 */
+
         lmmc_vec_fill(&x, 0.0);
         memset(&result, 0, sizeof(result));
         st = lmmc_bicgstab_solve(&A, &b, NULL, &cfg, &x, &result);
@@ -310,7 +314,7 @@ int main(void) {
             rc = 1;
         }
 
-        /* GMRES with max_iter=1 */
+
         lmmc_vec_fill(&x, 0.0);
         memset(&result, 0, sizeof(result));
         cfg.restart = 30;
@@ -326,7 +330,7 @@ int main(void) {
         if (rc) goto done;
     }
 
-    /* ===== Requirement 8.6: Dimension mismatch error ===== */
+
     {
         const size_t n = 5;
         lmmc_sparse_mat_t A = {0};
@@ -336,7 +340,7 @@ int main(void) {
 
         st = build_spd_tridiag(n, &A);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-        /* b has wrong size (n+2 instead of n) */
+
         lmmc_vec_create(n + 2, &b_wrong);
         lmmc_vec_fill(&b_wrong, 1.0);
         lmmc_vec_create(n, &x);
@@ -370,7 +374,7 @@ int main(void) {
         if (rc) goto done;
     }
 
-    /* ===== Requirement 8.8: Ill-conditioned matrix — non-convergence ===== */
+
     {
         const size_t n = 10;
         lmmc_sparse_mat_t A = {0};
@@ -386,12 +390,11 @@ int main(void) {
         lmmc_vec_fill(&x, 0.0);
 
         lmmc_itersolve_default_config(n, &cfg);
-        cfg.max_iter = 5;  /* very few iterations */
-        cfg.abs_tol = 1e-15; /* very tight tolerance */
+        cfg.max_iter = 5;
+        cfg.abs_tol = 1e-15;
 
         st = lmmc_cg_solve(&A, &b, NULL, &cfg, &x, &result);
-        /* With only 5 iterations and tight tolerance on ill-conditioned matrix,
-           it should not converge */
+
         if (result.converged) {
             printf("8.8 CG ill-conditioned unexpectedly converged in %zu iters\n", result.num_iter);
             rc = 1;
@@ -403,7 +406,7 @@ int main(void) {
         if (rc) goto done;
     }
 
-    /* ===== Requirement 8.9: Exact solution as initial guess ===== */
+
     {
         const size_t n = 10;
         lmmc_sparse_mat_t A = {0};
@@ -416,14 +419,14 @@ int main(void) {
         lmmc_vec_create(n, &b);
         lmmc_vec_create(n, &x);
 
-        /* Set x to exact solution (all ones) and compute b = A*x */
+
         lmmc_vec_fill(&x, 1.0);
         compute_rhs_ones(&A, &b);
 
         lmmc_itersolve_default_config(n, &cfg);
         cfg.max_iter = 200;
 
-        /* CG: starting from exact solution should converge in 0 or 1 iterations */
+
         st = lmmc_cg_solve(&A, &b, NULL, &cfg, &x, &result);
         if (st != LMMC_STATUS_OK || !result.converged) {
             printf("8.9 CG exact init failed: st=%d converged=%d\n", st, result.converged);
@@ -433,7 +436,7 @@ int main(void) {
             rc = 1;
         }
 
-        /* BiCGSTAB: same test */
+
         lmmc_vec_fill(&x, 1.0);
         memset(&result, 0, sizeof(result));
         st = lmmc_bicgstab_solve(&A, &b, NULL, &cfg, &x, &result);
@@ -445,7 +448,7 @@ int main(void) {
             rc = 1;
         }
 
-        /* GMRES: same test */
+
         lmmc_vec_fill(&x, 1.0);
         memset(&result, 0, sizeof(result));
         cfg.restart = 30;
@@ -464,7 +467,7 @@ int main(void) {
         if (rc) goto done;
     }
 
-    /* ===== Requirement 8.10: Jacobi preconditioner accelerates CG ===== */
+
     {
         const size_t n = 50;
         lmmc_sparse_mat_t A = {0};
@@ -483,7 +486,7 @@ int main(void) {
         lmmc_itersolve_default_config(n, &cfg);
         cfg.max_iter = 500;
 
-        /* Solve without preconditioner */
+
         lmmc_vec_fill(&x_none, 0.0);
         st = lmmc_cg_solve(&A, &b, NULL, &cfg, &x_none, &res_none);
         if (st != LMMC_STATUS_OK || !res_none.converged) {
@@ -493,7 +496,7 @@ int main(void) {
             rc = 1; goto done;
         }
 
-        /* Create Jacobi preconditioner and solve */
+
         st = lmmc_precond_create_jacobi(&A, &jacobi);
         if (st != LMMC_STATUS_OK) {
             printf("8.10 Jacobi create failed\n");
@@ -508,7 +511,7 @@ int main(void) {
             printf("8.10 CG with Jacobi failed\n");
             rc = 1;
         } else {
-            /* Preconditioned should converge in <= iterations than unpreconditioned */
+
             if (res_precond.num_iter > res_none.num_iter) {
                 printf("8.10 Jacobi did not accelerate: precond=%zu > none=%zu\n",
                        res_precond.num_iter, res_none.num_iter);

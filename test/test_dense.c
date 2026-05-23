@@ -1,3 +1,9 @@
+/**
+ * @file test_dense.c
+ * @brief 针对 LMMC 中 dense 相关接口的单元测试。
+ *
+ * @internal
+ */
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"
@@ -103,7 +109,7 @@ int main(void) {
     lmmc_real_t fnorm = 0.0;
     st = lmmc_mat_norm_fro(&a_copy, &fnorm);
     if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
-    if (!lmmc_test_nearly_equal(fnorm, 5.47722557505, 1e-6)) { // sqrt(1+4+9+16) = sqrt(30) = 5.477225...
+    if (!lmmc_test_nearly_equal(fnorm, 5.47722557505, 1e-6)) {
         rc = 1; goto cleanup;
     }
 

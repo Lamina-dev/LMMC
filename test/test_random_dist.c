@@ -1,21 +1,9 @@
 /**
  * @file test_random_dist.c
- * @brief Property-based tests for distribution sampling in random.h.
+ * @brief 针对 LMMC 中 random dist 相关接口的单元测试。
  *
- * Property 23: 均匀分布范围约束
- *   For any interval [a, b) with a < b, all values from lmmc_rng_uniform
- *   and lmmc_rng_fill_uniform satisfy a <= value < b.
- *
- * Property 24: 指数分布非负性
- *   For any rate > 0, all values from lmmc_rng_exponential are >= 0.
- *
- * Property 25: Shuffle 保持元素集合不变
- *   After lmmc_rng_shuffle, the array contains the same multiset of elements
- *   (sorted arrays are equal).
- *
- * Validates: Requirements 17.1, 17.3, 17.4, 17.5
+ * @internal
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -25,10 +13,10 @@
 #include "lmmc/config.h"
 #include "lmmc/random.h"
 
-/* Number of samples per property test iteration */
+
 #define NUM_SAMPLES 1200
 
-/* Number of random parameter configurations to test */
+
 #define NUM_CONFIGS 50
 
 static int test_failures = 0;
@@ -41,14 +29,14 @@ static int test_failures = 0;
     } \
 } while (0)
 
-/* Generate a random double in [lo, hi] */
+
 static double rand_in_range(double lo, double hi)
 {
     double u = (double)rand() / (double)RAND_MAX;
     return lo + (hi - lo) * u;
 }
 
-/* Comparison function for qsort on lmmc_real_t */
+
 static int cmp_real(const void* a, const void* b)
 {
     lmmc_real_t va = *(const lmmc_real_t*)a;
@@ -58,7 +46,7 @@ static int cmp_real(const void* a, const void* b)
     return 0;
 }
 
-/* Comparison function for qsort on int */
+
 static int cmp_int(const void* a, const void* b)
 {
     int va = *(const int*)a;
@@ -66,15 +54,7 @@ static int cmp_int(const void* a, const void* b)
     return va - vb;
 }
 
-/* ========================================================================
- * Property 23: 均匀分布范围约束
- * Validates: Requirements 17.1, 17.4
- * ======================================================================== */
 
-/**
- * Test: For random intervals [a, b) with a < b, lmmc_rng_uniform
- * always produces values in [a, b).
- */
 static int test_uniform_range_single(void)
 {
     int cfg;
@@ -86,9 +66,9 @@ static int test_uniform_range_single(void)
     lmmc_rng_seed(rng, (uint64_t)42);
 
     for (cfg = 0; cfg < NUM_CONFIGS; cfg++) {
-        /* Generate random interval parameters */
+
         double a = rand_in_range(-1000.0, 1000.0);
-        double b = a + rand_in_range(0.001, 2000.0); /* ensure a < b */
+        double b = a + rand_in_range(0.001, 2000.0);
         int i;
 
         for (i = 0; i < NUM_SAMPLES; i++) {
@@ -107,9 +87,7 @@ static int test_uniform_range_single(void)
     return 0;
 }
 
-/**
- * Test: lmmc_rng_fill_uniform fills array with values in [a, b).
- */
+
 static int test_uniform_range_fill(void)
 {
     int cfg;
@@ -145,9 +123,7 @@ static int test_uniform_range_fill(void)
     return 0;
 }
 
-/**
- * Test: Edge case - very small interval [a, a+epsilon).
- */
+
 static int test_uniform_range_tiny_interval(void)
 {
     lmmc_rng_t* rng = NULL;
@@ -176,9 +152,7 @@ static int test_uniform_range_tiny_interval(void)
     return 0;
 }
 
-/**
- * Test: Edge case - large interval.
- */
+
 static int test_uniform_range_large_interval(void)
 {
     lmmc_rng_t* rng = NULL;
@@ -207,14 +181,7 @@ static int test_uniform_range_large_interval(void)
     return 0;
 }
 
-/* ========================================================================
- * Property 24: 指数分布非负性
- * Validates: Requirements 17.3
- * ======================================================================== */
 
-/**
- * Test: For random rate > 0, lmmc_rng_exponential always produces values >= 0.
- */
 static int test_exponential_nonneg(void)
 {
     int cfg;
@@ -226,7 +193,7 @@ static int test_exponential_nonneg(void)
     lmmc_rng_seed(rng, (uint64_t)314159);
 
     for (cfg = 0; cfg < NUM_CONFIGS; cfg++) {
-        /* Generate random rate in (0, 1000] */
+
         double rate = rand_in_range(0.001, 1000.0);
         int i;
 
@@ -246,9 +213,7 @@ static int test_exponential_nonneg(void)
     return 0;
 }
 
-/**
- * Test: Edge case - very small rate (large expected values).
- */
+
 static int test_exponential_nonneg_small_rate(void)
 {
     lmmc_rng_t* rng = NULL;
@@ -274,9 +239,7 @@ static int test_exponential_nonneg_small_rate(void)
     return 0;
 }
 
-/**
- * Test: Edge case - very large rate (small expected values).
- */
+
 static int test_exponential_nonneg_large_rate(void)
 {
     lmmc_rng_t* rng = NULL;
@@ -302,15 +265,7 @@ static int test_exponential_nonneg_large_rate(void)
     return 0;
 }
 
-/* ========================================================================
- * Property 25: Shuffle 保持元素集合不变
- * Validates: Requirements 17.5
- * ======================================================================== */
 
-/**
- * Test: After shuffle, the array contains the same multiset of elements
- * (sorted arrays are equal). Uses lmmc_real_t arrays.
- */
 static int test_shuffle_preserves_elements_real(void)
 {
     int cfg;
@@ -322,7 +277,7 @@ static int test_shuffle_preserves_elements_real(void)
     lmmc_rng_seed(rng, (uint64_t)55555);
 
     for (cfg = 0; cfg < NUM_CONFIGS; cfg++) {
-        /* Random array size between 2 and 200 */
+
         size_t n = 2 + (size_t)(rand() % 199);
         lmmc_real_t* array = (lmmc_real_t*)malloc(n * sizeof(lmmc_real_t));
         lmmc_real_t* sorted_before = (lmmc_real_t*)malloc(n * sizeof(lmmc_real_t));
@@ -331,24 +286,24 @@ static int test_shuffle_preserves_elements_real(void)
         CHECK(array != NULL && sorted_before != NULL,
               "malloc failed (cfg=%d)", cfg);
 
-        /* Fill with random values (may have duplicates) */
+
         for (i = 0; i < n; i++) {
             array[i] = rand_in_range(-1000.0, 1000.0);
         }
 
-        /* Save sorted copy of original */
+
         memcpy(sorted_before, array, n * sizeof(lmmc_real_t));
         qsort(sorted_before, n, sizeof(lmmc_real_t), cmp_real);
 
-        /* Shuffle */
+
         status = lmmc_rng_shuffle(rng, array, n, sizeof(lmmc_real_t));
         CHECK(status == LMMC_STATUS_OK,
               "shuffle returned error %d (cfg=%d, n=%zu)", (int)status, cfg, n);
 
-        /* Sort shuffled array */
+
         qsort(array, n, sizeof(lmmc_real_t), cmp_real);
 
-        /* Compare sorted arrays */
+
         for (i = 0; i < n; i++) {
             CHECK(array[i] == sorted_before[i],
                   "shuffle changed elements: sorted[%zu]=%g vs original sorted[%zu]=%g (cfg=%d)",
@@ -363,9 +318,7 @@ static int test_shuffle_preserves_elements_real(void)
     return 0;
 }
 
-/**
- * Test: Shuffle preserves elements for int arrays.
- */
+
 static int test_shuffle_preserves_elements_int(void)
 {
     int cfg;
@@ -385,24 +338,24 @@ static int test_shuffle_preserves_elements_int(void)
         CHECK(array != NULL && sorted_before != NULL,
               "malloc failed (cfg=%d)", cfg);
 
-        /* Fill with random integers (may have duplicates) */
+
         for (i = 0; i < n; i++) {
             array[i] = rand() % 1000 - 500;
         }
 
-        /* Save sorted copy */
+
         memcpy(sorted_before, array, n * sizeof(int));
         qsort(sorted_before, n, sizeof(int), cmp_int);
 
-        /* Shuffle */
+
         status = lmmc_rng_shuffle(rng, array, n, sizeof(int));
         CHECK(status == LMMC_STATUS_OK,
               "shuffle int returned error %d (cfg=%d, n=%zu)", (int)status, cfg, n);
 
-        /* Sort shuffled array */
+
         qsort(array, n, sizeof(int), cmp_int);
 
-        /* Compare */
+
         for (i = 0; i < n; i++) {
             CHECK(array[i] == sorted_before[i],
                   "shuffle int changed elements: sorted[%zu]=%d vs original sorted[%zu]=%d (cfg=%d)",
@@ -417,9 +370,7 @@ static int test_shuffle_preserves_elements_int(void)
     return 0;
 }
 
-/**
- * Test: Edge case - shuffle single element array (should be no-op).
- */
+
 static int test_shuffle_single_element(void)
 {
     lmmc_rng_t* rng = NULL;
@@ -438,9 +389,7 @@ static int test_shuffle_single_element(void)
     return 0;
 }
 
-/**
- * Test: Shuffle with duplicate elements preserves multiset.
- */
+
 static int test_shuffle_with_duplicates(void)
 {
     int cfg;
@@ -452,7 +401,7 @@ static int test_shuffle_with_duplicates(void)
     lmmc_rng_seed(rng, (uint64_t)22222);
 
     for (cfg = 0; cfg < NUM_CONFIGS; cfg++) {
-        /* Array with many duplicates */
+
         size_t n = 50 + (size_t)(rand() % 151);
         int* array = (int*)malloc(n * sizeof(int));
         int* sorted_before = (int*)malloc(n * sizeof(int));
@@ -461,7 +410,7 @@ static int test_shuffle_with_duplicates(void)
         CHECK(array != NULL && sorted_before != NULL,
               "malloc failed (cfg=%d)", cfg);
 
-        /* Fill with values from a small range to ensure duplicates */
+
         for (i = 0; i < n; i++) {
             array[i] = rand() % 10;
         }
@@ -488,9 +437,6 @@ static int test_shuffle_with_duplicates(void)
     return 0;
 }
 
-/* ========================================================================
- * Main
- * ======================================================================== */
 
 int main(void)
 {

@@ -1,8 +1,12 @@
+/**
+ * @file example_nonlinear_logging.c
+ * @brief 演示 LMMC 中 nonlinear logging 相关接口的使用。
+ */
 #include <math.h>
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 
-// 1. Define a custom callback for nonlinear solver
+
 static void my_nonlinear_logger(size_t iter, lmmc_real_t x, lmmc_real_t f_x, void* user_data) {
     const char* prefix = (const char*)user_data;
     printf("[%s] Step %zu: root_guess = %.6f, error = %.3e\n", prefix, iter, x, f_x);
@@ -10,7 +14,7 @@ static void my_nonlinear_logger(size_t iter, lmmc_real_t x, lmmc_real_t f_x, voi
 
 static lmmc_real_t my_function(lmmc_real_t x, void* user_data) {
     (void)user_data;
-    return x * x - 2.0; // Finding sqrt(2)
+    return x * x - 2.0;
 }
 
 static lmmc_real_t my_derivative(lmmc_real_t x, void* user_data) {
@@ -43,7 +47,7 @@ int main(void) {
     cfg.verbose = 0;
     cfg.log_cb = my_nonlinear_logger;
     cfg.log_user_data = "CustomLog";
-    
+
     st = lmmc_newton_solve(my_function, my_derivative, NULL, 2.0, &cfg, &res);
     printf("Final Status: %s", lmmc_status_string(st));
     if (st == LMMC_STATUS_OK) {
@@ -53,10 +57,10 @@ int main(void) {
     }
 
     printf("--- Part 3: Custom Callback Logging ---\n");
-    cfg.verbose = 0; // Disable built-in printf
+    cfg.verbose = 0;
     cfg.log_cb = my_nonlinear_logger;
     cfg.log_user_data = (void*)"CustomSolver";
-    
+
     st = lmmc_newton_solve(my_function, my_derivative, NULL, 2.0, &cfg, &res);
     printf("Final Status: %s", lmmc_status_string(st));
     if (st == LMMC_STATUS_OK) {

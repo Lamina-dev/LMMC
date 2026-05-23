@@ -1,3 +1,7 @@
+/**
+ * @file itersolve.c
+ * @brief 稀疏迭代求解器实现：CG / BiCGSTAB / GMRES。
+ */
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
@@ -7,7 +11,7 @@
 #include "lmmc/itersolve.h"
 
 static int lmmc_is_finite_number(lmmc_real_t v) {
-    // Note: Assuming isfinite still works or is replaced via macro in user code.
+
     return isfinite(v) ? 1 : 0;
 }
 
@@ -16,7 +20,7 @@ static lmmc_status_t lmmc_vec_norm2_checked(const lmmc_vec_t* v, lmmc_real_t* ou
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    /* Check all elements are finite before computing norm */
+
     for (size_t i = 0; i < v->size; ++i) {
         if (!lmmc_is_finite_number(v->data[i])) {
             return LMMC_STATUS_NUMERICAL_FAILURE;
@@ -93,7 +97,7 @@ static lmmc_status_t lmmc_gmres_back_substitute(
     for (ii = dim; ii > 0; --ii) {
         size_t i = ii - 1;
         size_t j = 0;
-        
+
         LMMC_REAL_SET(&sum, &rhs[i]);
         LMMC_REAL_SET_D(&diag, 0.0);
 
@@ -141,8 +145,8 @@ static void lmmc_itersolve_do_log(const lmmc_itersolve_config_t* cfg, size_t ite
     if (cfg->log_cb != NULL) {
         cfg->log_cb(iter, residual_norm, cfg->log_user_data);
     } else if (cfg->verbose) {
-        // Warning: printf with %.10e may break if lmmc_real_t is a struct.
-        // Assuming user will replace printf or handle it properly.
+
+
         printf("Iteration %zu: residual norm = %.10e\n", iter, residual_norm);
     }
 }
@@ -163,13 +167,12 @@ lmmc_status_t lmmc_itersolve_default_config(size_t problem_size, lmmc_itersolve_
         }
     }
 
-    // Since these are struct members, we set them directly or use LMMC_REAL_SET_D if they are changed to lmmc_real_t.
-    // LMMC_DEFAULT_ABS_TOL might be a macro. Let's use LMMC_REAL_SET if it's lmmc_real_t.
+
     LMMC_REAL_INIT(&out_cfg->abs_tol);
     LMMC_REAL_INIT(&out_cfg->rel_tol);
     LMMC_REAL_SET_D(&out_cfg->abs_tol, LMMC_DEFAULT_ABS_TOL);
     LMMC_REAL_SET_D(&out_cfg->rel_tol, 1e-8);
-    
+
     out_cfg->max_iter = max_iter;
     out_cfg->restart = (problem_size < 30) ? problem_size : 30;
     out_cfg->verbose = 0;
@@ -243,7 +246,7 @@ static lmmc_status_t lmmc_gmres_arnoldi_step(
     size_t ii = 0;
     lmmc_status_t st = lmmc_sparse_mat_vec_mul(a, &basis[j], ax);
     if (st != LMMC_STATUS_OK) goto end;
-    
+
     st = lmmc_apply_precond_or_identity(precond, ax, w);
     if (st != LMMC_STATUS_OK) goto end;
 
@@ -255,7 +258,7 @@ static lmmc_status_t lmmc_gmres_arnoldi_step(
         }
         LMMC_REAL_SET(&h[ii * restart + j], &hij);
 
-        /* w = w + (-hij) * basis[ii] */
+
         lmmc_real_t neg_hij; LMMC_REAL_INIT(&neg_hij);
         LMMC_REAL_NEG(&neg_hij, &hij);
         st = lmmc_vec_axpy(neg_hij, &basis[ii], w);
@@ -285,18 +288,18 @@ static lmmc_status_t lmmc_gmres_apply_givens(
     for (ii = 0; ii < j; ++ii) {
         lmmc_real_t h0; LMMC_REAL_INIT(&h0); LMMC_REAL_SET(&h0, &h[ii * restart + j]);
         lmmc_real_t h1; LMMC_REAL_INIT(&h1); LMMC_REAL_SET(&h1, &h[(ii + 1) * restart + j]);
-        
+
         lmmc_real_t m1, m2; LMMC_REAL_INIT(&m1); LMMC_REAL_INIT(&m2);
         LMMC_REAL_MUL(&m1, &cs[ii], &h0);
         LMMC_REAL_MUL(&m2, &sn[ii], &h1);
         LMMC_REAL_ADD(&h[ii * restart + j], &m1, &m2);
-        
+
         lmmc_real_t neg_sn; LMMC_REAL_INIT(&neg_sn);
         LMMC_REAL_NEG(&neg_sn, &sn[ii]);
         LMMC_REAL_MUL(&m1, &neg_sn, &h0);
         LMMC_REAL_MUL(&m2, &cs[ii], &h1);
         LMMC_REAL_ADD(&h[(ii + 1) * restart + j], &m1, &m2);
-        
+
         LMMC_REAL_CLEAR(&neg_sn);
         LMMC_REAL_CLEAR(&m2); LMMC_REAL_CLEAR(&m1);
         LMMC_REAL_CLEAR(&h1); LMMC_REAL_CLEAR(&h0);
@@ -305,7 +308,7 @@ static lmmc_status_t lmmc_gmres_apply_givens(
     {
         lmmc_real_t hj; LMMC_REAL_INIT(&hj); LMMC_REAL_SET(&hj, &h[j * restart + j]);
         lmmc_real_t hsub; LMMC_REAL_INIT(&hsub); LMMC_REAL_SET(&hsub, &h[(j + 1) * restart + j]);
-        
+
         lmmc_real_t denom_loc; LMMC_REAL_INIT(&denom_loc);
         lmmc_real_t m1, m2, a_sum;
         LMMC_REAL_INIT(&m1); LMMC_REAL_INIT(&m2); LMMC_REAL_INIT(&a_sum);
@@ -313,7 +316,7 @@ static lmmc_status_t lmmc_gmres_apply_givens(
         LMMC_REAL_MUL(&m2, &hsub, &hsub);
         LMMC_REAL_ADD(&a_sum, &m1, &m2);
         LMMC_REAL_SQRT(&denom_loc, &a_sum);
-        
+
         lmmc_real_t gtmp; LMMC_REAL_INIT(&gtmp); LMMC_REAL_SET_D(&gtmp, 0.0);
 
         if (!lmmc_is_finite_number(denom_loc)) {
@@ -345,12 +348,12 @@ static lmmc_status_t lmmc_gmres_apply_givens(
         LMMC_REAL_SET_D(&h[(j + 1) * restart + j], 0.0);
 
         LMMC_REAL_MUL(&gtmp, &cs[j], &g[j]);
-        
+
         lmmc_real_t neg_sn; LMMC_REAL_INIT(&neg_sn);
         LMMC_REAL_NEG(&neg_sn, &sn[j]);
         LMMC_REAL_MUL(&g[j + 1], &neg_sn, &g[j]);
         LMMC_REAL_CLEAR(&neg_sn);
-        
+
         LMMC_REAL_SET(&g[j], &gtmp);
 
         LMMC_REAL_CLEAR(&a_sum); LMMC_REAL_CLEAR(&m2); LMMC_REAL_CLEAR(&m1);
@@ -374,7 +377,7 @@ lmmc_status_t lmmc_cg_solve(
     lmmc_vec_t p = {0};
     lmmc_vec_t ap = {0};
     lmmc_status_t st = LMMC_STATUS_OK;
-    
+
     lmmc_real_t norm_b; LMMC_REAL_INIT(&norm_b); LMMC_REAL_SET_D(&norm_b, 0.0);
     lmmc_real_t norm_r; LMMC_REAL_INIT(&norm_r); LMMC_REAL_SET_D(&norm_r, 0.0);
     lmmc_real_t threshold; LMMC_REAL_INIT(&threshold); LMMC_REAL_SET_D(&threshold, 0.0);
@@ -422,7 +425,7 @@ lmmc_status_t lmmc_cg_solve(
 
     LMMC_REAL_MUL(&tmp_mul, &local_cfg.rel_tol, &norm_b);
     LMMC_REAL_ADD(&threshold, &local_cfg.abs_tol, &tmp_mul);
-    
+
     if (!lmmc_is_finite_number(threshold)) {
         st = LMMC_STATUS_NUMERICAL_FAILURE;
         goto cleanup;
@@ -446,7 +449,7 @@ lmmc_status_t lmmc_cg_solve(
 
     st = lmmc_vec_dot_checked(&r, &z, &rho);
     if (st != LMMC_STATUS_OK) goto cleanup;
-    
+
     LMMC_REAL_ABS(&abs_val, &rho);
     if (LMMC_REAL_CMP(&abs_val, &eps_30) <= 0) {
         st = LMMC_STATUS_NUMERICAL_FAILURE;
@@ -466,7 +469,7 @@ lmmc_status_t lmmc_cg_solve(
 
             st = lmmc_vec_dot_checked(&p, &ap, &denom);
             if (st != LMMC_STATUS_OK) goto cleanup;
-            
+
             LMMC_REAL_ABS(&abs_val, &denom);
             if (LMMC_REAL_CMP(&abs_val, &eps_30) <= 0) {
                 st = LMMC_STATUS_NUMERICAL_FAILURE;
@@ -489,7 +492,7 @@ lmmc_status_t lmmc_cg_solve(
                 }
             }
 
-            /* r = r + (-alpha) * ap */
+
             {
                 lmmc_real_t neg_alpha; LMMC_REAL_INIT(&neg_alpha);
                 LMMC_REAL_NEG(&neg_alpha, &alpha);
@@ -518,7 +521,7 @@ lmmc_status_t lmmc_cg_solve(
 
             st = lmmc_vec_dot_checked(&r, &z, &rho_new);
             if (st != LMMC_STATUS_OK) goto cleanup;
-            
+
             LMMC_REAL_ABS(&abs_val, &rho_new);
             if (LMMC_REAL_CMP(&abs_val, &eps_30) <= 0) {
                 st = LMMC_STATUS_NUMERICAL_FAILURE;
@@ -599,7 +602,7 @@ static lmmc_status_t lmmc_bicgstab_compute_alpha(
 
     st = lmmc_vec_dot_checked(r_hat, v, &denom);
     if (st != LMMC_STATUS_OK) goto end;
-    
+
     LMMC_REAL_ABS(&abs_val, &denom);
     if (LMMC_REAL_CMP(&abs_val, &eps_30) <= 0) {
         st = LMMC_STATUS_NUMERICAL_FAILURE; goto end;
@@ -633,10 +636,10 @@ static lmmc_status_t lmmc_bicgstab_compute_omega(
 
     st = lmmc_vec_dot_checked(t, s, &ts);
     if (st != LMMC_STATUS_OK) goto end;
-    
+
     st = lmmc_vec_dot_checked(t, t, &tt);
     if (st != LMMC_STATUS_OK) goto end;
-    
+
     LMMC_REAL_ABS(&abs_val, &tt);
     if (LMMC_REAL_CMP(&abs_val, &eps_30) <= 0) {
         st = LMMC_STATUS_NUMERICAL_FAILURE; goto end;
@@ -665,7 +668,7 @@ lmmc_status_t lmmc_bicgstab_solve(
     lmmc_itersolve_config_t local_cfg = {0};
     lmmc_vec_t r = {0}, r_hat = {0}, p = {0}, v = {0}, s = {0}, t = {0}, y = {0}, z = {0}, ax = {0};
     lmmc_status_t st = LMMC_STATUS_OK;
-    
+
     lmmc_real_t norm_b; LMMC_REAL_INIT(&norm_b); LMMC_REAL_SET_D(&norm_b, 0.0);
     lmmc_real_t norm_r; LMMC_REAL_INIT(&norm_r); LMMC_REAL_SET_D(&norm_r, 0.0);
     lmmc_real_t threshold; LMMC_REAL_INIT(&threshold); LMMC_REAL_SET_D(&threshold, 0.0);
@@ -749,7 +752,7 @@ lmmc_status_t lmmc_bicgstab_solve(
 
             st = lmmc_vec_dot_checked(&r_hat, &r, &rho_hat);
             if (st != LMMC_STATUS_OK) goto cleanup;
-            
+
             LMMC_REAL_ABS(&abs_val, &rho_hat);
             if (LMMC_REAL_CMP(&abs_val, &eps_30) <= 0) {
                 st = LMMC_STATUS_NUMERICAL_FAILURE; goto cleanup;
@@ -763,7 +766,7 @@ lmmc_status_t lmmc_bicgstab_solve(
                 if (LMMC_REAL_CMP(&abs_val, &eps_30) <= 0) {
                     st = LMMC_STATUS_NUMERICAL_FAILURE; goto cleanup;
                 }
-                
+
                 lmmc_real_t tmp_div1; LMMC_REAL_INIT(&tmp_div1);
                 lmmc_real_t tmp_div2; LMMC_REAL_INIT(&tmp_div2);
                 LMMC_REAL_DIV(&tmp_div1, &rho_hat, &rho);
@@ -792,7 +795,7 @@ lmmc_status_t lmmc_bicgstab_solve(
             st = lmmc_bicgstab_compute_alpha(a, precond, &p, &y, &v, &r_hat, rho_hat, eps_30, &alpha);
             if (st != LMMC_STATUS_OK) goto cleanup;
 
-            /* s = r - alpha * v  (copy r to s, then s += (-alpha) * v) */
+
             st = lmmc_vec_copy(&r, &s);
             if (st != LMMC_STATUS_OK) goto cleanup;
             {
@@ -832,7 +835,7 @@ lmmc_status_t lmmc_bicgstab_solve(
                 LMMC_REAL_MUL(&tmp_mul, &alpha, &y.data[i]);
                 lmmc_real_t tmp_mul2; LMMC_REAL_INIT(&tmp_mul2);
                 LMMC_REAL_MUL(&tmp_mul2, &omega, &z.data[i]);
-                
+
                 LMMC_REAL_ADD(&tmp_add, &tmp_mul, &tmp_mul2);
                 lmmc_real_t tmp_add2; LMMC_REAL_INIT(&tmp_add2);
                 LMMC_REAL_ADD(&tmp_add2, &x->data[i], &tmp_add);
@@ -845,7 +848,7 @@ lmmc_status_t lmmc_bicgstab_solve(
                 }
             }
 
-            /* r = s - omega * t  (copy s to r, then r += (-omega) * t) */
+
             st = lmmc_vec_copy(&s, &r);
             if (st != LMMC_STATUS_OK) goto cleanup;
             {
@@ -996,7 +999,7 @@ lmmc_status_t lmmc_gmres_solve(
         st = LMMC_STATUS_ALLOCATION_FAILED; goto cleanup;
     }
 
-    // Initialize all h, cs, sn, g, y elements
+
     for(size_t k = 0; k < (restart+1)*restart; k++) { LMMC_REAL_INIT(&h[k]); }
     for(size_t k = 0; k < restart; k++) { LMMC_REAL_INIT(&cs[k]); }
     for(size_t k = 0; k < restart; k++) { LMMC_REAL_INIT(&sn[k]); }
@@ -1055,7 +1058,7 @@ lmmc_status_t lmmc_gmres_solve(
 
         st = lmmc_apply_precond_or_identity(precond, &r, &z);
         if (st != LMMC_STATUS_OK) goto cleanup;
-        
+
         st = lmmc_vec_norm2_checked(&z, &beta);
         if (st != LMMC_STATUS_OK) goto cleanup;
 

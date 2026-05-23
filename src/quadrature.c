@@ -1,29 +1,13 @@
 /**
  * @file quadrature.c
- * @brief Numerical integration (quadrature) module for LMMC.
- *
- * Implements:
- * - Composite trapezoidal rule (lmmc_quad_trapezoid)
- * - Composite Simpson's rule (lmmc_quad_simpson)
- * - Gauss-Legendre quadrature (lmmc_quad_gauss_legendre)
- * - Adaptive Gauss-Kronrod quadrature (lmmc_quad_adaptive) [future]
+ * @brief 一元数值积分实现：梯形、Simpson、Gauss、自适应。
  */
-
 #include "lmmc/quadrature.h"
 #include "lmmc/config.h"
 #include "lmmc/status.h"
 #include "internal.h"
 
-/* ========================================================================
- * Composite Trapezoidal Rule
- * ========================================================================
- *
- * Formula: integral ≈ h/2 * [f(a) + 2*f(a+h) + 2*f(a+2h) + ... + 2*f(b-h) + f(b)]
- * where h = (b - a) / n
- *
- * Exact for linear functions (polynomials of degree <= 1).
- * Error: O(h^2) for smooth functions.
- */
+
 lmmc_status_t lmmc_quad_trapezoid(
     lmmc_quad_func_t func,
     void* user_data,
@@ -32,7 +16,7 @@ lmmc_status_t lmmc_quad_trapezoid(
     size_t n,
     lmmc_real_t* out_result)
 {
-    /* Parameter validation */
+
     if (func == NULL || out_result == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
@@ -43,34 +27,25 @@ lmmc_status_t lmmc_quad_trapezoid(
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    /* Compute step size h = (b - a) / n */
+
     lmmc_real_t h = (b - a) / (lmmc_real_t)n;
 
-    /* Sum = f(a) + f(b) */
+
     lmmc_real_t sum = func(a, user_data) + func(b, user_data);
 
-    /* Add 2 * f(a + i*h) for i = 1, ..., n-1 */
+
     for (size_t i = 1; i < n; i++) {
         lmmc_real_t x_i = a + (lmmc_real_t)i * h;
         sum += 2.0 * func(x_i, user_data);
     }
 
-    /* Result = h/2 * sum */
+
     *out_result = (h / 2.0) * sum;
 
     return LMMC_STATUS_OK;
 }
 
-/* ========================================================================
- * Composite Simpson's Rule
- * ========================================================================
- *
- * Formula: integral ≈ h/3 * [f(a) + 4*f(a+h) + 2*f(a+2h) + 4*f(a+3h) + ... + f(b)]
- * where h = (b - a) / n, and n must be even.
- *
- * Exact for polynomials of degree <= 3.
- * Error: O(h^4) for smooth functions.
- */
+
 lmmc_status_t lmmc_quad_simpson(
     lmmc_quad_func_t func,
     void* user_data,
@@ -79,7 +54,7 @@ lmmc_status_t lmmc_quad_simpson(
     size_t n,
     lmmc_real_t* out_result)
 {
-    /* Parameter validation */
+
     if (func == NULL || out_result == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
@@ -93,16 +68,13 @@ lmmc_status_t lmmc_quad_simpson(
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    /* Compute step size h = (b - a) / n */
+
     lmmc_real_t h = (b - a) / (lmmc_real_t)n;
 
-    /* Sum = f(a) + f(b) */
+
     lmmc_real_t sum = func(a, user_data) + func(b, user_data);
 
-    /* Add weighted interior points:
-     * - Odd indices (1, 3, 5, ...): coefficient 4
-     * - Even indices (2, 4, 6, ...): coefficient 2
-     */
+
     for (size_t i = 1; i < n; i++) {
         lmmc_real_t x_i = a + (lmmc_real_t)i * h;
         if (i % 2 == 1) {
@@ -112,34 +84,17 @@ lmmc_status_t lmmc_quad_simpson(
         }
     }
 
-    /* Result = h/3 * sum */
+
     *out_result = (h / 3.0) * sum;
 
     return LMMC_STATUS_OK;
 }
 
-/* ========================================================================
- * Gauss-Legendre Quadrature
- * ========================================================================
- *
- * Uses precomputed nodes and weights on [-1, 1] for orders 2 through 20.
- * For an interval [a, b], the change of variable is:
- *   x = (b-a)/2 * t + (a+b)/2
- *   integral = (b-a)/2 * sum( w[i] * f(x[i]) )
- *
- * An n-point Gauss-Legendre rule is exact for polynomials of degree <= 2n-1.
- */
 
-/* Maximum supported Gauss-Legendre order */
 #define LMMC_GL_MAX_ORDER 20
 #define LMMC_GL_MIN_ORDER 2
 
-/* Static tables of Gauss-Legendre nodes and weights for orders 2-20.
- * Nodes are on [-1, 1]. Weights sum to 2.
- * Values are given to at least 16 significant digits.
- */
 
-/* Order 2 */
 static const lmmc_real_t gl_nodes_2[] = {
     -0.5773502691896257645,
      0.5773502691896257645
@@ -149,7 +104,7 @@ static const lmmc_real_t gl_weights_2[] = {
      1.0000000000000000000
 };
 
-/* Order 3 */
+
 static const lmmc_real_t gl_nodes_3[] = {
     -0.7745966692414833771,
      0.0000000000000000000,
@@ -161,7 +116,7 @@ static const lmmc_real_t gl_weights_3[] = {
      0.5555555555555555556
 };
 
-/* Order 4 */
+
 static const lmmc_real_t gl_nodes_4[] = {
     -0.8611363115940525752,
     -0.3399810435848562648,
@@ -175,7 +130,7 @@ static const lmmc_real_t gl_weights_4[] = {
      0.3478548451374538574
 };
 
-/* Order 5 */
+
 static const lmmc_real_t gl_nodes_5[] = {
     -0.9061798459386639928,
     -0.5384693101056830910,
@@ -191,7 +146,7 @@ static const lmmc_real_t gl_weights_5[] = {
      0.2369268850561890875
 };
 
-/* Order 6 */
+
 static const lmmc_real_t gl_nodes_6[] = {
     -0.9324695142031520278,
     -0.6612093864662645137,
@@ -209,7 +164,7 @@ static const lmmc_real_t gl_weights_6[] = {
      0.1713244923791703450
 };
 
-/* Order 7 */
+
 static const lmmc_real_t gl_nodes_7[] = {
     -0.9491079123427585245,
     -0.7415311855993944399,
@@ -229,7 +184,7 @@ static const lmmc_real_t gl_weights_7[] = {
      0.1294849661688696932
 };
 
-/* Order 8 */
+
 static const lmmc_real_t gl_nodes_8[] = {
     -0.9602898564975362317,
     -0.7966664774136267396,
@@ -251,7 +206,7 @@ static const lmmc_real_t gl_weights_8[] = {
      0.1012285362903762591
 };
 
-/* Order 9 */
+
 static const lmmc_real_t gl_nodes_9[] = {
     -0.9681602395076260899,
     -0.8360311073266357943,
@@ -275,7 +230,7 @@ static const lmmc_real_t gl_weights_9[] = {
      0.0812743883615744120
 };
 
-/* Order 10 */
+
 static const lmmc_real_t gl_nodes_10[] = {
     -0.9739065285171717200,
     -0.8650633666889845108,
@@ -301,7 +256,7 @@ static const lmmc_real_t gl_weights_10[] = {
      0.0666713443086881376
 };
 
-/* Order 11 */
+
 static const lmmc_real_t gl_nodes_11[] = {
     -0.9782286581460569928,
     -0.8870625997680952990,
@@ -329,7 +284,7 @@ static const lmmc_real_t gl_weights_11[] = {
      0.0556685671161736665
 };
 
-/* Order 12 */
+
 static const lmmc_real_t gl_nodes_12[] = {
     -0.9815606342467192507,
     -0.9041172563704748567,
@@ -359,7 +314,7 @@ static const lmmc_real_t gl_weights_12[] = {
      0.0471753363865118272
 };
 
-/* Order 13 */
+
 static const lmmc_real_t gl_nodes_13[] = {
     -0.9841830547185881494,
     -0.9175983992229779653,
@@ -391,7 +346,7 @@ static const lmmc_real_t gl_weights_13[] = {
      0.0404840047653158796
 };
 
-/* Order 14 */
+
 static const lmmc_real_t gl_nodes_14[] = {
     -0.9862838086968123388,
     -0.9284348836635735173,
@@ -425,7 +380,7 @@ static const lmmc_real_t gl_weights_14[] = {
      0.0351194603317518630
 };
 
-/* Order 15 */
+
 static const lmmc_real_t gl_nodes_15[] = {
     -0.9879925180204854285,
     -0.9372733924007059044,
@@ -461,7 +416,7 @@ static const lmmc_real_t gl_weights_15[] = {
      0.0307532419961172684
 };
 
-/* Order 16 */
+
 static const lmmc_real_t gl_nodes_16[] = {
     -0.9894009349916499326,
     -0.9445750230732326000,
@@ -499,7 +454,7 @@ static const lmmc_real_t gl_weights_16[] = {
      0.0271524594117540949
 };
 
-/* Order 17 */
+
 static const lmmc_real_t gl_nodes_17[] = {
     -0.9905754753144173356,
     -0.9506755217687677612,
@@ -539,7 +494,7 @@ static const lmmc_real_t gl_weights_17[] = {
      0.0241483028685479319
 };
 
-/* Order 18 */
+
 static const lmmc_real_t gl_nodes_18[] = {
     -0.9915651684209309160,
     -0.9558239495713977551,
@@ -581,7 +536,7 @@ static const lmmc_real_t gl_weights_18[] = {
      0.0216160135264833103
 };
 
-/* Order 19 */
+
 static const lmmc_real_t gl_nodes_19[] = {
     -0.9924068438435844032,
     -0.9602081521348300308,
@@ -625,7 +580,7 @@ static const lmmc_real_t gl_weights_19[] = {
      0.0194617882297264771
 };
 
-/* Order 20 */
+
 static const lmmc_real_t gl_nodes_20[] = {
     -0.9931285991850949247,
     -0.9639719272779137912,
@@ -671,7 +626,7 @@ static const lmmc_real_t gl_weights_20[] = {
      0.0176140071391521183
 };
 
-/* Lookup tables for nodes and weights by order (index = order - 2) */
+
 static const lmmc_real_t* const gl_nodes_table[] = {
     gl_nodes_2,  gl_nodes_3,  gl_nodes_4,  gl_nodes_5,
     gl_nodes_6,  gl_nodes_7,  gl_nodes_8,  gl_nodes_9,
@@ -696,7 +651,7 @@ lmmc_status_t lmmc_quad_gauss_legendre(
     size_t order,
     lmmc_real_t* out_result)
 {
-    /* Parameter validation */
+
     if (func == NULL || out_result == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
@@ -707,47 +662,28 @@ lmmc_status_t lmmc_quad_gauss_legendre(
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    /* Get nodes and weights for the requested order */
+
     const lmmc_real_t* nodes   = gl_nodes_table[order - LMMC_GL_MIN_ORDER];
     const lmmc_real_t* weights = gl_weights_table[order - LMMC_GL_MIN_ORDER];
 
-    /* Interval transformation coefficients:
-     * x = half_len * t + midpoint
-     * where half_len = (b - a) / 2, midpoint = (a + b) / 2
-     */
+
     lmmc_real_t half_len = (b - a) / 2.0;
     lmmc_real_t midpoint = (a + b) / 2.0;
 
-    /* Compute weighted sum: sum( w[i] * f(x[i]) ) */
+
     lmmc_real_t sum = 0.0;
     for (size_t i = 0; i < order; i++) {
         lmmc_real_t x_i = half_len * nodes[i] + midpoint;
         sum += weights[i] * func(x_i, user_data);
     }
 
-    /* Result = (b - a) / 2 * sum */
+
     *out_result = half_len * sum;
 
     return LMMC_STATUS_OK;
 }
 
-/* ========================================================================
- * Adaptive Gauss-Kronrod Quadrature (G7/K15)
- * ========================================================================
- *
- * Uses a 7-point Gauss rule embedded in a 15-point Kronrod rule.
- * The Kronrod rule reuses all 7 Gauss points plus 8 additional points,
- * so only 15 function evaluations are needed per subinterval to get both
- * a 7-point and a 15-point estimate.
- *
- * Error estimate: |K15 - G7| for each subinterval.
- * Acceptance criterion: error <= max(abs_tol, rel_tol * |K15_total|)
- * If max_depth is reached, returns LMMC_STATUS_WARNING_MAX_DEPTH with
- * the current best estimate.
- */
 
-/* 15-point Kronrod nodes on [-1, 1] (sorted in increasing order).
- * The 7 Gauss nodes are at indices 1, 3, 5, 7, 9, 11, 13 (odd indices). */
 static const lmmc_real_t gk15_nodes[15] = {
     -0.9914553711208126392,
     -0.9491079123427585245,
@@ -766,7 +702,7 @@ static const lmmc_real_t gk15_nodes[15] = {
      0.9914553711208126392
 };
 
-/* 15-point Kronrod weights on [-1, 1] */
+
 static const lmmc_real_t gk15_weights[15] = {
      0.0229353220105292250,
      0.0630920926299785533,
@@ -785,9 +721,7 @@ static const lmmc_real_t gk15_weights[15] = {
      0.0229353220105292250
 };
 
-/* 7-point Gauss weights on [-1, 1].
- * These correspond to the Gauss nodes which are at Kronrod indices
- * 1, 3, 5, 7, 9, 11, 13. */
+
 static const lmmc_real_t g7_weights[7] = {
      0.1294849661688696932,
      0.2797053914892766679,
@@ -798,29 +732,10 @@ static const lmmc_real_t g7_weights[7] = {
      0.1294849661688696932
 };
 
-/* Indices into gk15_nodes that correspond to the 7 Gauss points */
+
 static const int g7_kronrod_idx[7] = { 1, 3, 5, 7, 9, 11, 13 };
 
-/**
- * @brief Internal recursive helper for adaptive Gauss-Kronrod quadrature.
- *
- * Computes the G7 and K15 estimates on [a, b]. If the error is within
- * tolerance, accepts the K15 estimate. Otherwise, subdivides at the
- * midpoint and recurses on each half.
- *
- * @param func        Integrand function pointer.
- * @param user_data   User data passed to func.
- * @param a           Left endpoint of the interval.
- * @param b           Right endpoint of the interval.
- * @param abs_tol     Absolute tolerance for this subinterval.
- * @param rel_tol     Relative tolerance.
- * @param depth       Current recursion depth.
- * @param max_depth   Maximum allowed recursion depth.
- * @param out_value   Output: integral estimate on this interval.
- * @param out_error   Output: error estimate on this interval.
- * @param out_evals   Output: number of function evaluations used.
- * @return LMMC_STATUS_OK or LMMC_STATUS_WARNING_MAX_DEPTH.
- */
+
 static lmmc_status_t gk15_adaptive_recursive(
     lmmc_quad_func_t func,
     void* user_data,
@@ -834,11 +749,11 @@ static lmmc_status_t gk15_adaptive_recursive(
     lmmc_real_t* out_error,
     size_t* out_evals)
 {
-    /* Transform from [-1,1] to [a,b]: x = half_len * t + midpoint */
+
     lmmc_real_t half_len = (b - a) / 2.0;
     lmmc_real_t midpoint = (a + b) / 2.0;
 
-    /* Evaluate function at all 15 Kronrod points */
+
     lmmc_real_t fvals[15];
     for (int i = 0; i < 15; i++) {
         lmmc_real_t x_i = half_len * gk15_nodes[i] + midpoint;
@@ -846,49 +761,49 @@ static lmmc_status_t gk15_adaptive_recursive(
     }
     *out_evals = 15;
 
-    /* Compute K15 estimate */
+
     lmmc_real_t k15_sum = 0.0;
     for (int i = 0; i < 15; i++) {
         k15_sum += gk15_weights[i] * fvals[i];
     }
     lmmc_real_t k15_result = half_len * k15_sum;
 
-    /* Compute G7 estimate using only the 7 Gauss points */
+
     lmmc_real_t g7_sum = 0.0;
     for (int i = 0; i < 7; i++) {
         g7_sum += g7_weights[i] * fvals[g7_kronrod_idx[i]];
     }
     lmmc_real_t g7_result = half_len * g7_sum;
 
-    /* Error estimate = |K15 - G7| */
+
     lmmc_real_t error = lmmc_abs(k15_result - g7_result);
 
-    /* Acceptance criterion: error <= max(abs_tol, rel_tol * |K15|) */
+
     lmmc_real_t tolerance = lmmc_max(abs_tol, rel_tol * lmmc_abs(k15_result));
 
     if (error <= tolerance) {
-        /* Accept this interval */
+
         *out_value = k15_result;
         *out_error = error;
         return LMMC_STATUS_OK;
     }
 
-    /* Check if we've reached max depth */
+
     if (depth >= max_depth) {
-        /* Return current best estimate with warning */
+
         *out_value = k15_result;
         *out_error = error;
         return LMMC_STATUS_WARNING_MAX_DEPTH;
     }
 
-    /* Subdivide at midpoint and recurse */
+
     lmmc_real_t mid = (a + b) / 2.0;
     lmmc_real_t left_value, left_error;
     size_t left_evals;
     lmmc_real_t right_value, right_error;
     size_t right_evals;
 
-    /* Each half gets half the absolute tolerance (to maintain global tolerance) */
+
     lmmc_real_t sub_abs_tol = abs_tol / 2.0;
 
     lmmc_status_t left_status = gk15_adaptive_recursive(
@@ -903,12 +818,12 @@ static lmmc_status_t gk15_adaptive_recursive(
         depth + 1, max_depth,
         &right_value, &right_error, &right_evals);
 
-    /* Combine results */
+
     *out_value = left_value + right_value;
     *out_error = left_error + right_error;
     *out_evals += left_evals + right_evals;
 
-    /* If either half hit max depth, propagate the warning */
+
     if (left_status == LMMC_STATUS_WARNING_MAX_DEPTH ||
         right_status == LMMC_STATUS_WARNING_MAX_DEPTH) {
         return LMMC_STATUS_WARNING_MAX_DEPTH;
@@ -917,9 +832,7 @@ static lmmc_status_t gk15_adaptive_recursive(
     return LMMC_STATUS_OK;
 }
 
-/* ========================================================================
- * Public API: lmmc_quad_adaptive
- * ======================================================================== */
+
 lmmc_status_t lmmc_quad_adaptive(
     lmmc_quad_func_t func,
     void* user_data,
@@ -930,7 +843,7 @@ lmmc_status_t lmmc_quad_adaptive(
     size_t max_depth,
     lmmc_quad_result_t* out_result)
 {
-    /* Parameter validation */
+
     if (func == NULL || out_result == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
@@ -941,12 +854,12 @@ lmmc_status_t lmmc_quad_adaptive(
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    /* Initialize output */
+
     out_result->value = 0.0;
     out_result->error = 0.0;
     out_result->num_evals = 0;
 
-    /* Run recursive adaptive integration */
+
     lmmc_real_t value, error;
     size_t evals;
 
@@ -956,7 +869,7 @@ lmmc_status_t lmmc_quad_adaptive(
         0, max_depth,
         &value, &error, &evals);
 
-    /* Store results */
+
     out_result->value = value;
     out_result->error = error;
     out_result->num_evals = evals;

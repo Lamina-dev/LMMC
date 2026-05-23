@@ -1,3 +1,7 @@
+/**
+ * @file example_gmres_restart.c
+ * @brief 演示 LMMC 中 gmres restart 相关接口的使用。
+ */
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 

@@ -1,3 +1,7 @@
+/**
+ * @file ode.c
+ * @brief ODE 初值问题求解器实现：Euler / RK4 / RK45。
+ */
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
@@ -432,14 +436,14 @@ lmmc_status_t lmmc_ode_rk4_solve(
             h = rem;
         }
 
-        /* k1 = f(t, y) */
+
         st = lmmc_ode_rhs_eval(rhs, t, y, k1, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
         if (st != LMMC_STATUS_OK) {
             out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
             goto rk4_fail;
         }
 
-        /* y_tmp = y + 0.5*h*k1 */
+
         LMMC_REAL_MUL(&half_h, &half, &h);
         for (i = 0; i < dim; ++i) {
             lmmc_real_t tmp;
@@ -447,7 +451,7 @@ lmmc_status_t lmmc_ode_rk4_solve(
             LMMC_REAL_ADD(&y_tmp[i], &y[i], &tmp);
         }
 
-        /* k2 = f(t + 0.5*h, y_tmp) */
+
         LMMC_REAL_ADD(&t_mid, &t, &half_h);
         st = lmmc_ode_rhs_eval(rhs, t_mid, y_tmp, k2, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
         if (st != LMMC_STATUS_OK) {
@@ -455,28 +459,28 @@ lmmc_status_t lmmc_ode_rk4_solve(
             goto rk4_fail;
         }
 
-        /* y_tmp = y + 0.5*h*k2 */
+
         for (i = 0; i < dim; ++i) {
             lmmc_real_t tmp;
             LMMC_REAL_MUL(&tmp, &half_h, &k2[i]);
             LMMC_REAL_ADD(&y_tmp[i], &y[i], &tmp);
         }
 
-        /* k3 = f(t + 0.5*h, y_tmp) */
+
         st = lmmc_ode_rhs_eval(rhs, t_mid, y_tmp, k3, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
         if (st != LMMC_STATUS_OK) {
             out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
             goto rk4_fail;
         }
 
-        /* y_tmp = y + h*k3 */
+
         for (i = 0; i < dim; ++i) {
             lmmc_real_t tmp;
             LMMC_REAL_MUL(&tmp, &h, &k3[i]);
             LMMC_REAL_ADD(&y_tmp[i], &y[i], &tmp);
         }
 
-        /* k4 = f(t + h, y_tmp) */
+
         LMMC_REAL_ADD(&t_next, &t, &h);
         st = lmmc_ode_rhs_eval(rhs, t_next, y_tmp, k4, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
         if (st != LMMC_STATUS_OK) {
@@ -484,7 +488,7 @@ lmmc_status_t lmmc_ode_rk4_solve(
             goto rk4_fail;
         }
 
-        /* y += (h/6) * (k1 + 2*k2 + 2*k3 + k4) */
+
         LMMC_REAL_DIV(&h_over_6, &h, &six);
         for (i = 0; i < dim; ++i) {
             lmmc_real_t t2k2, t2k3, sum1, sum2, sum3, weighted;
@@ -536,4 +540,3 @@ rk4_fail:
     lmmc_free(k1);
     return LMMC_STATUS_NUMERICAL_FAILURE;
 }
-

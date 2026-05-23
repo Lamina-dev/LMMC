@@ -1,23 +1,9 @@
 /**
  * @file test_eigen_general.c
- * @brief Property-based tests for general eigenvalue decomposition.
+ * @brief 针对 LMMC 中 eigen general 相关接口的单元测试。
  *
- * Implements Property 9 from the design doc:
- *   For any real square matrix A, the returned (real[i], imag[i]) eigenvalue
- *   pairs should satisfy the eigenvalue equation, and complex eigenvalues
- *   should come in conjugate pairs.
- *
- * Tests:
- *   1. Diagonal matrices: eigenvalues equal diagonal entries
- *   2. Block-diagonal matrices: eigenvalues match the blocks
- *   3. Complex eigenvalue case: 2x2 rotation matrix has e^(±i*theta)
- *   4. Conjugate pairs: when imag != 0 there must be a matching -imag entry
- *   5. Random small (2x2, 3x3) matrices: verify p(lambda) = det(A - lambda*I)
- *      is approximately zero for each returned eigenvalue
- *
- * Validates: Requirements 6.1, 6.4
+ * @internal
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -38,10 +24,6 @@
     } \
 } while (0)
 
-/* ========================================================================
- * Helpers: complex arithmetic and characteristic polynomial evaluation.
- * Use plain double tuples to avoid <complex.h> portability concerns on MSVC.
- * ======================================================================== */
 
 typedef struct { double re; double im; } cplx_t;
 
@@ -70,10 +52,7 @@ static double cplx_abs(cplx_t a) {
     return sqrt(a.re * a.re + a.im * a.im);
 }
 
-/*
- * Evaluate a real-coefficient polynomial p(x) = c[0] + c[1]*x + ... + c[deg]*x^deg
- * at a complex point lambda using Horner's scheme.
- */
+
 static cplx_t poly_eval_complex(const double *coeffs, int degree, cplx_t lambda) {
     cplx_t acc = cplx_make(coeffs[degree], 0.0);
     int k;
@@ -84,19 +63,14 @@ static cplx_t poly_eval_complex(const double *coeffs, int degree, cplx_t lambda)
     return acc;
 }
 
-/*
- * Build coefficients of the characteristic polynomial p(lambda) = det(A - lambda*I)
- * for a real n x n matrix (n = 2 or 3). Coefficients are stored low-degree first:
- *   coeffs[0] + coeffs[1]*lambda + ... + coeffs[n]*lambda^n.
- * Returns 0 on success, 1 if n is unsupported.
- */
+
 static int build_char_poly(const lmmc_real_t *A, size_t n, double *coeffs) {
     if (n == 2) {
         double a = A[0], b = A[1];
         double c = A[2], d = A[3];
         double tr = a + d;
         double det = a * d - b * c;
-        /* det(A - lambda*I) = lambda^2 - tr*lambda + det */
+
         coeffs[0] = det;
         coeffs[1] = -tr;
         coeffs[2] = 1.0;
@@ -107,16 +81,16 @@ static int build_char_poly(const lmmc_real_t *A, size_t n, double *coeffs) {
         double a21 = A[3], a22 = A[4], a23 = A[5];
         double a31 = A[6], a32 = A[7], a33 = A[8];
         double tr = a11 + a22 + a33;
-        /* sum of 2x2 principal minors */
+
         double m11 = a22 * a33 - a23 * a32;
         double m22 = a11 * a33 - a13 * a31;
         double m33 = a11 * a22 - a12 * a21;
         double c1 = m11 + m22 + m33;
-        /* determinant */
+
         double det = a11 * (a22 * a33 - a23 * a32)
                    - a12 * (a21 * a33 - a23 * a31)
                    + a13 * (a21 * a32 - a22 * a31);
-        /* det(A - lambda*I) = -lambda^3 + tr*lambda^2 - c1*lambda + det */
+
         coeffs[0] = det;
         coeffs[1] = -c1;
         coeffs[2] = tr;
@@ -126,12 +100,7 @@ static int build_char_poly(const lmmc_real_t *A, size_t n, double *coeffs) {
     return 1;
 }
 
-/*
- * Verify that every returned eigenvalue is a root of the characteristic polynomial.
- *
- * The matrix scale is used to normalize tolerance so that |p(lambda)| ~ 0 is
- * checked relative to a reasonable scale (sum of |a_ij| raised to power n).
- */
+
 static int verify_char_poly_roots(const lmmc_real_t *A, size_t n,
                                   const lmmc_eigen_gen_result_t *result,
                                   double tol)
@@ -142,7 +111,7 @@ static int verify_char_poly_roots(const lmmc_real_t *A, size_t n,
         return 1;
     }
 
-    /* Scale used to make tolerance meaningful for matrices with non-unit entries. */
+
     double anorm = 0.0;
     for (size_t i = 0; i < n * n; i++) {
         if (fabs(A[i]) > anorm) anorm = fabs(A[i]);
@@ -166,10 +135,7 @@ static int verify_char_poly_roots(const lmmc_real_t *A, size_t n,
     return 0;
 }
 
-/*
- * Verify that every nonzero imaginary part has a matching opposite-sign entry,
- * confirming that complex eigenvalues come in conjugate pairs.
- */
+
 static int verify_conjugate_pairs(const lmmc_eigen_gen_result_t *result, double tol)
 {
     size_t n = result->real_parts.size;
@@ -210,7 +176,7 @@ static int verify_conjugate_pairs(const lmmc_eigen_gen_result_t *result, double 
     return 0;
 }
 
-/* Convenience helper: run the solver and run both invariants. */
+
 static int run_property_check(const lmmc_real_t *A, size_t n, const char *label)
 {
     lmmc_mat_t mat;
@@ -246,9 +212,7 @@ static int run_property_check(const lmmc_real_t *A, size_t n, const char *label)
     return rc;
 }
 
-/* ========================================================================
- * Test 1: Diagonal matrices - eigenvalues equal diagonal entries.
- * ======================================================================== */
+
 static int test_diagonal_2x2(void)
 {
     lmmc_real_t A[] = {
@@ -268,13 +232,7 @@ static int test_diagonal_3x3(void)
     return run_property_check(A, 3, "diagonal_3x3");
 }
 
-/* ========================================================================
- * Test 2: Block-diagonal matrices - eigenvalues match the blocks.
- *
- * A = block_diag(B1, [c]) where B1 is a 2x2 block with known eigenvalues
- * and [c] is a 1x1 block.
- * Use B1 = [[2, 1], [1, 2]] with eigenvalues 1, 3. Combined 3x3 spectrum: {1, 3, c}.
- * ======================================================================== */
+
 static int test_block_diagonal_3x3(void)
 {
     lmmc_real_t A[] = {
@@ -285,10 +243,7 @@ static int test_block_diagonal_3x3(void)
     return run_property_check(A, 3, "block_diagonal_3x3");
 }
 
-/* ========================================================================
- * Test 3: Complex eigenvalue case - 2x2 rotation matrix.
- * R(theta) = [[cos, -sin], [sin, cos]] has eigenvalues cos +/- i sin = e^(±i theta).
- * ======================================================================== */
+
 static int test_rotation_2x2(void)
 {
     double theta = 0.7;
@@ -301,11 +256,7 @@ static int test_rotation_2x2(void)
     return run_property_check(A, 2, "rotation_2x2");
 }
 
-/* ========================================================================
- * Test 4: Verify conjugate pairs explicitly via known-complex 2x2 case.
- * Already covered by test_rotation_2x2's conjugate check, but exercise an
- * additional skew-symmetric matrix [[0, -2], [2, 0]] -> eigenvalues +/- 2i.
- * ======================================================================== */
+
 static int test_skew_symmetric_2x2(void)
 {
     lmmc_real_t A[] = {
@@ -315,14 +266,11 @@ static int test_skew_symmetric_2x2(void)
     return run_property_check(A, 2, "skew_symmetric_2x2");
 }
 
-/* ========================================================================
- * Test 5: Random small matrices - characteristic polynomial property.
- * Use deterministic seeded "random" matrices to keep tests reproducible.
- * ======================================================================== */
+
 static unsigned long lcg_state = 12345UL;
 static double next_uniform(double lo, double hi)
 {
-    /* Numerical Recipes style linear congruential generator. */
+
     lcg_state = lcg_state * 1664525UL + 1013904223UL;
     double u = (double)(lcg_state & 0xFFFFFFFFUL) / 4294967296.0;
     return lo + (hi - lo) * u;
@@ -363,9 +311,7 @@ static int test_random_3x3_matrices(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Input validation.
- * ======================================================================== */
+
 static int test_invalid_inputs(void)
 {
     lmmc_eigen_gen_result_t result;
@@ -384,7 +330,7 @@ static int test_invalid_inputs(void)
           "NULL out_result should return INVALID_ARGUMENT, got %d", (int)st);
     lmmc_mat_destroy(&mat);
 
-    /* Non-square matrix */
+
     st = lmmc_mat_create(2, 3, &mat);
     CHECK(st == LMMC_STATUS_OK, "mat_create non-square failed");
     st = lmmc_eigen_general(&mat, &result);
@@ -394,9 +340,7 @@ static int test_invalid_inputs(void)
     return 0;
 }
 
-/* ========================================================================
- * Main
- * ======================================================================== */
+
 typedef int (*test_func_t)(void);
 
 typedef struct {

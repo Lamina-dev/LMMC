@@ -1,18 +1,9 @@
 /**
  * @file test_interp_lagrange.c
- * @brief Unit tests for Lagrange interpolation (barycentric form).
+ * @brief 针对 LMMC 中 interp lagrange 相关接口的单元测试。
  *
- * Tests cover:
- * - Parameter validation (NULL pointers, n < 1)
- * - Interpolation passes through data points (Property 17)
- * - Exact match at data nodes returns ys[j] directly
- * - Polynomial interpolation correctness
- * - Single point (n=1) case
- * - Destroy NULL is safe
- *
- * Validates: Requirements 12.1–12.6
+ * @internal
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -32,9 +23,6 @@ static int test_failures = 0;
     } \
 } while (0)
 
-/* ========================================================================
- * Test: Parameter validation
- * ======================================================================== */
 
 static int test_lagrange_null_args(void)
 {
@@ -43,15 +31,15 @@ static int test_lagrange_null_args(void)
     lmmc_interp_lagrange_t* lag = NULL;
     lmmc_status_t st;
 
-    /* NULL xs */
+
     st = lmmc_interp_lagrange_create(NULL, ys, 3, &lag);
     CHECK(st == LMMC_STATUS_INVALID_ARGUMENT, "NULL xs should fail");
 
-    /* NULL ys */
+
     st = lmmc_interp_lagrange_create(xs, NULL, 3, &lag);
     CHECK(st == LMMC_STATUS_INVALID_ARGUMENT, "NULL ys should fail");
 
-    /* NULL out_lagrange */
+
     st = lmmc_interp_lagrange_create(xs, ys, 3, NULL);
     CHECK(st == LMMC_STATUS_INVALID_ARGUMENT, "NULL out_lagrange should fail");
 
@@ -65,16 +53,13 @@ static int test_lagrange_too_few_points(void)
     lmmc_interp_lagrange_t* lag = NULL;
     lmmc_status_t st;
 
-    /* n = 0 should fail */
+
     st = lmmc_interp_lagrange_create(xs, ys, 0, &lag);
     CHECK(st == LMMC_STATUS_INVALID_ARGUMENT, "n=0 should fail (need >= 1)");
 
     return 0;
 }
 
-/* ========================================================================
- * Test: Single point (n=1) - constant interpolation
- * ======================================================================== */
 
 static int test_lagrange_single_point(void)
 {
@@ -88,13 +73,13 @@ static int test_lagrange_single_point(void)
     st = lmmc_interp_lagrange_create(xs, ys, 1, &lag);
     CHECK(st == LMMC_STATUS_OK, "create with 1 point should succeed");
 
-    /* At the data point itself */
+
     st = lmmc_interp_lagrange_eval(lag, 3.0, &result);
     CHECK(st == LMMC_STATUS_OK, "eval at data point should succeed");
     CHECK(lmmc_test_nearly_equal(result, 7.0, eps),
           "at x=3.0: expected 7.0, got %.15f", result);
 
-    /* At another point - for n=1, the polynomial is constant y=7.0 */
+
     st = lmmc_interp_lagrange_eval(lag, 5.0, &result);
     CHECK(st == LMMC_STATUS_OK, "eval at x=5.0 should succeed");
     CHECK(lmmc_test_nearly_equal(result, 7.0, eps),
@@ -104,13 +89,10 @@ static int test_lagrange_single_point(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Interpolation passes through data points (Property 17)
- * ======================================================================== */
 
 static int test_lagrange_passes_through_data_points(void)
 {
-    /* Use f(x) = x^2 sampled at 5 points */
+
     lmmc_real_t xs[] = {0.0, 1.0, 2.0, 3.0, 4.0};
     lmmc_real_t ys[] = {0.0, 1.0, 4.0, 9.0, 16.0};
     lmmc_interp_lagrange_t* lag = NULL;
@@ -133,18 +115,12 @@ static int test_lagrange_passes_through_data_points(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Polynomial interpolation correctness
- *
- * For n data points from a polynomial of degree <= n-1, the Lagrange
- * interpolant should reproduce the polynomial exactly at any point.
- * ======================================================================== */
 
 static int test_lagrange_quadratic_exact(void)
 {
-    /* f(x) = 2x^2 - 3x + 1, sampled at 3 points (degree 2 polynomial, 3 nodes) */
+
     lmmc_real_t xs[] = {0.0, 1.0, 2.0};
-    lmmc_real_t ys[] = {1.0, 0.0, 3.0}; /* f(0)=1, f(1)=0, f(2)=3 */
+    lmmc_real_t ys[] = {1.0, 0.0, 3.0};
     lmmc_interp_lagrange_t* lag = NULL;
     lmmc_status_t st;
     lmmc_real_t result;
@@ -154,7 +130,7 @@ static int test_lagrange_quadratic_exact(void)
     st = lmmc_interp_lagrange_create(xs, ys, 3, &lag);
     CHECK(st == LMMC_STATUS_OK, "create should succeed");
 
-    /* Test at intermediate points */
+
     for (x = -1.0; x <= 3.0; x += 0.5) {
         lmmc_real_t expected = 2.0 * x * x - 3.0 * x + 1.0;
         st = lmmc_interp_lagrange_eval(lag, (lmmc_real_t)x, &result);
@@ -169,9 +145,9 @@ static int test_lagrange_quadratic_exact(void)
 
 static int test_lagrange_cubic_exact(void)
 {
-    /* f(x) = x^3 - 2x + 1, sampled at 4 points (degree 3 polynomial, 4 nodes) */
+
     lmmc_real_t xs[] = {-1.0, 0.0, 1.0, 2.0};
-    lmmc_real_t ys[] = {2.0, 1.0, 0.0, 5.0}; /* f(-1)=2, f(0)=1, f(1)=0, f(2)=5 */
+    lmmc_real_t ys[] = {2.0, 1.0, 0.0, 5.0};
     lmmc_interp_lagrange_t* lag = NULL;
     lmmc_status_t st;
     lmmc_real_t result;
@@ -181,7 +157,7 @@ static int test_lagrange_cubic_exact(void)
     st = lmmc_interp_lagrange_create(xs, ys, 4, &lag);
     CHECK(st == LMMC_STATUS_OK, "create should succeed");
 
-    /* Test at intermediate points */
+
     for (x = -1.0; x <= 2.0; x += 0.25) {
         lmmc_real_t expected = x * x * x - 2.0 * x + 1.0;
         st = lmmc_interp_lagrange_eval(lag, (lmmc_real_t)x, &result);
@@ -194,9 +170,6 @@ static int test_lagrange_cubic_exact(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Eval with NULL lagrange context
- * ======================================================================== */
 
 static int test_lagrange_eval_null(void)
 {
@@ -226,24 +199,18 @@ static int test_lagrange_eval_null_out(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Destroy NULL is safe
- * ======================================================================== */
 
 static int test_lagrange_destroy_null(void)
 {
-    /* Should not crash */
+
     lmmc_interp_lagrange_destroy(NULL);
     return 0;
 }
 
-/* ========================================================================
- * Test: Non-uniform spacing
- * ======================================================================== */
 
 static int test_lagrange_non_uniform_spacing(void)
 {
-    /* f(x) = x^2, non-uniformly spaced nodes */
+
     lmmc_real_t xs[] = {0.0, 0.5, 1.5, 3.0, 4.0};
     lmmc_real_t ys[] = {0.0, 0.25, 2.25, 9.0, 16.0};
     lmmc_interp_lagrange_t* lag = NULL;
@@ -254,8 +221,7 @@ static int test_lagrange_non_uniform_spacing(void)
     st = lmmc_interp_lagrange_create(xs, ys, 5, &lag);
     CHECK(st == LMMC_STATUS_OK, "create should succeed");
 
-    /* With 5 nodes from a degree-2 polynomial, interpolation should be exact
-     * (since degree 2 < n-1 = 4) */
+
     st = lmmc_interp_lagrange_eval(lag, 2.0, &result);
     CHECK(st == LMMC_STATUS_OK, "eval at x=2.0 should succeed");
     CHECK(lmmc_test_nearly_equal(result, 4.0, eps),
@@ -270,9 +236,6 @@ static int test_lagrange_non_uniform_spacing(void)
     return 0;
 }
 
-/* ========================================================================
- * Main
- * ======================================================================== */
 
 int main(void)
 {

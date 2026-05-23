@@ -1,23 +1,9 @@
 /**
  * @file test_dense_vec.c
- * @brief Property-based tests for BLAS Level 1 vector operations in dense.h.
+ * @brief 针对 LMMC 中 dense vec 相关接口的单元测试。
  *
- * Property 3: 向量 axpy 线性组合正确性
- *   For any vectors x, y and scalar alpha, after lmmc_vec_axpy,
- *   each element y[i] should equal alpha * x[i] + old_y[i].
- *
- * Property 4: 向量范数非负性与一致性
- *   For any non-zero vector x, norm2(x) > 0 and norm_inf(x) > 0;
- *   for zero vector, both are 0.
- *   Also norm_inf(x) <= norm2(x) <= sqrt(n) * norm_inf(x).
- *
- * Property 5: 向量 copy/swap 数据保持
- *   copy(x, dst) makes dst equal to x;
- *   swap(x, y) exchanges their data.
- *
- * Validates: Requirements 2.1, 2.2, 2.4, 2.5, 2.6
+ * @internal
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -27,10 +13,10 @@
 #include "lmmc/config.h"
 #include "lmmc/dense.h"
 
-/* Number of random iterations for property tests */
+
 #define NUM_ITERATIONS 150
 
-/* Tolerance for floating-point comparisons */
+
 #define TOL 1e-12
 
 static int test_failures = 0;
@@ -43,19 +29,19 @@ static int test_failures = 0;
     } \
 } while (0)
 
-/* Generate a random double in [-range, range] */
+
 static double rand_double(double range)
 {
     return ((double)rand() / (double)RAND_MAX) * 2.0 * range - range;
 }
 
-/* Generate a random vector size in [min_size, max_size] */
+
 static size_t rand_vec_size(size_t min_size, size_t max_size)
 {
     return min_size + (size_t)(rand() % (int)(max_size - min_size + 1));
 }
 
-/* Fill a vector with random values in [-range, range] */
+
 static void fill_random_vec(lmmc_vec_t* v, double range)
 {
     for (size_t i = 0; i < v->size; ++i) {
@@ -63,7 +49,7 @@ static void fill_random_vec(lmmc_vec_t* v, double range)
     }
 }
 
-/* Fill a vector with zeros */
+
 static void fill_zero_vec(lmmc_vec_t* v)
 {
     for (size_t i = 0; i < v->size; ++i) {
@@ -71,15 +57,7 @@ static void fill_zero_vec(lmmc_vec_t* v)
     }
 }
 
-/* ========================================================================
- * Property 3: 向量 axpy 线性组合正确性
- * Validates: Requirements 2.4
- * ======================================================================== */
 
-/**
- * Test: For random vectors x, y and scalar alpha,
- * after lmmc_vec_axpy(alpha, x, y), y[i] == alpha * x[i] + old_y[i].
- */
 static int test_axpy_correctness(void)
 {
     int iter;
@@ -94,7 +72,7 @@ static int test_axpy_correctness(void)
         fill_random_vec(&x, range);
         fill_random_vec(&y, range);
 
-        /* Save original y */
+
         lmmc_vec_t old_y;
         lmmc_vec_create(n, &old_y);
         for (size_t i = 0; i < n; ++i) {
@@ -107,7 +85,7 @@ static int test_axpy_correctness(void)
         CHECK(status == LMMC_STATUS_OK,
               "axpy returned error %d (iter=%d, n=%zu)", (int)status, iter, n);
 
-        /* Verify each element */
+
         for (size_t i = 0; i < n; ++i) {
             double expected = alpha * x.data[i] + old_y.data[i];
             double diff = fabs(y.data[i] - expected);
@@ -124,9 +102,7 @@ static int test_axpy_correctness(void)
     return 0;
 }
 
-/**
- * Test: Edge case - single-element vector axpy.
- */
+
 static int test_axpy_single_element(void)
 {
     lmmc_vec_t x, y;
@@ -147,9 +123,7 @@ static int test_axpy_single_element(void)
     return 0;
 }
 
-/**
- * Test: axpy with alpha = 0 should leave y unchanged.
- */
+
 static int test_axpy_alpha_zero(void)
 {
     size_t n = 10;
@@ -159,7 +133,7 @@ static int test_axpy_alpha_zero(void)
     fill_random_vec(&x, 100.0);
     fill_random_vec(&y, 100.0);
 
-    /* Save original y */
+
     double old_y[10];
     for (size_t i = 0; i < n; ++i) old_y[i] = y.data[i];
 
@@ -177,16 +151,7 @@ static int test_axpy_alpha_zero(void)
     return 0;
 }
 
-/* ========================================================================
- * Property 4: 向量范数非负性与一致性
- * Validates: Requirements 2.1, 2.2
- * ======================================================================== */
 
-/**
- * Test: For any non-zero vector x, norm2(x) > 0 and norm_inf(x) > 0.
- * For zero vector, both are 0.
- * Also: norm_inf(x) <= norm2(x) <= sqrt(n) * norm_inf(x).
- */
 static int test_norm_properties(void)
 {
     int iter;
@@ -205,13 +170,13 @@ static int test_norm_properties(void)
         CHECK(s1 == LMMC_STATUS_OK, "norm2 returned error %d", (int)s1);
         CHECK(s2 == LMMC_STATUS_OK, "norm_inf returned error %d", (int)s2);
 
-        /* Non-negativity */
+
         CHECK(norm2_val >= 0.0,
               "norm2 should be >= 0, got %g (iter=%d)", norm2_val, iter);
         CHECK(norm_inf_val >= 0.0,
               "norm_inf should be >= 0, got %g (iter=%d)", norm_inf_val, iter);
 
-        /* Check if vector is non-zero */
+
         int is_nonzero = 0;
         for (size_t i = 0; i < n; ++i) {
             if (x.data[i] != 0.0) { is_nonzero = 1; break; }
@@ -224,7 +189,7 @@ static int test_norm_properties(void)
                   "norm_inf of non-zero vec should be > 0 (iter=%d)", iter);
         }
 
-        /* Consistency: norm_inf <= norm2 <= sqrt(n) * norm_inf */
+
         double sqrt_n = sqrt((double)n);
         CHECK(norm_inf_val <= norm2_val + TOL * norm2_val,
               "norm_inf (%g) should be <= norm2 (%g) (iter=%d)",
@@ -238,9 +203,7 @@ static int test_norm_properties(void)
     return 0;
 }
 
-/**
- * Test: Zero vector norms should both be 0.
- */
+
 static int test_norm_zero_vector(void)
 {
     int iter;
@@ -265,9 +228,7 @@ static int test_norm_zero_vector(void)
     return 0;
 }
 
-/**
- * Test: Single-element vector norm consistency.
- */
+
 static int test_norm_single_element(void)
 {
     lmmc_vec_t x;
@@ -278,7 +239,7 @@ static int test_norm_single_element(void)
     lmmc_vec_norm2(&x, &norm2_val);
     lmmc_vec_norm_inf(&x, &norm_inf_val);
 
-    /* For single element, norm2 == norm_inf == |x[0]| */
+
     CHECK(fabs(norm2_val - 5.0) < TOL,
           "norm2 of [-5] should be 5, got %g", norm2_val);
     CHECK(fabs(norm_inf_val - 5.0) < TOL,
@@ -288,14 +249,7 @@ static int test_norm_single_element(void)
     return 0;
 }
 
-/* ========================================================================
- * Property 5: 向量 copy/swap 数据保持
- * Validates: Requirements 2.5, 2.6
- * ======================================================================== */
 
-/**
- * Test: copy(x, dst) makes dst equal to x element-wise.
- */
 static int test_copy_correctness(void)
 {
     int iter;
@@ -308,7 +262,7 @@ static int test_copy_correctness(void)
 
         double range = (iter < 10) ? 1e15 : 100.0;
         fill_random_vec(&x, range);
-        fill_random_vec(&dst, range); /* dst has different initial data */
+        fill_random_vec(&dst, range);
 
         lmmc_status_t status = lmmc_vec_copy(&x, &dst);
         CHECK(status == LMMC_STATUS_OK,
@@ -326,9 +280,7 @@ static int test_copy_correctness(void)
     return 0;
 }
 
-/**
- * Test: swap(x, y) exchanges their data completely.
- */
+
 static int test_swap_correctness(void)
 {
     int iter;
@@ -343,7 +295,7 @@ static int test_swap_correctness(void)
         fill_random_vec(&x, range);
         fill_random_vec(&y, range);
 
-        /* Save original data */
+
         double* orig_x = (double*)malloc(n * sizeof(double));
         double* orig_y = (double*)malloc(n * sizeof(double));
         for (size_t i = 0; i < n; ++i) {
@@ -355,7 +307,7 @@ static int test_swap_correctness(void)
         CHECK(status == LMMC_STATUS_OK,
               "swap returned error %d (iter=%d)", (int)status, iter);
 
-        /* After swap: x should have orig_y, y should have orig_x */
+
         for (size_t i = 0; i < n; ++i) {
             CHECK(x.data[i] == orig_y[i],
                   "swap: x[%zu]=%g should be orig_y=%g (iter=%d)",
@@ -373,9 +325,7 @@ static int test_swap_correctness(void)
     return 0;
 }
 
-/**
- * Test: Edge case - copy/swap with single-element vectors.
- */
+
 static int test_copy_swap_single_element(void)
 {
     lmmc_vec_t x, y;
@@ -385,7 +335,7 @@ static int test_copy_swap_single_element(void)
     x.data[0] = 42.0;
     y.data[0] = -99.0;
 
-    /* Test copy */
+
     lmmc_vec_t dst;
     lmmc_vec_create(1, &dst);
     dst.data[0] = 0.0;
@@ -393,7 +343,7 @@ static int test_copy_swap_single_element(void)
     CHECK(dst.data[0] == 42.0,
           "copy single: dst should be 42.0, got %g", dst.data[0]);
 
-    /* Test swap */
+
     lmmc_vec_swap(&x, &y);
     CHECK(x.data[0] == -99.0,
           "swap single: x should be -99.0, got %g", x.data[0]);
@@ -406,9 +356,7 @@ static int test_copy_swap_single_element(void)
     return 0;
 }
 
-/**
- * Test: Double swap should restore original data.
- */
+
 static int test_swap_double_swap(void)
 {
     int iter;
@@ -421,7 +369,7 @@ static int test_swap_double_swap(void)
         fill_random_vec(&x, 100.0);
         fill_random_vec(&y, 100.0);
 
-        /* Save originals */
+
         double* orig_x = (double*)malloc(n * sizeof(double));
         double* orig_y = (double*)malloc(n * sizeof(double));
         for (size_t i = 0; i < n; ++i) {
@@ -429,11 +377,11 @@ static int test_swap_double_swap(void)
             orig_y[i] = y.data[i];
         }
 
-        /* Swap twice */
+
         lmmc_vec_swap(&x, &y);
         lmmc_vec_swap(&x, &y);
 
-        /* Should be back to original */
+
         for (size_t i = 0; i < n; ++i) {
             CHECK(x.data[i] == orig_x[i],
                   "double swap: x[%zu] not restored (iter=%d)", i, iter);
@@ -449,9 +397,6 @@ static int test_swap_double_swap(void)
     return 0;
 }
 
-/* ========================================================================
- * Main
- * ======================================================================== */
 
 int main(void)
 {

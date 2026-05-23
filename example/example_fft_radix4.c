@@ -1,3 +1,7 @@
+/**
+ * @file example_fft_radix4.c
+ * @brief 演示 LMMC 中 fft radix4 相关接口的使用。
+ */
 #include <math.h>
 #include <stdio.h>
 #include "lmmc/lmmc.h"

@@ -1,0 +1,156 @@
+# Doxyfile for LMMC
+# Generated for Doxygen 1.9.x and newer.
+# 仅覆盖与默认不同 / 项目相关的关键设置；其余项保留默认值。
+
+#---------------------------------------------------------------------------
+# 项目元信息
+#---------------------------------------------------------------------------
+PROJECT_NAME           = "LMMC"
+PROJECT_NUMBER         = "0.1.0"
+PROJECT_BRIEF          = "Lamina Math/Matrix Core: 基于 LAMMP 的数值与线性代数库"
+OUTPUT_DIRECTORY       = docs
+OUTPUT_LANGUAGE        = Chinese
+
+# 用 README.md 作为主页（首页）
+USE_MDFILE_AS_MAINPAGE = README.md
+
+#---------------------------------------------------------------------------
+# 构建相关
+#---------------------------------------------------------------------------
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+MULTILINE_CPP_IS_BRIEF = NO
+INHERIT_DOCS           = YES
+TAB_SIZE               = 4
+OPTIMIZE_OUTPUT_FOR_C  = YES
+MARKDOWN_SUPPORT       = YES
+AUTOLINK_SUPPORT       = YES
+EXTRACT_ALL            = NO
+EXTRACT_STATIC         = YES
+EXTRACT_PRIVATE        = NO
+EXTRACT_PACKAGE        = NO
+EXTRACT_LOCAL_CLASSES  = YES
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+HIDE_FRIEND_COMPOUNDS  = NO
+HIDE_IN_BODY_DOCS      = NO
+INTERNAL_DOCS          = NO
+CASE_SENSE_NAMES       = SYSTEM
+HIDE_SCOPE_NAMES       = NO
+SHOW_INCLUDE_FILES     = YES
+SORT_MEMBER_DOCS       = YES
+SORT_BRIEF_DOCS        = NO
+SORT_GROUP_NAMES       = NO
+SORT_BY_SCOPE_NAME     = NO
+
+#---------------------------------------------------------------------------
+# 警告与诊断
+#---------------------------------------------------------------------------
+QUIET                  = YES
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_IF_INCOMPLETE_DOC = YES
+WARN_NO_PARAMDOC       = YES
+WARN_AS_ERROR          = NO
+WARN_LOGFILE           = docs/doxygen-warnings.log
+
+#---------------------------------------------------------------------------
+# 输入源
+#---------------------------------------------------------------------------
+INPUT                  = README.md \
+                         include \
+                         src
+INPUT_ENCODING         = UTF-8
+FILE_PATTERNS          = *.c \
+                         *.h \
+                         *.md
+RECURSIVE              = YES
+
+# 跳过子模块、构建目录与外部代码
+EXCLUDE                = LAMMP \
+                         build \
+                         build_eigen_test \
+                         build_mingw \
+                         build_test
+EXCLUDE_PATTERNS       = */build*/* \
+                         */LAMMP/* \
+                         */.git/* \
+                         */.kiro/*
+EXCLUDE_SYMBOLS        =
+
+# 示例代码（@example 引用从这里查找）
+EXAMPLE_PATH           = example
+EXAMPLE_PATTERNS       = *.c
+EXAMPLE_RECURSIVE      = NO
+
+# 在源代码浏览页中显示函数体
+SOURCE_BROWSER         = YES
+INLINE_SOURCES         = NO
+STRIP_CODE_COMMENTS    = YES
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+REFERENCES_LINK_SOURCE = YES
+
+#---------------------------------------------------------------------------
+# 索引与字母表
+#---------------------------------------------------------------------------
+ALPHABETICAL_INDEX     = YES
+
+#---------------------------------------------------------------------------
+# HTML 输出
+#---------------------------------------------------------------------------
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+HTML_FILE_EXTENSION    = .html
+HTML_COLORSTYLE        = AUTO_LIGHT
+HTML_DYNAMIC_MENUS     = YES
+HTML_DYNAMIC_SECTIONS  = NO
+DISABLE_INDEX          = NO
+GENERATE_TREEVIEW      = YES
+FULL_SIDEBAR           = NO
+SEARCHENGINE           = YES
+SERVER_BASED_SEARCH    = NO
+
+#---------------------------------------------------------------------------
+# LaTeX / 其他输出（默认关闭以加速）
+#---------------------------------------------------------------------------
+GENERATE_LATEX         = NO
+GENERATE_RTF           = NO
+GENERATE_MAN           = NO
+GENERATE_XML           = NO
+GENERATE_DOCBOOK       = NO
+
+#---------------------------------------------------------------------------
+# 预处理（让 Doxygen 正确解析 extern "C" / 平台宏）
+#---------------------------------------------------------------------------
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+SEARCH_INCLUDES        = YES
+INCLUDE_PATH           = include
+PREDEFINED             = __cplusplus=1 \
+                         LMMC_USE_LAMMP_ALLOC \
+                         LMMC_USE_BLAS
+
+#---------------------------------------------------------------------------
+# 图表（如需类 / 调用图，安装 Graphviz 后将 HAVE_DOT 设为 YES）
+#---------------------------------------------------------------------------
+HAVE_DOT               = NO
+CLASS_GRAPH            = YES
+COLLABORATION_GRAPH    = NO
+GROUP_GRAPHS           = YES
+INCLUDE_GRAPH          = YES
+INCLUDED_BY_GRAPH      = YES
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO
+GRAPHICAL_HIERARCHY    = YES
+DIRECTORY_GRAPH        = YES
+DOT_IMAGE_FORMAT       = svg
+INTERACTIVE_SVG        = YES
+DOT_GRAPH_MAX_NODES    = 100
+MAX_DOT_GRAPH_DEPTH    = 0
+DOT_TRANSPARENT        = NO
+DOT_MULTI_TARGETS      = YES
+GENERATE_LEGEND        = YES
+DOT_CLEANUP            = YES

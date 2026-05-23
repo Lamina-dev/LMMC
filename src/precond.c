@@ -1,3 +1,7 @@
+/**
+ * @file precond.c
+ * @brief 迭代求解器使用的预处理子（Jacobi / ILU0 / ILUT）实现。
+ */
 #include <math.h>
 #include <string.h>
 #include "memory_bridge.h"
@@ -187,7 +191,7 @@ static void lmmc_select_top_abs(
             for (s = 1; s < selected; ++s) {
                 lmmc_real_t cur_abs; LMMC_REAL_INIT(&cur_abs);
                 LMMC_REAL_ABS(&cur_abs, &workspace[out_cols[s]]);
-                
+
                 if (LMMC_REAL_CMP(&cur_abs, &min_abs) < 0) {
                     LMMC_REAL_SET(&min_abs, &cur_abs);
                     min_idx = s;
@@ -590,7 +594,7 @@ lmmc_status_t lmmc_precond_create_ilut(
     size_t active_count = 0;
     lmmc_precond_ilu_impl_t* impl = NULL;
     lmmc_status_t st = lmmc_sparse_validate_csr_basic(a);
-    
+
     lmmc_real_t zero; LMMC_REAL_INIT(&zero); LMMC_REAL_SET_D(&zero, 0.0);
     lmmc_real_t eps_15; LMMC_REAL_INIT(&eps_15); LMMC_REAL_SET_D(&eps_15, 1e-15);
     lmmc_real_t tmp_add; LMMC_REAL_INIT(&tmp_add); LMMC_REAL_SET_D(&tmp_add, 0.0);
@@ -730,7 +734,7 @@ lmmc_status_t lmmc_precond_create_ilut(
                 lmmc_real_t lik; LMMC_REAL_INIT(&lik); LMMC_REAL_SET_D(&lik, 0.0);
                 lmmc_real_t abs_aik; LMMC_REAL_INIT(&abs_aik);
                 lmmc_real_t abs_diag_k; LMMC_REAL_INIT(&abs_diag_k);
-                
+
                 size_t u_start = 0;
                 size_t u_end = 0;
 
@@ -827,7 +831,7 @@ lmmc_status_t lmmc_precond_create_ilut(
         LMMC_REAL_SET(&diag_i, &workspace[i]);
         lmmc_real_t abs_diag_i; LMMC_REAL_INIT(&abs_diag_i);
         LMMC_REAL_ABS(&abs_diag_i, &diag_i);
-        
+
         if (!lmmc_is_finite_number(&diag_i) || LMMC_REAL_CMP(&abs_diag_i, &eps_15) <= 0) {
             LMMC_REAL_CLEAR(&abs_diag_i); LMMC_REAL_CLEAR(&diag_i);
             st = LMMC_STATUS_SINGULAR_MATRIX; goto fail;

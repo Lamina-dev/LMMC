@@ -1,22 +1,9 @@
 /**
  * @file test_eigen_sym.c
- * @brief Unit tests for symmetric eigenvalue decomposition.
+ * @brief 针对 LMMC 中 eigen sym 相关接口的单元测试。
  *
- * Tests:
- * 1. Input validation (NULL, non-square)
- * 2. 1x1 matrix
- * 3. 2x2 diagonal matrix
- * 4. 2x2 symmetric matrix with known eigenvalues
- * 5. 3x3 identity matrix
- * 6. 3x3 symmetric matrix
- * 7. Orthogonality of eigenvectors (V^T * V = I)
- * 8. Reconstruction (A = V * diag(lambda) * V^T)
- * 9. Eigenvalues in ascending order
- * 10. Destroy function safety
- *
- * Validates: Requirements 5.1–5.7
+ * @internal
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -38,9 +25,7 @@ static int test_failures = 0;
 
 #define TOL 1e-10
 
-/* ========================================================================
- * Test: NULL input returns INVALID_ARGUMENT
- * ======================================================================== */
+
 static int test_null_input(void)
 {
     lmmc_eigen_sym_result_t result;
@@ -60,9 +45,7 @@ static int test_null_input(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Non-square matrix returns INVALID_ARGUMENT
- * ======================================================================== */
+
 static int test_non_square(void)
 {
     lmmc_mat_t mat;
@@ -77,9 +60,7 @@ static int test_non_square(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: 1x1 matrix
- * ======================================================================== */
+
 static int test_1x1(void)
 {
     lmmc_mat_t mat;
@@ -99,9 +80,7 @@ static int test_1x1(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: 2x2 diagonal matrix
- * ======================================================================== */
+
 static int test_2x2_diagonal(void)
 {
     lmmc_mat_t mat;
@@ -113,7 +92,7 @@ static int test_2x2_diagonal(void)
     lmmc_status_t s = lmmc_eigen_symmetric(&mat, &result);
     CHECK(s == LMMC_STATUS_OK, "2x2 diagonal should succeed, got %d", (int)s);
 
-    /* Eigenvalues should be 3 and 7, ascending */
+
     CHECK(fabs(result.eigenvalues.data[0] - 3.0) < TOL,
           "eigenvalue[0] should be 3.0, got %f", result.eigenvalues.data[0]);
     CHECK(fabs(result.eigenvalues.data[1] - 7.0) < TOL,
@@ -124,10 +103,7 @@ static int test_2x2_diagonal(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: 2x2 symmetric matrix with known eigenvalues
- * A = [[2, 1], [1, 2]], eigenvalues = 1, 3
- * ======================================================================== */
+
 static int test_2x2_symmetric(void)
 {
     lmmc_mat_t mat;
@@ -139,7 +115,7 @@ static int test_2x2_symmetric(void)
     lmmc_status_t s = lmmc_eigen_symmetric(&mat, &result);
     CHECK(s == LMMC_STATUS_OK, "2x2 symmetric should succeed, got %d", (int)s);
 
-    /* Eigenvalues should be 1 and 3, ascending */
+
     CHECK(fabs(result.eigenvalues.data[0] - 1.0) < TOL,
           "eigenvalue[0] should be 1.0, got %f", result.eigenvalues.data[0]);
     CHECK(fabs(result.eigenvalues.data[1] - 3.0) < TOL,
@@ -150,9 +126,7 @@ static int test_2x2_symmetric(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: 3x3 identity matrix
- * ======================================================================== */
+
 static int test_3x3_identity(void)
 {
     lmmc_mat_t mat;
@@ -165,7 +139,7 @@ static int test_3x3_identity(void)
     lmmc_status_t s = lmmc_eigen_symmetric(&mat, &result);
     CHECK(s == LMMC_STATUS_OK, "3x3 identity should succeed, got %d", (int)s);
 
-    /* All eigenvalues should be 1 */
+
     for (int i = 0; i < 3; i++) {
         CHECK(fabs(result.eigenvalues.data[i] - 1.0) < TOL,
               "eigenvalue[%d] should be 1.0, got %f", i, result.eigenvalues.data[i]);
@@ -176,18 +150,13 @@ static int test_3x3_identity(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: 3x3 symmetric matrix
- * A = [[4, 1, 1], [1, 4, 1], [1, 1, 4]]
- * Eigenvalues: 2, 2, 6 (ascending: 2, 2, 6 -- but actually 3, 3, 6)
- * Actually: eigenvalues of this matrix are 3, 3, 6
- * ======================================================================== */
+
 static int test_3x3_symmetric(void)
 {
     lmmc_mat_t mat;
     lmmc_eigen_sym_result_t result;
     lmmc_mat_create(3, 3, &mat);
-    /* A = [[4, 1, 1], [1, 4, 1], [1, 1, 4]] */
+
     mat.data[0] = 4.0; mat.data[1] = 1.0; mat.data[2] = 1.0;
     mat.data[3] = 1.0; mat.data[4] = 4.0; mat.data[5] = 1.0;
     mat.data[6] = 1.0; mat.data[7] = 1.0; mat.data[8] = 4.0;
@@ -195,7 +164,7 @@ static int test_3x3_symmetric(void)
     lmmc_status_t s = lmmc_eigen_symmetric(&mat, &result);
     CHECK(s == LMMC_STATUS_OK, "3x3 symmetric should succeed, got %d", (int)s);
 
-    /* Eigenvalues: 3, 3, 6 (ascending) */
+
     CHECK(fabs(result.eigenvalues.data[0] - 3.0) < TOL,
           "eigenvalue[0] should be 3.0, got %f", result.eigenvalues.data[0]);
     CHECK(fabs(result.eigenvalues.data[1] - 3.0) < TOL,
@@ -208,9 +177,7 @@ static int test_3x3_symmetric(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Orthogonality of eigenvectors (V^T * V = I)
- * ======================================================================== */
+
 static int test_orthogonality(void)
 {
     lmmc_mat_t mat;
@@ -218,8 +185,7 @@ static int test_orthogonality(void)
     size_t n = 4;
     lmmc_mat_create(n, n, &mat);
 
-    /* Create a symmetric matrix */
-    /* A = [[5, 1, 2, 0], [1, 4, 1, 1], [2, 1, 6, 2], [0, 1, 2, 3]] */
+
     lmmc_real_t data[] = {
         5.0, 1.0, 2.0, 0.0,
         1.0, 4.0, 1.0, 1.0,
@@ -233,7 +199,7 @@ static int test_orthogonality(void)
     lmmc_status_t s = lmmc_eigen_symmetric(&mat, &result);
     CHECK(s == LMMC_STATUS_OK, "4x4 symmetric should succeed, got %d", (int)s);
 
-    /* Check V^T * V = I */
+
     for (size_t i = 0; i < n; i++) {
         for (size_t j = 0; j < n; j++) {
             lmmc_real_t dot = 0.0;
@@ -252,9 +218,7 @@ static int test_orthogonality(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Reconstruction A = V * diag(lambda) * V^T
- * ======================================================================== */
+
 static int test_reconstruction(void)
 {
     lmmc_mat_t mat;
@@ -262,7 +226,7 @@ static int test_reconstruction(void)
     size_t n = 3;
     lmmc_mat_create(n, n, &mat);
 
-    /* A = [[2, -1, 0], [-1, 2, -1], [0, -1, 2]] (tridiagonal) */
+
     lmmc_real_t data[] = {
         2.0, -1.0, 0.0,
        -1.0,  2.0, -1.0,
@@ -275,14 +239,12 @@ static int test_reconstruction(void)
     lmmc_status_t s = lmmc_eigen_symmetric(&mat, &result);
     CHECK(s == LMMC_STATUS_OK, "3x3 tridiag should succeed, got %d", (int)s);
 
-    /* Reconstruct: A_recon = V * diag(lambda) * V^T
-     * V is stored column-major in eigenvectors (each column is an eigenvector)
-     * So V[i][k] = eigenvectors.data[i * n + k] */
+
     for (size_t i = 0; i < n; i++) {
         for (size_t j = 0; j < n; j++) {
             lmmc_real_t sum = 0.0;
             for (size_t k = 0; k < n; k++) {
-                /* V[i,k] * lambda[k] * V[j,k] */
+
                 sum += result.eigenvectors.data[i * n + k] *
                        result.eigenvalues.data[k] *
                        result.eigenvectors.data[j * n + k];
@@ -298,9 +260,7 @@ static int test_reconstruction(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Eigenvalues in ascending order
- * ======================================================================== */
+
 static int test_ascending_order(void)
 {
     lmmc_mat_t mat;
@@ -308,7 +268,7 @@ static int test_ascending_order(void)
     size_t n = 4;
     lmmc_mat_create(n, n, &mat);
 
-    /* Create a symmetric matrix with distinct eigenvalues */
+
     lmmc_real_t data[] = {
         10.0, 1.0, 2.0, 3.0,
          1.0, 5.0, 1.0, 2.0,
@@ -322,7 +282,7 @@ static int test_ascending_order(void)
     lmmc_status_t s = lmmc_eigen_symmetric(&mat, &result);
     CHECK(s == LMMC_STATUS_OK, "4x4 should succeed, got %d", (int)s);
 
-    /* Check ascending order */
+
     for (size_t i = 0; i < n - 1; i++) {
         CHECK(result.eigenvalues.data[i] <= result.eigenvalues.data[i + 1],
               "eigenvalues not ascending: [%zu]=%f > [%zu]=%f",
@@ -334,21 +294,17 @@ static int test_ascending_order(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Destroy function safety (NULL input)
- * ======================================================================== */
+
 static int test_destroy_null(void)
 {
-    /* Should not crash */
+
     lmmc_eigen_sym_result_destroy(NULL);
     lmmc_eigen_gen_result_destroy(NULL);
     lmmc_svd_result_destroy(NULL);
     return 0;
 }
 
-/* ========================================================================
- * Main
- * ======================================================================== */
+
 typedef int (*test_func_t)(void);
 
 typedef struct {

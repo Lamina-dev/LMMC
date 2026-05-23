@@ -1,3 +1,7 @@
+/**
+ * @file nonlinear.c
+ * @brief 标量非线性方程求根算法实现。
+ */
 #include <math.h>
 #include <stdio.h>
 #include "internal.h"

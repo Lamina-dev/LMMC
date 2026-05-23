@@ -1,3 +1,7 @@
+/**
+ * @file stats.c
+ * @brief 基础统计量与组合数学实现。
+ */
 #include <math.h>
 #include "memory_bridge.h"
 #include "lmmc/config.h"
@@ -910,11 +914,10 @@ static double lmmp_convert_to_double(mp_srcptr src, mp_size_t size) {
 }
 
 static void lmmp_to_lmmc_real(lmmc_real_t* dst, mp_srcptr src, mp_size_t size) {
-    // 现在的临时方案：
+
     LMMC_REAL_SET_D(dst, lmmp_convert_to_double(src, size));
 
-    // 未来的终极方案：
-    // lmmp_float_set_integer_part(dst, src, size);
+
 }
 
 void lmmc_stats_factorial(lmmc_real_t* out_val, uint32_t n) {

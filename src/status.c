@@ -1,3 +1,7 @@
+/**
+ * @file status.c
+ * @brief 状态码到字符串的映射实现。
+ */
 #include "lmmc/config.h"
 #include "lmmc/status.h"
 

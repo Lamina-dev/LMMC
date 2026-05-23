@@ -1,22 +1,9 @@
 /**
  * @file test_svd.c
- * @brief Unit tests for SVD decomposition, pseudo-inverse, and condition number.
+ * @brief 针对 LMMC 中 svd 相关接口的单元测试。
  *
- * Tests:
- * 1. Input validation (NULL, zero dimensions)
- * 2. 1x1 matrix SVD
- * 3. 2x2 diagonal matrix SVD
- * 4. 3x3 matrix SVD reconstruction (A = U * diag(sigma) * Vt)
- * 5. Orthogonality of U and Vt
- * 6. Singular values in descending order
- * 7. Wide matrix (m < n) SVD
- * 8. Pseudo-inverse (A * A+ * A = A)
- * 9. Condition number
- * 10. lmmc_svd_result_destroy safety
- *
- * Validates: Requirements 7.1-7.7
+ * @internal
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -39,9 +26,7 @@ static int test_failures = 0;
 #define TOL 1e-10
 #define MAT_ELEM(mat, i, j) ((mat)->data[(i) * (mat)->stride + (j)])
 
-/* ========================================================================
- * Test: NULL input returns INVALID_ARGUMENT
- * ======================================================================== */
+
 static int test_null_input(void)
 {
     lmmc_svd_result_t result;
@@ -61,9 +46,7 @@ static int test_null_input(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: 1x1 matrix SVD
- * ======================================================================== */
+
 static int test_1x1(void)
 {
     lmmc_mat_t mat;
@@ -81,9 +64,7 @@ static int test_1x1(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: 2x2 diagonal matrix SVD
- * ======================================================================== */
+
 static int test_2x2_diagonal(void)
 {
     lmmc_mat_t mat;
@@ -95,7 +76,7 @@ static int test_2x2_diagonal(void)
     lmmc_status_t s = lmmc_svd(&mat, &result);
     CHECK(s == LMMC_STATUS_OK, "2x2 diagonal SVD should succeed, got %d", (int)s);
 
-    /* Singular values should be 7 and 3, descending */
+
     CHECK(fabs(result.sigma.data[0] - 7.0) < TOL,
           "sigma[0] should be 7.0, got %f", result.sigma.data[0]);
     CHECK(fabs(result.sigma.data[1] - 3.0) < TOL,
@@ -106,9 +87,7 @@ static int test_2x2_diagonal(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: 3x3 matrix SVD reconstruction (A = U * diag(sigma) * Vt)
- * ======================================================================== */
+
 static int test_3x3_reconstruction(void)
 {
     lmmc_mat_t mat;
@@ -116,7 +95,7 @@ static int test_3x3_reconstruction(void)
     size_t m = 3, n = 3;
     lmmc_mat_create(m, n, &mat);
 
-    /* A = [[1, 2, 3], [4, 5, 6], [7, 8, 10]] */
+
     lmmc_real_t data[] = {
         1.0, 2.0, 3.0,
         4.0, 5.0, 6.0,
@@ -127,7 +106,7 @@ static int test_3x3_reconstruction(void)
     lmmc_status_t s = lmmc_svd(&mat, &result);
     CHECK(s == LMMC_STATUS_OK, "3x3 SVD should succeed, got %d", (int)s);
 
-    /* Reconstruct: A_recon[i][j] = sum_k U[i][k] * sigma[k] * Vt[k][j] */
+
     size_t p = (m < n) ? m : n;
     for (size_t i = 0; i < m; i++) {
         for (size_t j = 0; j < n; j++) {
@@ -148,9 +127,7 @@ static int test_3x3_reconstruction(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Orthogonality of U (U^T * U = I) and Vt (Vt * Vt^T = I)
- * ======================================================================== */
+
 static int test_orthogonality(void)
 {
     lmmc_mat_t mat;
@@ -158,7 +135,7 @@ static int test_orthogonality(void)
     size_t m = 4, n = 3;
     lmmc_mat_create(m, n, &mat);
 
-    /* A = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11, 13]] */
+
     lmmc_real_t data[] = {
         1.0, 2.0, 3.0,
         4.0, 5.0, 6.0,
@@ -170,7 +147,7 @@ static int test_orthogonality(void)
     lmmc_status_t s = lmmc_svd(&mat, &result);
     CHECK(s == LMMC_STATUS_OK, "4x3 SVD should succeed, got %d", (int)s);
 
-    /* Check U^T * U = I (m x m) */
+
     for (size_t i = 0; i < m; i++) {
         for (size_t j = 0; j < m; j++) {
             lmmc_real_t dot = 0.0;
@@ -183,7 +160,7 @@ static int test_orthogonality(void)
         }
     }
 
-    /* Check Vt * Vt^T = I (n x n) */
+
     for (size_t i = 0; i < n; i++) {
         for (size_t j = 0; j < n; j++) {
             lmmc_real_t dot = 0.0;
@@ -201,9 +178,7 @@ static int test_orthogonality(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Singular values in descending order
- * ======================================================================== */
+
 static int test_descending_order(void)
 {
     lmmc_mat_t mat;
@@ -229,7 +204,7 @@ static int test_descending_order(void)
               i, result.sigma.data[i], i + 1, result.sigma.data[i + 1]);
     }
 
-    /* All singular values should be non-negative */
+
     for (size_t i = 0; i < p; i++) {
         CHECK(result.sigma.data[i] >= 0.0,
               "sigma[%zu] should be >= 0, got %f", i, result.sigma.data[i]);
@@ -240,9 +215,7 @@ static int test_descending_order(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Wide matrix (m < n) SVD
- * ======================================================================== */
+
 static int test_wide_matrix(void)
 {
     lmmc_mat_t mat;
@@ -250,7 +223,7 @@ static int test_wide_matrix(void)
     size_t m = 2, n = 4;
     lmmc_mat_create(m, n, &mat);
 
-    /* A = [[1, 2, 3, 4], [5, 6, 7, 8]] */
+
     lmmc_real_t data[] = {
         1.0, 2.0, 3.0, 4.0,
         5.0, 6.0, 7.0, 8.0
@@ -260,7 +233,7 @@ static int test_wide_matrix(void)
     lmmc_status_t s = lmmc_svd(&mat, &result);
     CHECK(s == LMMC_STATUS_OK, "2x4 SVD should succeed, got %d", (int)s);
 
-    /* Check dimensions */
+
     CHECK(result.U.rows == m && result.U.cols == m,
           "U should be %zux%zu, got %zux%zu", m, m, result.U.rows, result.U.cols);
     CHECK(result.sigma.size == m,
@@ -268,8 +241,8 @@ static int test_wide_matrix(void)
     CHECK(result.Vt.rows == n && result.Vt.cols == n,
           "Vt should be %zux%zu, got %zux%zu", n, n, result.Vt.rows, result.Vt.cols);
 
-    /* Reconstruct: A_recon[i][j] = sum_k U[i][k] * sigma[k] * Vt[k][j] */
-    size_t p = m; /* min(m,n) = m */
+
+    size_t p = m;
     for (size_t i = 0; i < m; i++) {
         for (size_t j = 0; j < n; j++) {
             lmmc_real_t sum = 0.0;
@@ -289,16 +262,14 @@ static int test_wide_matrix(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Pseudo-inverse (A * A+ * A = A)
- * ======================================================================== */
+
 static int test_pinv(void)
 {
     lmmc_mat_t mat;
     size_t m = 3, n = 2;
     lmmc_mat_create(m, n, &mat);
 
-    /* A = [[1, 2], [3, 4], [5, 6]] */
+
     lmmc_real_t data[] = {
         1.0, 2.0,
         3.0, 4.0,
@@ -306,15 +277,14 @@ static int test_pinv(void)
     };
     for (size_t i = 0; i < m * n; i++) mat.data[i] = data[i];
 
-    /* Allocate output: pinv is n x m */
+
     lmmc_mat_t pinv;
     lmmc_mat_create(n, m, &pinv);
 
     lmmc_status_t s = lmmc_pinv(&mat, 0.0, &pinv);
     CHECK(s == LMMC_STATUS_OK, "pinv should succeed, got %d", (int)s);
 
-    /* Verify Moore-Penrose condition: A * A+ * A = A */
-    /* First compute T = A+ * A (n x n) */
+
     lmmc_mat_t temp_nn;
     lmmc_mat_create(n, n, &temp_nn);
     for (size_t i = 0; i < n; i++) {
@@ -326,7 +296,7 @@ static int test_pinv(void)
             MAT_ELEM(&temp_nn, i, j) = sum;
         }
     }
-    /* Then compute A * T (m x n) and compare with A */
+
     for (size_t i = 0; i < m; i++) {
         for (size_t j = 0; j < n; j++) {
             lmmc_real_t sum = 0.0;
@@ -345,14 +315,12 @@ static int test_pinv(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Condition number
- * ======================================================================== */
+
 static int test_cond(void)
 {
     lmmc_mat_t mat;
     lmmc_mat_create(2, 2, &mat);
-    /* A = [[3, 0], [0, 1]] => cond = 3/1 = 3 */
+
     mat.data[0] = 3.0; mat.data[1] = 0.0;
     mat.data[2] = 0.0; mat.data[3] = 1.0;
 
@@ -366,14 +334,12 @@ static int test_cond(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: Condition number for singular matrix returns INFINITY
- * ======================================================================== */
+
 static int test_cond_singular(void)
 {
     lmmc_mat_t mat;
     lmmc_mat_create(2, 2, &mat);
-    /* A = [[1, 0], [0, 0]] => singular, cond = inf */
+
     mat.data[0] = 1.0; mat.data[1] = 0.0;
     mat.data[2] = 0.0; mat.data[3] = 0.0;
 
@@ -386,9 +352,7 @@ static int test_cond_singular(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: pinv NULL input validation
- * ======================================================================== */
+
 static int test_pinv_null(void)
 {
     lmmc_mat_t mat, pinv;
@@ -408,19 +372,15 @@ static int test_pinv_null(void)
     return 0;
 }
 
-/* ========================================================================
- * Test: lmmc_svd_result_destroy safety (NULL input)
- * ======================================================================== */
+
 static int test_destroy_null(void)
 {
-    /* Should not crash */
+
     lmmc_svd_result_destroy(NULL);
     return 0;
 }
 
-/* ========================================================================
- * Main
- * ======================================================================== */
+
 typedef int (*test_func_t)(void);
 
 typedef struct {

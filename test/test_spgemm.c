@@ -1,3 +1,9 @@
+/**
+ * @file test_spgemm.c
+ * @brief 针对 LMMC 中 spgemm 相关接口的单元测试。
+ *
+ * @internal
+ */
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"
@@ -8,13 +14,6 @@ int main(void) {
     lmmc_status_t st = LMMC_STATUS_OK;
     int rc = 0;
 
-    // A = [ 1 0 2 ]
-    //     [ 0 3 0 ]
-    // B = [ 0 4 ]
-    //     [ 5 0 ]
-    //     [ 0 6 ]
-    // C = A * B = [ 1*0+0*5+2*0  1*4+0*0+2*6 ] = [ 0 16 ]
-    //             [ 0*0+3*5+0*0  0*4+3*0+0*6 ]   [ 15 0 ]
 
     st = lmmc_mat_create(2, 3, &a_dense);
     if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
@@ -51,7 +50,7 @@ int main(void) {
         rc = 1; goto cleanup;
     }
 
-    // Test with identity
+
     lmmc_sparse_mat_t eye = {0}, res_eye = {0};
     lmmc_mat_t eye_dense = {0};
     st = lmmc_mat_create(3, 3, &eye_dense);
@@ -64,7 +63,7 @@ int main(void) {
     if (st != LMMC_STATUS_OK || res_eye.nnz != a.nnz) {
         rc = 1; goto cleanup_eye;
     }
-    
+
 cleanup_eye:
     lmmc_sparse_destroy(&res_eye);
     lmmc_sparse_destroy(&eye);

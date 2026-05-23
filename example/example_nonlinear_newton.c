@@ -1,3 +1,7 @@
+/**
+ * @file example_nonlinear_newton.c
+ * @brief 演示 LMMC 中 nonlinear newton 相关接口的使用。
+ */
 #include <math.h>
 #include <stdio.h>
 #include "lmmc/lmmc.h"

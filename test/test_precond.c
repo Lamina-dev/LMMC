@@ -1,16 +1,16 @@
+/**
+ * @file test_precond.c
+ * @brief 针对 LMMC 中 precond 相关接口的单元测试。
+ *
+ * @internal
+ */
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"
 
-/*
- * test_precond.c - Preconditioner module tests
- * Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10
- */
 
-/* Helper: build an nxn SPD tridiagonal matrix using sparse builder.
- * Diagonal = 4.0, off-diagonal = -1.0 (classic 1D Laplacian-like) */
 static lmmc_status_t build_spd_tridiag(size_t n, lmmc_sparse_mat_t* out) {
     lmmc_sparse_builder_t* builder = NULL;
     lmmc_status_t st;
@@ -38,7 +38,7 @@ fail:
     return st;
 }
 
-/* Helper: build a general (non-symmetric) nxn diagonally dominant matrix */
+
 static lmmc_status_t build_general_dd(size_t n, lmmc_sparse_mat_t* out) {
     lmmc_sparse_builder_t* builder = NULL;
     lmmc_status_t st;
@@ -70,7 +70,7 @@ int main(void) {
     int rc = 0;
     lmmc_status_t st;
 
-    /* ===== Test 1: Jacobi preconditioner - diagonal inverse times vector (Req 2.1) ===== */
+
     {
         lmmc_sparse_mat_t A = {0};
         lmmc_precond_t jacobi = {0};
@@ -95,7 +95,7 @@ int main(void) {
         st = lmmc_precond_apply(&jacobi, &v, &out);
         if (st != LMMC_STATUS_OK) { lmmc_vec_destroy(&out); lmmc_vec_destroy(&v); lmmc_precond_destroy(&jacobi); lmmc_sparse_destroy(&A); rc = 1; goto done; }
 
-        /* Jacobi: out[i] = v[i] / diag(A)[i] = v[i] / 4.0 */
+
         for (i = 0; i < 5; ++i) {
             lmmc_real_t expected = (lmmc_real_t)(i + 1) / 4.0;
             if (!lmmc_test_nearly_equal(out.data[i], expected, 1e-12)) {
@@ -109,9 +109,7 @@ int main(void) {
         lmmc_sparse_destroy(&A);
     }
 
-    /* ===== Test 2: ILU0 preconditioner - verify A * M^{-1}v = v (Req 2.2) ===== */
-    /* For tridiagonal matrix, ILU0 is exact (no fill-in dropped), so
-     * applying the preconditioner should give the exact solution to Ax=v */
+
     {
         lmmc_sparse_mat_t A = {0};
         lmmc_precond_t ilu0 = {0};
@@ -136,11 +134,11 @@ int main(void) {
             v.data[i] = (lmmc_real_t)(i + 1);
         }
 
-        /* Apply ILU0: out_ilu = M^{-1} * v where M approx A */
+
         st = lmmc_precond_apply(&ilu0, &v, &out_ilu);
         if (st != LMMC_STATUS_OK) { lmmc_vec_destroy(&Ax); lmmc_vec_destroy(&out_ilu); lmmc_vec_destroy(&v); lmmc_precond_destroy(&ilu0); lmmc_sparse_destroy(&A); rc = 1; goto done; }
 
-        /* Verify: ||A * out_ilu - v|| < 1e-10 */
+
         st = lmmc_sparse_mat_vec_mul(&A, &out_ilu, &Ax);
         if (st != LMMC_STATUS_OK) { lmmc_vec_destroy(&Ax); lmmc_vec_destroy(&out_ilu); lmmc_vec_destroy(&v); lmmc_precond_destroy(&ilu0); lmmc_sparse_destroy(&A); rc = 1; goto done; }
 
@@ -162,7 +160,7 @@ int main(void) {
         lmmc_sparse_destroy(&A);
     }
 
-    /* ===== Test 3: None preconditioner - identity transform (Req 2.3) ===== */
+
     {
         lmmc_precond_t none = {0};
         lmmc_vec_t v = {0}, out = {0};
@@ -194,7 +192,7 @@ int main(void) {
         lmmc_precond_destroy(&none);
     }
 
-    /* ===== Test 4: ILUT preconditioner - approximate inverse validity (Req 2.4) ===== */
+
     {
         lmmc_sparse_mat_t A = {0};
         lmmc_precond_t ilut = {0};
@@ -219,11 +217,11 @@ int main(void) {
             v.data[i] = (lmmc_real_t)(i + 1);
         }
 
-        /* Apply ILUT: out = M^{-1} * v */
+
         st = lmmc_precond_apply(&ilut, &v, &out);
         if (st != LMMC_STATUS_OK) { lmmc_vec_destroy(&Ax); lmmc_vec_destroy(&out); lmmc_vec_destroy(&v); lmmc_precond_destroy(&ilut); lmmc_sparse_destroy(&A); rc = 1; goto done; }
 
-        /* Compute A * out and compare with v: residual = ||A*out - v|| */
+
         st = lmmc_sparse_mat_vec_mul(&A, &out, &Ax);
         if (st != LMMC_STATUS_OK) { lmmc_vec_destroy(&Ax); lmmc_vec_destroy(&out); lmmc_vec_destroy(&v); lmmc_precond_destroy(&ilut); lmmc_sparse_destroy(&A); rc = 1; goto done; }
 
@@ -234,7 +232,7 @@ int main(void) {
         }
         residual_norm = sqrt(residual_norm);
 
-        /* For tridiagonal, ILUT with generous fill should be near-exact */
+
         if (residual_norm > 1e-6) {
             rc = 1; lmmc_vec_destroy(&Ax); lmmc_vec_destroy(&out); lmmc_vec_destroy(&v); lmmc_precond_destroy(&ilut); lmmc_sparse_destroy(&A); goto done;
         }
@@ -246,7 +244,7 @@ int main(void) {
         lmmc_sparse_destroy(&A);
     }
 
-    /* ===== Test 5: CG + Jacobi converges in fewer or equal iters (Req 2.5) ===== */
+
     {
         lmmc_sparse_mat_t A = {0};
         lmmc_precond_t jacobi = {0};
@@ -277,19 +275,19 @@ int main(void) {
         if (st != LMMC_STATUS_OK) { lmmc_vec_destroy(&x_none); lmmc_vec_destroy(&x_precond); lmmc_vec_destroy(&b); lmmc_precond_destroy(&jacobi); lmmc_sparse_destroy(&A); rc = 1; goto done; }
         cfg_iter.max_iter = 200;
 
-        /* Solve with Jacobi preconditioner */
+
         st = lmmc_cg_solve(&A, &b, &jacobi, &cfg_iter, &x_precond, &res_precond);
         if (st != LMMC_STATUS_OK || res_precond.converged != 1) {
             lmmc_vec_destroy(&x_none); lmmc_vec_destroy(&x_precond); lmmc_vec_destroy(&b); lmmc_precond_destroy(&jacobi); lmmc_sparse_destroy(&A); rc = 1; goto done;
         }
 
-        /* Solve without preconditioner */
+
         st = lmmc_cg_solve(&A, &b, NULL, &cfg_iter, &x_none, &res_none);
         if (st != LMMC_STATUS_OK || res_none.converged != 1) {
             lmmc_vec_destroy(&x_none); lmmc_vec_destroy(&x_precond); lmmc_vec_destroy(&b); lmmc_precond_destroy(&jacobi); lmmc_sparse_destroy(&A); rc = 1; goto done;
         }
 
-        /* Preconditioned should converge in fewer or equal iterations */
+
         if (res_precond.num_iter > res_none.num_iter) {
             rc = 1; lmmc_vec_destroy(&x_none); lmmc_vec_destroy(&x_precond); lmmc_vec_destroy(&b); lmmc_precond_destroy(&jacobi); lmmc_sparse_destroy(&A); goto done;
         }
@@ -301,7 +299,7 @@ int main(void) {
         lmmc_sparse_destroy(&A);
     }
 
-    /* ===== Test 6: BiCGSTAB + ILU0 residual < 1e-8 (Req 2.6) ===== */
+
     {
         lmmc_sparse_mat_t A = {0};
         lmmc_precond_t ilu0 = {0};
@@ -338,7 +336,7 @@ int main(void) {
             lmmc_vec_destroy(&Ax); lmmc_vec_destroy(&x); lmmc_vec_destroy(&b); lmmc_precond_destroy(&ilu0); lmmc_sparse_destroy(&A); rc = 1; goto done;
         }
 
-        /* Verify residual: ||Ax - b|| < 1e-8 */
+
         st = lmmc_sparse_mat_vec_mul(&A, &x, &Ax);
         if (st != LMMC_STATUS_OK) { lmmc_vec_destroy(&Ax); lmmc_vec_destroy(&x); lmmc_vec_destroy(&b); lmmc_precond_destroy(&ilu0); lmmc_sparse_destroy(&A); rc = 1; goto done; }
 
@@ -360,7 +358,7 @@ int main(void) {
         lmmc_sparse_destroy(&A);
     }
 
-    /* ===== Test 7: Error handling - NULL matrix (Req 2.7) ===== */
+
     {
         lmmc_precond_t p = {0};
 
@@ -374,20 +372,20 @@ int main(void) {
         if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; goto done; }
     }
 
-    /* ===== Test 8: Error handling - zero diagonal (Req 2.8) ===== */
+
     {
         lmmc_sparse_builder_t* builder = NULL;
         lmmc_sparse_mat_t A = {0};
         lmmc_precond_t p = {0};
 
-        /* Build a 3x3 matrix with zero on diagonal at row 1 */
+
         st = lmmc_sparse_builder_create(3, 3, 9, &builder);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
         lmmc_sparse_builder_add(builder, 0, 0, 2.0);
         lmmc_sparse_builder_add(builder, 0, 1, 1.0);
         lmmc_sparse_builder_add(builder, 1, 0, 1.0);
-        lmmc_sparse_builder_add(builder, 1, 1, 0.0);  /* zero diagonal */
+        lmmc_sparse_builder_add(builder, 1, 1, 0.0);
         lmmc_sparse_builder_add(builder, 1, 2, 1.0);
         lmmc_sparse_builder_add(builder, 2, 1, 1.0);
         lmmc_sparse_builder_add(builder, 2, 2, 3.0);
@@ -396,7 +394,7 @@ int main(void) {
         lmmc_sparse_builder_destroy(builder);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-        /* Jacobi should fail with zero diagonal */
+
         st = lmmc_precond_create_jacobi(&A, &p);
         if (st != LMMC_STATUS_SINGULAR_MATRIX) {
             lmmc_precond_destroy(&p);
@@ -407,7 +405,7 @@ int main(void) {
         lmmc_sparse_destroy(&A);
     }
 
-    /* ===== Test 9: Multi-size verification - 1x1 to 200x200 (Req 2.9) ===== */
+
     {
         size_t sizes[] = {1, 5, 50, 200};
         size_t num_sizes = 4;
@@ -423,17 +421,17 @@ int main(void) {
             st = build_spd_tridiag(n, &A);
             if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
 
-            /* Jacobi */
+
             st = lmmc_precond_create_jacobi(&A, &jacobi);
             if (st != LMMC_STATUS_OK) { lmmc_sparse_destroy(&A); rc = 1; goto done; }
             lmmc_precond_destroy(&jacobi);
 
-            /* ILU0 */
+
             st = lmmc_precond_create_ilu0(&A, &ilu0_p);
             if (st != LMMC_STATUS_OK) { lmmc_sparse_destroy(&A); rc = 1; goto done; }
             lmmc_precond_destroy(&ilu0_p);
 
-            /* None */
+
             st = lmmc_precond_create_none(n, &none_p);
             if (st != LMMC_STATUS_OK) { lmmc_sparse_destroy(&A); rc = 1; goto done; }
             lmmc_precond_destroy(&none_p);
@@ -442,7 +440,7 @@ int main(void) {
         }
     }
 
-    /* ===== Test 10: Destroy releases resources (Req 2.10) ===== */
+
     {
         lmmc_sparse_mat_t A = {0};
         lmmc_precond_t jacobi = {0};
@@ -465,13 +463,13 @@ int main(void) {
         st = lmmc_precond_create_none(10, &none_p);
         if (st != LMMC_STATUS_OK) { lmmc_precond_destroy(&ilut_p); lmmc_precond_destroy(&ilu0_p); lmmc_precond_destroy(&jacobi); lmmc_sparse_destroy(&A); rc = 1; goto done; }
 
-        /* Destroy all - should not crash or leak */
+
         lmmc_precond_destroy(&none_p);
         lmmc_precond_destroy(&ilut_p);
         lmmc_precond_destroy(&ilu0_p);
         lmmc_precond_destroy(&jacobi);
 
-        /* Destroy NULL - should be safe */
+
         lmmc_precond_destroy(NULL);
 
         lmmc_sparse_destroy(&A);

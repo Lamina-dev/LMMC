@@ -1,34 +1,9 @@
 /**
  * @file test_eigen_gen_prop.c
- * @brief Property-based tests for general eigenvalue decomposition.
+ * @brief 针对 LMMC 中 eigen gen prop 相关接口的单元测试。
  *
- * Implements Property 9 from the design doc:
- *   For any real square matrix A, the trace and determinant relations
- *   should hold over the returned eigenvalues, and complex eigenvalues
- *   should come in conjugate pairs.
- *
- *   Specifically:
- *     - sum(real_parts) ≈ trace(A)
- *       (since trace(A) equals the sum of the eigenvalues, and
- *        each conjugate pair (a + bi, a - bi) contributes 2a to the sum
- *        of real parts).
- *     - product over conjugate pairs of (real^2 + imag^2)
- *         times product of remaining real eigenvalues ≈ det(A)
- *       (det(A) equals the product of the eigenvalues; each conjugate
- *        pair (a + bi)(a - bi) = a^2 + b^2 contributes a real factor).
- *     - Complex eigenvalues come in conjugate pairs.
- *
- *   Also includes specific structural cases:
- *     - Rotation matrix [[cosθ, -sinθ], [sinθ, cosθ]] has eigenvalues
- *       cosθ ± i sinθ.
- *     - Diagonal matrices yield diagonal entries with zero imaginary part.
- *
- *   Random coverage: 30+ random matrices of size 2..5 with the trace
- *   property check (looser tolerance, e.g. 1e-7).
- *
- * Validates: Requirements 6.1, 6.4
+ * @internal
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -39,14 +14,14 @@
 #include "lmmc/eigen.h"
 #include "lmmc/status.h"
 
-/* Fixed seed for reproducible random matrix generation. */
+
 #define RNG_SEED 0xC0FFEEULL
 
-/* Loose tolerance for trace property over random matrices. */
+
 #define TRACE_TOL 1e-7
-/* Tighter tolerance for known-structure matrices. */
+
 #define STRUCT_TOL 1e-9
-/* Tolerance used to decide whether an imaginary part is "zero". */
+
 #define IMAG_ZERO_TOL 1e-9
 
 #define CHECK(cond, msg, ...) do { \
@@ -56,9 +31,7 @@
     } \
 } while (0)
 
-/* ------------------------------------------------------------------ */
-/* Deterministic PRNG (xorshift64*) for reproducible random matrices. */
-/* ------------------------------------------------------------------ */
+
 static unsigned long long g_rng_state = RNG_SEED;
 
 static void rng_seed(unsigned long long s) { g_rng_state = (s == 0) ? 1ULL : s; }
@@ -75,14 +48,11 @@ static unsigned long long rng_u64(void)
 
 static double rng_uniform(double lo, double hi)
 {
-    /* Map upper 53 bits to [0, 1). */
+
     double u = (double)(rng_u64() >> 11) * (1.0 / 9007199254740992.0);
     return lo + (hi - lo) * u;
 }
 
-/* ------------------------------------------------------------------ */
-/* Matrix helpers.                                                     */
-/* ------------------------------------------------------------------ */
 
 static lmmc_status_t fill_mat_from_array(lmmc_mat_t *mat, const lmmc_real_t *src, size_t n)
 {
@@ -103,7 +73,7 @@ static double mat_trace(const lmmc_real_t *A, size_t n)
     return t;
 }
 
-/* General determinant via LU with partial pivoting (used only for n <= 5). */
+
 static int mat_det_via_lu(const lmmc_real_t *A, size_t n, double *out_det)
 {
     double *M;
@@ -117,7 +87,7 @@ static int mat_det_via_lu(const lmmc_real_t *A, size_t n, double *out_det)
 
     sign = 1.0;
     for (k = 0; k < n; k++) {
-        /* find pivot */
+
         p = k;
         for (i = k + 1; i < n; i++) {
             if (fabs(M[i * n + k]) > fabs(M[p * n + k])) p = i;
@@ -146,15 +116,7 @@ static int mat_det_via_lu(const lmmc_real_t *A, size_t n, double *out_det)
     return 0;
 }
 
-/* ------------------------------------------------------------------ */
-/* Property checks.                                                    */
-/* ------------------------------------------------------------------ */
 
-/*
- * Property: complex eigenvalues come in conjugate pairs.
- * For each i with |imag[i]| > tol, find a distinct j (j != i) such that
- *   real[j] == real[i] AND imag[j] == -imag[i] (within tol).
- */
 static int check_conjugate_pairs(const lmmc_eigen_gen_result_t *result, double tol)
 {
     size_t n = result->real_parts.size;
@@ -196,7 +158,7 @@ static int check_conjugate_pairs(const lmmc_eigen_gen_result_t *result, double t
     return 0;
 }
 
-/* sum of real parts equals trace(A) */
+
 static int check_trace_property(const lmmc_real_t *A, size_t n,
                                 const lmmc_eigen_gen_result_t *result,
                                 double tol, const char *label)
@@ -217,14 +179,7 @@ static int check_trace_property(const lmmc_real_t *A, size_t n,
     return 0;
 }
 
-/*
- * Determinant property:
- *   For each conjugate pair (a + bi, a - bi), contributes (a^2 + b^2).
- *   Multiplied with the remaining real eigenvalues should equal det(A).
- *
- * We pair eigenvalues using greedy matching identical to check_conjugate_pairs.
- * Unmatched eigenvalues with |imag| > IMAG_ZERO_TOL are treated as failure.
- */
+
 static int check_det_property(const lmmc_real_t *A, size_t n,
                               const lmmc_eigen_gen_result_t *result,
                               double tol, const char *label)
@@ -256,7 +211,7 @@ static int check_det_property(const lmmc_real_t *A, size_t n,
             used[i] = 1;
             continue;
         }
-        /* find conjugate partner */
+
         for (j = i + 1; j < n; j++) {
             double re_j, im_j;
             if (used[j]) continue;
@@ -288,9 +243,6 @@ static int check_det_property(const lmmc_real_t *A, size_t n,
     return 0;
 }
 
-/* ------------------------------------------------------------------ */
-/* Test runners.                                                       */
-/* ------------------------------------------------------------------ */
 
 static int run_eigen_general(const lmmc_real_t *A, size_t n,
                              lmmc_eigen_gen_result_t *out, const char *label)
@@ -314,12 +266,10 @@ static int run_eigen_general(const lmmc_real_t *A, size_t n,
     return 0;
 }
 
-/* ------------------------------------------------------------------ */
-/* Test 1: Rotation matrix.                                            */
-/* ------------------------------------------------------------------ */
+
 static int test_rotation_matrix(void)
 {
-    /* theta = 0.7: eigenvalues cos(0.7) ± i*sin(0.7). */
+
     const double theta = 0.7;
     const double c = cos(theta);
     const double s = sin(theta);
@@ -331,7 +281,7 @@ static int test_rotation_matrix(void)
     int rc = 0;
     if (run_eigen_general(A, 2, &result, "rotation_2x2") != 0) return 1;
 
-    /* Check exact eigenvalues: cos(theta) ± i*sin(theta). */
+
     {
         size_t found_pos = 0, found_neg = 0;
         size_t i;
@@ -357,9 +307,7 @@ static int test_rotation_matrix(void)
     return rc;
 }
 
-/* ------------------------------------------------------------------ */
-/* Test 2: Diagonal matrices.                                          */
-/* ------------------------------------------------------------------ */
+
 static int test_diagonal_matrix(void)
 {
     lmmc_real_t A[9] = {
@@ -371,7 +319,7 @@ static int test_diagonal_matrix(void)
     int rc = 0;
     if (run_eigen_general(A, 3, &result, "diagonal_3x3") != 0) return 1;
 
-    /* All imag parts must be ~0. */
+
     {
         size_t i;
         for (i = 0; i < 3; i++) {
@@ -382,7 +330,7 @@ static int test_diagonal_matrix(void)
             }
         }
     }
-    /* Multiset of real parts must match {2.5, -1.5, 4.0}. */
+
     if (rc == 0) {
         double expected[3] = { 2.5, -1.5, 4.0 };
         int matched[3] = {0, 0, 0};
@@ -412,9 +360,7 @@ static int test_diagonal_matrix(void)
     return rc;
 }
 
-/* ------------------------------------------------------------------ */
-/* Test 3: Random matrices, trace property + conjugate pairs.          */
-/* ------------------------------------------------------------------ */
+
 static int test_random_matrices(void)
 {
     int trials = 32;
@@ -423,12 +369,12 @@ static int test_random_matrices(void)
     for (t = 0; t < trials; t++) {
         size_t n;
         size_t i;
-        lmmc_real_t A[25]; /* up to 5x5 */
+        lmmc_real_t A[25];
         lmmc_eigen_gen_result_t result;
         char label[32];
         int rc;
 
-        /* size in 2..5 */
+
         n = (size_t)(2 + (int)(rng_u64() % 4));
 
         for (i = 0; i < n * n; i++) {
@@ -458,9 +404,7 @@ static int test_random_matrices(void)
     return 0;
 }
 
-/* ------------------------------------------------------------------ */
-/* Main                                                                */
-/* ------------------------------------------------------------------ */
+
 typedef int (*test_func_t)(void);
 typedef struct { const char *name; test_func_t func; } test_entry_t;
 

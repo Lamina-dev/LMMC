@@ -1,3 +1,9 @@
+/**
+ * @file test_sparse.c
+ * @brief 针对 LMMC 中 sparse 相关接口的单元测试。
+ *
+ * @internal
+ */
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"

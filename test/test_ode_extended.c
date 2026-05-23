@@ -1,3 +1,9 @@
+/**
+ * @file test_ode_extended.c
+ * @brief 针对 LMMC 中 ode extended 相关接口的单元测试。
+ *
+ * @internal
+ */
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -12,10 +18,7 @@ static double pi_val(void) {
     return 3.14159265358979323846;
 }
 
-/* ===== RHS functions ===== */
 
-/* Lotka-Volterra: x' = x(1-y), y' = y(x-1)
- * Conserved quantity: H(x,y) = x - ln(x) + y - ln(y) */
 static lmmc_status_t rhs_lotka_volterra(double t, const double* y, double* yp,
                                          size_t dim, void* ud) {
     (void)t; (void)ud;
@@ -25,7 +28,7 @@ static lmmc_status_t rhs_lotka_volterra(double t, const double* y, double* yp,
     return LMMC_STATUS_OK;
 }
 
-/* Stiff equation: y' = -1000*y */
+
 static lmmc_status_t rhs_stiff(double t, const double* y, double* yp,
                                 size_t dim, void* ud) {
     (void)t; (void)ud;
@@ -34,7 +37,7 @@ static lmmc_status_t rhs_stiff(double t, const double* y, double* yp,
     return LMMC_STATUS_OK;
 }
 
-/* Exponential growth: y' = y, solution y = e^t */
+
 static lmmc_status_t rhs_exp_growth(double t, const double* y, double* yp,
                                      size_t dim, void* ud) {
     (void)t; (void)ud;
@@ -43,7 +46,7 @@ static lmmc_status_t rhs_exp_growth(double t, const double* y, double* yp,
     return LMMC_STATUS_OK;
 }
 
-/* High-dimensional system: y_i' = -(i+1) * y_i, solution y_i(t) = y_i(0)*exp(-(i+1)*t) */
+
 static lmmc_status_t rhs_high_dim(double t, const double* y, double* yp,
                                    size_t dim, void* ud) {
     (void)t; (void)ud;
@@ -54,7 +57,7 @@ static lmmc_status_t rhs_high_dim(double t, const double* y, double* yp,
     return LMMC_STATUS_OK;
 }
 
-/* Harmonic oscillator: x' = v, v' = -x; period = 2*pi */
+
 static lmmc_status_t rhs_harmonic(double t, const double* y, double* yp,
                                    size_t dim, void* ud) {
     (void)t; (void)ud;
@@ -64,7 +67,7 @@ static lmmc_status_t rhs_harmonic(double t, const double* y, double* yp,
     return LMMC_STATUS_OK;
 }
 
-/* Zero RHS: y' = 0 */
+
 static lmmc_status_t rhs_zero(double t, const double* y, double* yp,
                                size_t dim, void* ud) {
     (void)t; (void)y; (void)ud;
@@ -84,14 +87,13 @@ int main(void) {
     memset(&cfg, 0, sizeof(cfg));
     memset(&result, 0, sizeof(result));
 
-    /* ===== Test 1: Lotka-Volterra conserved quantity (Req 11.1) ===== */
-    /* Use RK4 with small fixed step to verify conservation */
+
     {
         double y[2] = {1.5, 1.0};
         double H_initial, H_final;
         lmmc_ode_config_t lv_cfg;
 
-        /* Conserved quantity: H(x,y) = x - ln(x) + y - ln(y) */
+
         H_initial = y[0] - log(y[0]) + y[1] - log(y[1]);
 
         st = lmmc_ode_default_config(0.0, 6.0, 2, &lv_cfg);
@@ -108,8 +110,7 @@ int main(void) {
         if (!lmmc_test_nearly_equal(H_initial, H_final, 1e-6)) { rc = 1; goto done; }
     }
 
-    /* ===== Test 2: Stiff equation y'=-1000y stability (Req 11.2) ===== */
-    /* Euler method with h=0.0005 < 2/1000=0.002 for stability */
+
     {
         double y[1] = {1.0};
         lmmc_ode_config_t stiff_cfg;
@@ -124,13 +125,11 @@ int main(void) {
         st = lmmc_ode_euler_solve(rhs_stiff, NULL, 1, 0.0, 0.01, y, &stiff_cfg, &result);
         if (st != LMMC_STATUS_OK || result.converged != 1) { rc = 1; goto done; }
 
-        /* With h=0.0005, factor = (1 - 1000*0.0005) = 0.5
-         * After 20 steps: 0.5^20 ≈ 9.5e-7
-         * The result should be stable (bounded, positive, and small) */
+
         if (y[0] < 0.0 || y[0] > 1.0) { rc = 1; goto done; }
     }
 
-    /* ===== Test 3: y'=y RK4 global error (Req 11.3) ===== */
+
     {
         double y[1] = {1.0};
         double exact;
@@ -147,11 +146,11 @@ int main(void) {
         if (st != LMMC_STATUS_OK || result.converged != 1) { rc = 1; goto done; }
 
         exact = exp(5.0);
-        /* RK4 with h=0.01 on y'=y over [0,5]: global error < 1e-7 */
+
         if (!lmmc_test_nearly_equal(y[0], exact, TEST_EPS_NORMAL)) { rc = 1; goto done; }
     }
 
-    /* ===== Test 4: High-dimensional system dim=10 (Req 11.4) ===== */
+
     {
         double y[10];
         double exact_val;
@@ -179,8 +178,7 @@ int main(void) {
         }
     }
 
-    /* ===== Test 5: Step size reduction improves accuracy (Req 11.5) ===== */
-    /* Verify that halving the step size significantly reduces error for RK4 */
+
     {
         double y_h[1], y_h2[1];
         double exact;
@@ -189,7 +187,7 @@ int main(void) {
 
         exact = exp(1.0);
 
-        /* Solve with step h = 0.1 */
+
         y_h[0] = 1.0;
         st = lmmc_ode_default_config(0.0, 1.0, 1, &step_cfg);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
@@ -202,7 +200,7 @@ int main(void) {
         if (st != LMMC_STATUS_OK || result.converged != 1) { rc = 1; goto done; }
         err_h = fabs(y_h[0] - exact);
 
-        /* Solve with step h/2 = 0.05 */
+
         y_h2[0] = 1.0;
         step_cfg.initial_step = 0.05;
         step_cfg.min_step = 0.05;
@@ -213,12 +211,11 @@ int main(void) {
         if (st != LMMC_STATUS_OK || result.converged != 1) { rc = 1; goto done; }
         err_h2 = fabs(y_h2[0] - exact);
 
-        /* RK4 is 4th order: error ratio should be ~16 (2^4) */
-        /* Allow some tolerance: ratio should be > 8 */
+
         if (err_h2 == 0.0 || (err_h / err_h2) < 8.0) { rc = 1; goto done; }
     }
 
-    /* ===== Test 6: Harmonic oscillator periodicity (Req 11.6) ===== */
+
     {
         double y[2] = {1.0, 0.0};
         lmmc_ode_config_t ho_cfg;
@@ -234,19 +231,19 @@ int main(void) {
         st = lmmc_ode_rk4_solve(rhs_harmonic, NULL, 2, 0.0, period, y, &ho_cfg, &result);
         if (st != LMMC_STATUS_OK || result.converged != 1) { rc = 1; goto done; }
 
-        /* After one full period, should return to initial state */
+
         if (!lmmc_test_nearly_equal(y[0], 1.0, TEST_EPS_LOOSE)) { rc = 1; goto done; }
         if (!lmmc_test_nearly_equal(y[1], 0.0, TEST_EPS_LOOSE)) { rc = 1; goto done; }
     }
 
-    /* ===== Test 7: Zero RHS y'=0 (Req 11.7) ===== */
+
     {
         double y[3] = {1.5, -2.3, 4.7};
         double y_init[3] = {1.5, -2.3, 4.7};
         lmmc_ode_config_t zero_cfg;
         size_t i;
 
-        /* Test with Euler */
+
         st = lmmc_ode_default_config(0.0, 10.0, 3, &zero_cfg);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
         zero_cfg.initial_step = 0.1;
@@ -262,7 +259,7 @@ int main(void) {
             }
         }
 
-        /* Test with RK4 */
+
         y[0] = 1.5; y[1] = -2.3; y[2] = 4.7;
         zero_cfg.initial_step = 1.0;
         zero_cfg.min_step = 1.0;
@@ -277,12 +274,12 @@ int main(void) {
         }
     }
 
-    /* ===== Test 8: Initial step > interval length (Req 11.8) ===== */
+
     {
         double y[1] = {1.0};
         lmmc_ode_config_t big_step_cfg;
 
-        /* Interval is [0, 0.5] but initial_step = 2.0 */
+
         st = lmmc_ode_default_config(0.0, 0.5, 1, &big_step_cfg);
         if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
         big_step_cfg.initial_step = 2.0;
@@ -290,22 +287,21 @@ int main(void) {
         big_step_cfg.max_step = 2.0;
         big_step_cfg.max_steps = 100;
 
-        /* The solver should handle this gracefully */
+
         st = lmmc_ode_rk4_solve(rhs_exp_growth, NULL, 1, 0.0, 0.5, y, &big_step_cfg, &result);
 
-        /* Accept either success (solver clamped step) or a defined error */
+
         if (st == LMMC_STATUS_OK && result.converged == 1) {
-            /* If it succeeded, verify the result is reasonable */
+
             if (!lmmc_test_nearly_equal(y[0], exp(0.5), 0.1)) { rc = 1; goto done; }
         }
-        /* If it returned an error, that's also acceptable handling */
 
-        /* Also test with Euler */
+
         y[0] = 1.0;
         st = lmmc_ode_euler_solve(rhs_exp_growth, NULL, 1, 0.0, 0.5, y, &big_step_cfg, &result);
         if (st == LMMC_STATUS_OK && result.converged == 1) {
-            /* Euler with one big step clamped to 0.5: y = 1 + 0.5*1 = 1.5 */
-            /* Should be in the ballpark of e^0.5 ≈ 1.6487 */
+
+
             if (fabs(y[0] - exp(0.5)) > 0.5) { rc = 1; goto done; }
         }
     }

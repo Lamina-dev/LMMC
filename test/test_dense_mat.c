@@ -1,18 +1,9 @@
 /**
  * @file test_dense_mat.c
- * @brief Property-based tests for dense matrix operations.
+ * @brief 针对 LMMC 中 dense mat 相关接口的单元测试。
  *
- * Property 6: 矩阵加减法互逆性
- *   For any two same-dimension matrices A and B, mat_add(A, B, C) then
- *   mat_sub(C, B, D) gives D ≈ A within machine precision.
- *
- * Property 7: 单位矩阵性质
- *   For any positive integer n, identity(n) has all 1s on diagonal,
- *   0s elsewhere, trace == n, det == 1.
- *
- * Validates: Requirements 3.1, 3.2, 3.4, 3.5, 3.6
+ * @internal
  */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -21,10 +12,10 @@
 #include "lmmc/config.h"
 #include "lmmc/dense.h"
 
-/* Number of random iterations for property tests */
+
 #define NUM_ITERATIONS 100
 
-/* Floating point tolerance for comparisons */
+
 #define TOLERANCE 1e-12
 
 static int test_failures = 0;
@@ -37,19 +28,19 @@ static int test_failures = 0;
     } \
 } while (0)
 
-/* Generate a random double in [-range, range] */
+
 static double rand_double(double range)
 {
     return ((double)rand() / (double)RAND_MAX) * 2.0 * range - range;
 }
 
-/* Generate a random matrix size between min_size and max_size (inclusive) */
+
 static size_t rand_size(size_t min_size, size_t max_size)
 {
     return min_size + (size_t)(rand() % (int)(max_size - min_size + 1));
 }
 
-/* Fill a matrix with random values in [-range, range] */
+
 static void fill_random_matrix(lmmc_mat_t* mat, double range)
 {
     for (size_t i = 0; i < mat->rows; ++i) {
@@ -60,16 +51,7 @@ static void fill_random_matrix(lmmc_mat_t* mat, double range)
     }
 }
 
-/* ========================================================================
- * Property 6: 矩阵加减法互逆性
- * For any two same-dimension matrices A and B, mat_add(A, B, C) then
- * mat_sub(C, B, D) gives D ≈ A within machine precision.
- * Validates: Requirements 3.1, 3.2
- * ======================================================================== */
 
-/**
- * Test: mat_add then mat_sub recovers original matrix (random sizes 2x2 to 8x8).
- */
 static int test_mat_add_sub_inverse(void)
 {
     int iter;
@@ -81,7 +63,7 @@ static int test_mat_add_sub_inverse(void)
         lmmc_mat_t A, B, C, D;
         lmmc_status_t status;
 
-        /* Create matrices */
+
         status = lmmc_mat_create(rows, cols, &A);
         CHECK(status == LMMC_STATUS_OK, "iter %d: failed to create A (%zux%zu)", iter, rows, cols);
 
@@ -94,19 +76,19 @@ static int test_mat_add_sub_inverse(void)
         status = lmmc_mat_create(rows, cols, &D);
         CHECK(status == LMMC_STATUS_OK, "iter %d: failed to create D (%zux%zu)", iter, rows, cols);
 
-        /* Fill A and B with random values */
+
         fill_random_matrix(&A, 100.0);
         fill_random_matrix(&B, 100.0);
 
-        /* C = A + B */
+
         status = lmmc_mat_add(&A, &B, &C);
         CHECK(status == LMMC_STATUS_OK, "iter %d: mat_add failed", iter);
 
-        /* D = C - B, should equal A */
+
         status = lmmc_mat_sub(&C, &B, &D);
         CHECK(status == LMMC_STATUS_OK, "iter %d: mat_sub failed", iter);
 
-        /* Verify D ≈ A within tolerance */
+
         for (size_t i = 0; i < rows; ++i) {
             for (size_t j = 0; j < cols; ++j) {
                 lmmc_real_t d_val = D.data[i * D.stride + j];
@@ -118,7 +100,7 @@ static int test_mat_add_sub_inverse(void)
             }
         }
 
-        /* Cleanup */
+
         lmmc_mat_destroy(&A);
         lmmc_mat_destroy(&B);
         lmmc_mat_destroy(&C);
@@ -128,10 +110,7 @@ static int test_mat_add_sub_inverse(void)
     return 0;
 }
 
-/**
- * Test: mat_sub then mat_add recovers original matrix (reverse direction).
- * This tests the inverse property from the other direction: (A - B) + B = A.
- */
+
 static int test_mat_sub_add_inverse(void)
 {
     int iter;
@@ -143,7 +122,7 @@ static int test_mat_sub_add_inverse(void)
         lmmc_mat_t A, B, C, D;
         lmmc_status_t status;
 
-        /* Create matrices */
+
         status = lmmc_mat_create(rows, cols, &A);
         CHECK(status == LMMC_STATUS_OK, "iter %d: failed to create A", iter);
 
@@ -156,19 +135,19 @@ static int test_mat_sub_add_inverse(void)
         status = lmmc_mat_create(rows, cols, &D);
         CHECK(status == LMMC_STATUS_OK, "iter %d: failed to create D", iter);
 
-        /* Fill A and B with random values */
+
         fill_random_matrix(&A, 100.0);
         fill_random_matrix(&B, 100.0);
 
-        /* C = A - B */
+
         status = lmmc_mat_sub(&A, &B, &C);
         CHECK(status == LMMC_STATUS_OK, "iter %d: mat_sub failed", iter);
 
-        /* D = C + B, should equal A */
+
         status = lmmc_mat_add(&C, &B, &D);
         CHECK(status == LMMC_STATUS_OK, "iter %d: mat_add failed", iter);
 
-        /* Verify D ≈ A within tolerance */
+
         for (size_t i = 0; i < rows; ++i) {
             for (size_t j = 0; j < cols; ++j) {
                 lmmc_real_t d_val = D.data[i * D.stride + j];
@@ -180,7 +159,7 @@ static int test_mat_sub_add_inverse(void)
             }
         }
 
-        /* Cleanup */
+
         lmmc_mat_destroy(&A);
         lmmc_mat_destroy(&B);
         lmmc_mat_destroy(&C);
@@ -190,16 +169,7 @@ static int test_mat_sub_add_inverse(void)
     return 0;
 }
 
-/* ========================================================================
- * Property 7: 单位矩阵性质
- * For any positive integer n, identity(n) has all 1s on diagonal,
- * 0s elsewhere, trace == n, det == 1.
- * Validates: Requirements 3.4, 3.5, 3.6
- * ======================================================================== */
 
-/**
- * Test: identity matrix has correct structure (1s on diagonal, 0s elsewhere).
- */
 static int test_identity_structure(void)
 {
     int iter;
@@ -213,11 +183,11 @@ static int test_identity_structure(void)
         status = lmmc_mat_identity(n, &I);
         CHECK(status == LMMC_STATUS_OK, "iter %d: mat_identity(%zu) failed", iter, n);
 
-        /* Verify dimensions */
+
         CHECK(I.rows == n, "iter %d: identity rows = %zu, expected %zu", iter, I.rows, n);
         CHECK(I.cols == n, "iter %d: identity cols = %zu, expected %zu", iter, I.cols, n);
 
-        /* Verify structure: diagonal = 1, off-diagonal = 0 */
+
         for (size_t i = 0; i < n; ++i) {
             for (size_t j = 0; j < n; ++j) {
                 lmmc_real_t val = I.data[i * I.stride + j];
@@ -239,9 +209,7 @@ static int test_identity_structure(void)
     return 0;
 }
 
-/**
- * Test: trace of identity matrix equals n.
- */
+
 static int test_identity_trace(void)
 {
     int iter;
@@ -269,9 +237,7 @@ static int test_identity_trace(void)
     return 0;
 }
 
-/**
- * Test: determinant of identity matrix equals 1.
- */
+
 static int test_identity_det(void)
 {
     int iter;
@@ -299,9 +265,6 @@ static int test_identity_det(void)
     return 0;
 }
 
-/* ========================================================================
- * Main
- * ======================================================================== */
 
 int main(void)
 {
