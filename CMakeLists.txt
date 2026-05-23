@@ -5,6 +5,18 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
+# Force MSVC to treat all source files (including UTF-8 LAMMP headers without BOM)
+# as UTF-8. Avoids C2026/C4819 errors when including lammp/lmmp.h on locales whose
+# default code page is not UTF-8 (e.g. Chinese Windows / GBK).
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+
+# GCC/Clang: be explicit that source and execution charset are UTF-8.
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-finput-charset=UTF-8 -fexec-charset=UTF-8)
+endif()
+
 option(LMMC_BUILD_TESTS "Build LMMC tests" ON)
 option(LMMC_BUILD_EXAMPLES "Build LMMC examples" ON)
 option(LMMC_BUILD_SHARED "Build shared LMMC library (for Python ctypes/FFI)" ON)
@@ -61,14 +73,19 @@ endif()
 
 set(LMMC_SOURCES
     src/dense.c
+    src/eigen.c
     src/init.c
+    src/interp.c
     src/itersolve.c
     src/linear_algebra.c
     src/nonlinear.c
     src/numeric.c
     src/ode.c
     src/precond.c
+    src/quadrature.c
+    src/random.c
     src/sparse.c
+    src/sparse_direct.c
     src/stats.c
     src/status.c
     src/tensor.c
@@ -93,6 +110,17 @@ foreach(_lmmc_target IN LISTS LMMC_LIB_TARGETS)
             ${LAMMP_INCLUDE_DIR}
     )
 endforeach()
+
+# Optional BLAS/LAPACK acceleration (Requirement 18)
+option(LMMC_USE_BLAS "Enable external BLAS/LAPACK acceleration" OFF)
+if(LMMC_USE_BLAS)
+    find_package(BLAS REQUIRED)
+    find_package(LAPACK REQUIRED)
+    foreach(_lmmc_target IN LISTS LMMC_LIB_TARGETS)
+        target_compile_definitions(${_lmmc_target} PRIVATE LMMC_USE_BLAS=1)
+        target_link_libraries(${_lmmc_target} PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
+    endforeach()
+endif()
 
 if(TARGET LammpCore)
     # LammpCore is already a CMake target (e.g. built via add_subdirectory

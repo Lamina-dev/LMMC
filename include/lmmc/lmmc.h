@@ -13,6 +13,10 @@
 #include "lmmc/sparse.h"
 #include "lmmc/stats.h"
 #include "lmmc/tensor.h"
+#include "lmmc/eigen.h"
+#include "lmmc/interp.h"
+#include "lmmc/quadrature.h"
+#include "lmmc/random.h"
 
 #define LMMC_VERSION_MAJOR 0
 #define LMMC_VERSION_MINOR 1

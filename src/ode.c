@@ -2,12 +2,8 @@
 #include <string.h>
 #include <stdio.h>
 #include "memory_bridge.h"
-#include "lmmc/config.h"
+#include "internal.h"
 #include "lmmc/ode.h"
-
-static int lmmc_is_finite_number(lmmc_real_t v) {
-    return isfinite(v) ? 1 : 0;
-}
 
 static void lmmc_ode_do_log(const lmmc_ode_config_t* cfg, size_t step, lmmc_real_t t, const lmmc_real_t* y, size_t dim) {
     if (cfg->log_cb != NULL) {
@@ -15,36 +11,6 @@ static void lmmc_ode_do_log(const lmmc_ode_config_t* cfg, size_t step, lmmc_real
     } else if (cfg->verbose) {
         printf("Step %zu: t = %.10e, y[0] = %.10e\n", step, t, dim > 0 ? y[0] : 0.0);
     }
-}
-
-static int lmmc_mul_overflow_size(size_t a, size_t b, size_t* out) {
-    if (a == 0 || b == 0) {
-        *out = 0;
-        return 0;
-    }
-    if (a > ((size_t)-1) / b) {
-        return 1;
-    }
-    *out = a * b;
-    return 0;
-}
-
-static lmmc_real_t lmmc_absd(lmmc_real_t x) {
-    return x < 0.0 ? -x : x;
-}
-
-static lmmc_real_t lmmc_maxd(lmmc_real_t a, lmmc_real_t b) {
-    return a > b ? a : b;
-}
-
-static lmmc_real_t lmmc_clampd(lmmc_real_t v, lmmc_real_t lo, lmmc_real_t hi) {
-    if (v < lo) {
-        return lo;
-    }
-    if (v > hi) {
-        return hi;
-    }
-    return v;
 }
 
 static void lmmc_ode_reset_result(lmmc_ode_result_t* out_result, lmmc_real_t t_start) {
@@ -91,32 +57,37 @@ lmmc_status_t lmmc_ode_default_config(
     lmmc_real_t min_step = 0.0;
     lmmc_real_t max_step = 0.0;
     size_t max_steps = 0;
+    lmmc_real_t hundred = 100.0;
+    lmmc_real_t ten = 10.0;
+    lmmc_real_t span_factor = 1e-10;
+    lmmc_real_t step_factor = 1e-6;
+    lmmc_real_t tenth = 0.1;
 
-    if (out_cfg == NULL || problem_dim == 0 || !lmmc_is_finite_number(t_start) ||
-        !lmmc_is_finite_number(t_end) || !(t_end > t_start)) {
+    if (out_cfg == NULL || problem_dim == 0 || !lmmc_is_finite(&t_start) ||
+        !lmmc_is_finite(&t_end) || !(t_end > t_start)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    span = t_end - t_start;
-    initial_step = span / 100.0;
-    if (!lmmc_is_finite_number(initial_step) || initial_step <= 0.0) {
-        initial_step = 1e-3;
+    LMMC_REAL_SUB(&span, &t_end, &t_start);
+    LMMC_REAL_DIV(&initial_step, &span, &hundred);
+    if (!lmmc_is_finite(&initial_step) || initial_step <= 0.0) {
+        LMMC_REAL_SET_D(&initial_step, 1e-3);
     }
 
-    min_step = span * 1e-10;
-    if (!lmmc_is_finite_number(min_step) || min_step <= 0.0) {
-        min_step = initial_step * 1e-6;
+    LMMC_REAL_MUL(&min_step, &span, &span_factor);
+    if (!lmmc_is_finite(&min_step) || min_step <= 0.0) {
+        LMMC_REAL_MUL(&min_step, &initial_step, &step_factor);
     }
     if (min_step > initial_step) {
-        min_step = initial_step * 0.1;
+        LMMC_REAL_MUL(&min_step, &initial_step, &tenth);
     }
 
-    max_step = span / 10.0;
-    if (!lmmc_is_finite_number(max_step) || max_step <= 0.0) {
-        max_step = initial_step;
+    LMMC_REAL_DIV(&max_step, &span, &ten);
+    if (!lmmc_is_finite(&max_step) || max_step <= 0.0) {
+        LMMC_REAL_SET(&max_step, &initial_step);
     }
     if (max_step < initial_step) {
-        max_step = initial_step;
+        LMMC_REAL_SET(&max_step, &initial_step);
     }
 
     if (problem_dim > ((size_t)-1) / 10000) {
@@ -156,7 +127,7 @@ static lmmc_status_t lmmc_ode_load_and_validate_config(
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    if (!lmmc_is_finite_number(t_start) || !lmmc_is_finite_number(t_end) || !(t_end > t_start)) {
+    if (!lmmc_is_finite(&t_start) || !lmmc_is_finite(&t_end) || !(t_end > t_start)) {
         if (out_result != NULL) {
             out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_STEP;
         }
@@ -182,7 +153,7 @@ static lmmc_status_t lmmc_ode_load_and_validate_config(
         }
     }
 
-    if (!lmmc_is_finite_number(out_cfg->abs_tol) || !lmmc_is_finite_number(out_cfg->rel_tol) ||
+    if (!lmmc_is_finite(&out_cfg->abs_tol) || !lmmc_is_finite(&out_cfg->rel_tol) ||
         out_cfg->abs_tol < 0.0 || out_cfg->rel_tol < 0.0) {
         if (out_result != NULL) {
             out_result->failure_reason = LMMC_ODE_FAILURE_TOLERANCE_INCONSISTENT;
@@ -190,10 +161,10 @@ static lmmc_status_t lmmc_ode_load_and_validate_config(
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    if (!lmmc_is_finite_number(out_cfg->initial_step) || !lmmc_is_finite_number(out_cfg->min_step) ||
-        !lmmc_is_finite_number(out_cfg->max_step) || out_cfg->initial_step <= 0.0 ||
+    if (!lmmc_is_finite(&out_cfg->initial_step) || !lmmc_is_finite(&out_cfg->min_step) ||
+        !lmmc_is_finite(&out_cfg->max_step) || out_cfg->initial_step <= 0.0 ||
         out_cfg->min_step <= 0.0 || out_cfg->max_step <= 0.0 || out_cfg->min_step > out_cfg->max_step ||
-        out_cfg->max_steps == 0 || !lmmc_is_finite_number(out_cfg->adaptive_step_beta) ||
+        out_cfg->max_steps == 0 || !lmmc_is_finite(&out_cfg->adaptive_step_beta) ||
         out_cfg->adaptive_step_beta <= 0.0 || out_cfg->adaptive_step_beta > 1.0) {
         if (out_result != NULL) {
             out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_STEP;
@@ -230,7 +201,7 @@ static lmmc_status_t lmmc_ode_rhs_eval(
 
     *io_eval_count += 1;
     for (i = 0; i < dim; ++i) {
-        if (!lmmc_is_finite_number(y_prime[i])) {
+        if (!lmmc_is_finite(&y_prime[i])) {
             return LMMC_STATUS_NUMERICAL_FAILURE;
         }
     }
@@ -245,7 +216,7 @@ static int lmmc_ode_state_is_finite(const lmmc_real_t* y, size_t dim) {
     }
 
     for (i = 0; i < dim; ++i) {
-        if (!lmmc_is_finite_number(y[i])) {
+        if (!lmmc_is_finite(&y[i])) {
             return 0;
         }
     }
@@ -279,13 +250,14 @@ static lmmc_status_t validate_and_init_ode_config(
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }
 
-    if (lmmc_mul_overflow_size(dim, sizeof(lmmc_real_t), out_work_bytes)) {
+    if (!lmmc_safe_mul_size(dim, sizeof(lmmc_real_t), out_work_bytes)) {
         out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_DIMENSION;
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
     return LMMC_STATUS_OK;
 }
+
 
 lmmc_status_t lmmc_ode_euler_solve(
     lmmc_ode_rhs_t rhs,
@@ -315,20 +287,25 @@ lmmc_status_t lmmc_ode_euler_solve(
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
 
-    h = lmmc_clampd(local_cfg.initial_step, local_cfg.min_step, local_cfg.max_step);
-    if (h > (t_end - t_start)) {
-        h = t_end - t_start;
+    h = lmmc_clamp(local_cfg.initial_step, local_cfg.min_step, local_cfg.max_step);
+    {
+        lmmc_real_t span;
+        LMMC_REAL_SUB(&span, &t_end, &t_start);
+        if (h > span) {
+            h = span;
+        }
     }
 
     lmmc_ode_do_log(&local_cfg, 0, t, y, dim);
 
     while (t < t_end && out_result->num_steps < local_cfg.max_steps) {
         size_t i = 0;
-        lmmc_real_t rem = t_end - t;
+        lmmc_real_t rem;
         int callback_failed = 0;
         lmmc_status_t st = LMMC_STATUS_OK;
 
-        if (rem <= 0.0 || !lmmc_is_finite_number(rem)) {
+        LMMC_REAL_SUB(&rem, &t_end, &t);
+        if (rem <= 0.0 || !lmmc_is_finite(&rem)) {
             break;
         }
 
@@ -344,7 +321,9 @@ lmmc_status_t lmmc_ode_euler_solve(
         }
 
         for (i = 0; i < dim; ++i) {
-            y[i] += h * y_prime[i];
+            lmmc_real_t tmp;
+            LMMC_REAL_MUL(&tmp, &h, &y_prime[i]);
+            LMMC_REAL_ADD(&y[i], &y[i], &tmp);
         }
 
         if (!lmmc_ode_state_is_finite(y, dim)) {
@@ -353,8 +332,8 @@ lmmc_status_t lmmc_ode_euler_solve(
             return LMMC_STATUS_NUMERICAL_FAILURE;
         }
 
-        t += h;
-        if (!lmmc_is_finite_number(t)) {
+        LMMC_REAL_ADD(&t, &t, &h);
+        if (!lmmc_is_finite(&t)) {
             out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
             lmmc_free(y_prime);
             return LMMC_STATUS_NUMERICAL_FAILURE;
@@ -419,20 +398,33 @@ lmmc_status_t lmmc_ode_rk4_solve(
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
 
-    h = lmmc_clampd(local_cfg.initial_step, local_cfg.min_step, local_cfg.max_step);
-    if (h > (t_end - t_start)) {
-        h = t_end - t_start;
+    h = lmmc_clamp(local_cfg.initial_step, local_cfg.min_step, local_cfg.max_step);
+    {
+        lmmc_real_t span;
+        LMMC_REAL_SUB(&span, &t_end, &t_start);
+        if (h > span) {
+            h = span;
+        }
     }
 
     lmmc_ode_do_log(&local_cfg, 0, t, y, dim);
 
     while (t < t_end && out_result->num_steps < local_cfg.max_steps) {
         size_t i = 0;
-        lmmc_real_t rem = t_end - t;
+        lmmc_real_t rem;
         int callback_failed = 0;
         lmmc_status_t st = LMMC_STATUS_OK;
+        lmmc_real_t half_h;
+        lmmc_real_t t_mid;
+        lmmc_real_t t_next;
+        lmmc_real_t half = 0.5;
+        lmmc_real_t sixth;
+        lmmc_real_t two = 2.0;
+        lmmc_real_t six = 6.0;
+        lmmc_real_t h_over_6;
 
-        if (rem <= 0.0 || !lmmc_is_finite_number(rem)) {
+        LMMC_REAL_SUB(&rem, &t_end, &t);
+        if (rem <= 0.0 || !lmmc_is_finite(&rem)) {
             break;
         }
 
@@ -440,55 +432,80 @@ lmmc_status_t lmmc_ode_rk4_solve(
             h = rem;
         }
 
+        /* k1 = f(t, y) */
         st = lmmc_ode_rhs_eval(rhs, t, y, k1, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
         if (st != LMMC_STATUS_OK) {
             out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-            goto fail;
+            goto rk4_fail;
         }
 
+        /* y_tmp = y + 0.5*h*k1 */
+        LMMC_REAL_MUL(&half_h, &half, &h);
         for (i = 0; i < dim; ++i) {
-            y_tmp[i] = y[i] + 0.5 * h * k1[i];
+            lmmc_real_t tmp;
+            LMMC_REAL_MUL(&tmp, &half_h, &k1[i]);
+            LMMC_REAL_ADD(&y_tmp[i], &y[i], &tmp);
         }
 
-        st = lmmc_ode_rhs_eval(rhs, t + 0.5 * h, y_tmp, k2, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
+        /* k2 = f(t + 0.5*h, y_tmp) */
+        LMMC_REAL_ADD(&t_mid, &t, &half_h);
+        st = lmmc_ode_rhs_eval(rhs, t_mid, y_tmp, k2, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
         if (st != LMMC_STATUS_OK) {
             out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-            goto fail;
+            goto rk4_fail;
         }
 
+        /* y_tmp = y + 0.5*h*k2 */
         for (i = 0; i < dim; ++i) {
-            y_tmp[i] = y[i] + 0.5 * h * k2[i];
+            lmmc_real_t tmp;
+            LMMC_REAL_MUL(&tmp, &half_h, &k2[i]);
+            LMMC_REAL_ADD(&y_tmp[i], &y[i], &tmp);
         }
 
-        st = lmmc_ode_rhs_eval(rhs, t + 0.5 * h, y_tmp, k3, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
+        /* k3 = f(t + 0.5*h, y_tmp) */
+        st = lmmc_ode_rhs_eval(rhs, t_mid, y_tmp, k3, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
         if (st != LMMC_STATUS_OK) {
             out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-            goto fail;
+            goto rk4_fail;
         }
 
+        /* y_tmp = y + h*k3 */
         for (i = 0; i < dim; ++i) {
-            y_tmp[i] = y[i] + h * k3[i];
+            lmmc_real_t tmp;
+            LMMC_REAL_MUL(&tmp, &h, &k3[i]);
+            LMMC_REAL_ADD(&y_tmp[i], &y[i], &tmp);
         }
 
-        st = lmmc_ode_rhs_eval(rhs, t + h, y_tmp, k4, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
+        /* k4 = f(t + h, y_tmp) */
+        LMMC_REAL_ADD(&t_next, &t, &h);
+        st = lmmc_ode_rhs_eval(rhs, t_next, y_tmp, k4, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
         if (st != LMMC_STATUS_OK) {
             out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-            goto fail;
+            goto rk4_fail;
         }
 
+        /* y += (h/6) * (k1 + 2*k2 + 2*k3 + k4) */
+        LMMC_REAL_DIV(&h_over_6, &h, &six);
         for (i = 0; i < dim; ++i) {
-            y[i] += (h / 6.0) * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i]);
+            lmmc_real_t t2k2, t2k3, sum1, sum2, sum3, weighted;
+            LMMC_REAL_MUL(&t2k2, &two, &k2[i]);
+            LMMC_REAL_MUL(&t2k3, &two, &k3[i]);
+            LMMC_REAL_ADD(&sum1, &k1[i], &t2k2);
+            LMMC_REAL_ADD(&sum2, &sum1, &t2k3);
+            LMMC_REAL_ADD(&sum3, &sum2, &k4[i]);
+            LMMC_REAL_MUL(&weighted, &h_over_6, &sum3);
+            LMMC_REAL_ADD(&y[i], &y[i], &weighted);
         }
 
         if (!lmmc_ode_state_is_finite(y, dim)) {
             out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-            goto fail;
+            goto rk4_fail;
         }
 
-        t += h;
-        if (!lmmc_is_finite_number(t)) {
+        LMMC_REAL_ADD(&t, &t, &h);
+        if (!lmmc_is_finite(&t)) {
             out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-            goto fail;
+            goto rk4_fail;
         }
 
         out_result->num_steps += 1;
@@ -511,7 +528,7 @@ lmmc_status_t lmmc_ode_rk4_solve(
     lmmc_free(k1);
     return LMMC_STATUS_OK;
 
-fail:
+rk4_fail:
     lmmc_free(y_tmp);
     lmmc_free(k4);
     lmmc_free(k3);
@@ -520,275 +537,3 @@ fail:
     return LMMC_STATUS_NUMERICAL_FAILURE;
 }
 
-lmmc_status_t lmmc_ode_rk45_solve(
-    lmmc_ode_rhs_t rhs,
-    void* user_data,
-    size_t dim,
-    lmmc_real_t t_start,
-    lmmc_real_t t_end,
-    lmmc_real_t* y,
-    const lmmc_ode_config_t* cfg,
-    lmmc_ode_result_t* out_result
-) {
-    lmmc_ode_config_t local_cfg = {0};
-    size_t work_bytes = 0;
-    lmmc_real_t* k1 = NULL;
-    lmmc_real_t* k2 = NULL;
-    lmmc_real_t* k3 = NULL;
-    lmmc_real_t* k4 = NULL;
-    lmmc_real_t* k5 = NULL;
-    lmmc_real_t* k6 = NULL;
-    lmmc_real_t* k7 = NULL;
-    lmmc_real_t* y_tmp = NULL;
-    lmmc_real_t* y5 = NULL;
-    lmmc_real_t t = t_start;
-    lmmc_real_t h = 0.0;
-    lmmc_status_t init_st;
-
-    init_st = validate_and_init_ode_config(rhs, dim, t_start, t_end, y, cfg, &local_cfg, out_result, &work_bytes);
-    if (init_st != LMMC_STATUS_OK) {
-        return init_st;
-    }
-
-    k1 = (lmmc_real_t*)lmmc_alloc(work_bytes);
-    k2 = (lmmc_real_t*)lmmc_alloc(work_bytes);
-    k3 = (lmmc_real_t*)lmmc_alloc(work_bytes);
-    k4 = (lmmc_real_t*)lmmc_alloc(work_bytes);
-    k5 = (lmmc_real_t*)lmmc_alloc(work_bytes);
-    k6 = (lmmc_real_t*)lmmc_alloc(work_bytes);
-    k7 = (lmmc_real_t*)lmmc_alloc(work_bytes);
-    y_tmp = (lmmc_real_t*)lmmc_alloc(work_bytes);
-    y5 = (lmmc_real_t*)lmmc_alloc(work_bytes);
-
-    if (k1 == NULL || k2 == NULL || k3 == NULL || k4 == NULL || k5 == NULL || k6 == NULL ||
-        k7 == NULL || y_tmp == NULL || y5 == NULL) {
-        lmmc_free(y5);
-        lmmc_free(y_tmp);
-        lmmc_free(k7);
-        lmmc_free(k6);
-        lmmc_free(k5);
-        lmmc_free(k4);
-        lmmc_free(k3);
-        lmmc_free(k2);
-        lmmc_free(k1);
-        out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-        return LMMC_STATUS_ALLOCATION_FAILED;
-    }
-
-    h = lmmc_clampd(local_cfg.initial_step, local_cfg.min_step, local_cfg.max_step);
-    if (h > (t_end - t_start)) {
-        h = t_end - t_start;
-    }
-
-    lmmc_ode_do_log(&local_cfg, 0, t, y, dim);
-
-    while (t < t_end && out_result->num_steps < local_cfg.max_steps) {
-        lmmc_real_t rem = t_end - t;
-        int accepted = 0;
-        size_t reject_guard = 0;
-
-        if (rem <= 0.0 || !lmmc_is_finite_number(rem)) {
-            break;
-        }
-
-        if (h > rem) {
-            h = rem;
-        }
-
-        while (!accepted) {
-            size_t i = 0;
-            int callback_failed = 0;
-            lmmc_real_t err_norm = 0.0;
-            lmmc_real_t factor = 1.0;
-            lmmc_real_t h_new = 0.0;
-            lmmc_status_t st = LMMC_STATUS_OK;
-
-            if (++reject_guard > 1000) {
-                out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-                goto fail;
-            }
-
-            if (h < local_cfg.min_step) {
-                out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_STEP;
-                goto fail;
-            }
-
-            st = lmmc_ode_rhs_eval(rhs, t, y, k1, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
-            if (st != LMMC_STATUS_OK) {
-                out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-                goto fail;
-            }
-
-            for (i = 0; i < dim; ++i) {
-                y_tmp[i] = y[i] + h * (1.0 / 5.0) * k1[i];
-            }
-            st = lmmc_ode_rhs_eval(rhs, t + h * (1.0 / 5.0), y_tmp, k2, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
-            if (st != LMMC_STATUS_OK) {
-                out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-                goto fail;
-            }
-
-            for (i = 0; i < dim; ++i) {
-                y_tmp[i] = y[i] + h * ((3.0 / 40.0) * k1[i] + (9.0 / 40.0) * k2[i]);
-            }
-            st = lmmc_ode_rhs_eval(rhs, t + h * (3.0 / 10.0), y_tmp, k3, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
-            if (st != LMMC_STATUS_OK) {
-                out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-                goto fail;
-            }
-
-            for (i = 0; i < dim; ++i) {
-                y_tmp[i] = y[i] + h * ((44.0 / 45.0) * k1[i] + (-56.0 / 15.0) * k2[i] + (32.0 / 9.0) * k3[i]);
-            }
-            st = lmmc_ode_rhs_eval(rhs, t + h * (4.0 / 5.0), y_tmp, k4, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
-            if (st != LMMC_STATUS_OK) {
-                out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-                goto fail;
-            }
-
-            for (i = 0; i < dim; ++i) {
-                y_tmp[i] = y[i] + h * ((19372.0 / 6561.0) * k1[i] + (-25360.0 / 2187.0) * k2[i] +
-                                       (64448.0 / 6561.0) * k3[i] + (-212.0 / 729.0) * k4[i]);
-            }
-            st = lmmc_ode_rhs_eval(rhs, t + h * (8.0 / 9.0), y_tmp, k5, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
-            if (st != LMMC_STATUS_OK) {
-                out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-                goto fail;
-            }
-
-            for (i = 0; i < dim; ++i) {
-                y_tmp[i] = y[i] + h * ((9017.0 / 3168.0) * k1[i] + (-355.0 / 33.0) * k2[i] +
-                                       (46732.0 / 5247.0) * k3[i] + (49.0 / 176.0) * k4[i] +
-                                       (-5103.0 / 18656.0) * k5[i]);
-            }
-            st = lmmc_ode_rhs_eval(rhs, t + h, y_tmp, k6, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
-            if (st != LMMC_STATUS_OK) {
-                out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-                goto fail;
-            }
-
-            for (i = 0; i < dim; ++i) {
-                y_tmp[i] = y[i] + h * ((35.0 / 384.0) * k1[i] + (500.0 / 1113.0) * k3[i] +
-                                       (125.0 / 192.0) * k4[i] + (-2187.0 / 6784.0) * k5[i] +
-                                       (11.0 / 84.0) * k6[i]);
-            }
-            st = lmmc_ode_rhs_eval(rhs, t + h, y_tmp, k7, dim, user_data, &out_result->num_rhs_evals, &callback_failed);
-            if (st != LMMC_STATUS_OK) {
-                out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-                goto fail;
-            }
-
-            for (i = 0; i < dim; ++i) {
-                lmmc_real_t y4 = 0.0;
-                lmmc_real_t diff = 0.0;
-                lmmc_real_t tol = 0.0;
-                lmmc_real_t ratio = 0.0;
-
-                y5[i] = y[i] + h * ((35.0 / 384.0) * k1[i] + (500.0 / 1113.0) * k3[i] +
-                                    (125.0 / 192.0) * k4[i] + (-2187.0 / 6784.0) * k5[i] +
-                                    (11.0 / 84.0) * k6[i]);
-
-                y4 = y[i] + h * ((5179.0 / 57600.0) * k1[i] + (7571.0 / 16695.0) * k3[i] +
-                                 (393.0 / 640.0) * k4[i] + (-92097.0 / 339200.0) * k5[i] +
-                                 (187.0 / 2100.0) * k6[i] + (1.0 / 40.0) * k7[i]);
-
-                diff = lmmc_absd(y5[i] - y4);
-                tol = local_cfg.abs_tol + local_cfg.rel_tol * lmmc_maxd(lmmc_absd(y[i]), lmmc_absd(y5[i]));
-                if (tol <= 0.0) {
-                    tol = 1e-30;
-                }
-
-                ratio = diff / tol;
-                if (!lmmc_is_finite_number(ratio)) {
-                    out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-                    goto fail;
-                }
-                if (ratio > err_norm) {
-                    err_norm = ratio;
-                }
-            }
-
-            if (err_norm <= 1.0) {
-                for (i = 0; i < dim; ++i) {
-                    y[i] = y5[i];
-                }
-
-                if (!lmmc_ode_state_is_finite(y, dim)) {
-                    out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-                    goto fail;
-                }
-
-                t += h;
-                if (!lmmc_is_finite_number(t)) {
-                    out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-                    goto fail;
-                }
-
-                out_result->num_steps += 1;
-                out_result->final_t = t;
-                accepted = 1;
-                lmmc_ode_do_log(&local_cfg, out_result->num_steps, t, y, dim);
-            }
-
-            if (err_norm <= 1e-16) {
-                factor = 2.0;
-            } else {
-                factor = local_cfg.adaptive_step_beta * pow(1.0 / err_norm, 0.2);
-            }
-
-            if (!lmmc_is_finite_number(factor)) {
-                out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-                goto fail;
-            }
-
-            factor = lmmc_clampd(factor, 0.2, 5.0);
-            h_new = lmmc_clampd(h * factor, local_cfg.min_step, local_cfg.max_step);
-            if (!lmmc_is_finite_number(h_new) || h_new <= 0.0) {
-                out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_STEP;
-                goto fail;
-            }
-
-            h = h_new;
-
-            if (!accepted && h <= local_cfg.min_step) {
-                out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_STEP;
-                goto fail;
-            }
-
-            if (accepted) {
-                break;
-            }
-        }
-    }
-
-    if (t >= t_end) {
-        out_result->converged = 1;
-        out_result->failure_reason = LMMC_ODE_FAILURE_NONE;
-    } else {
-        out_result->converged = 0;
-        out_result->failure_reason = LMMC_ODE_FAILURE_MAX_STEPS;
-    }
-
-    lmmc_free(y5);
-    lmmc_free(y_tmp);
-    lmmc_free(k7);
-    lmmc_free(k6);
-    lmmc_free(k5);
-    lmmc_free(k4);
-    lmmc_free(k3);
-    lmmc_free(k2);
-    lmmc_free(k1);
-    return LMMC_STATUS_OK;
-
-fail:
-    lmmc_free(y5);
-    lmmc_free(y_tmp);
-    lmmc_free(k7);
-    lmmc_free(k6);
-    lmmc_free(k5);
-    lmmc_free(k4);
-    lmmc_free(k3);
-    lmmc_free(k2);
-    lmmc_free(k1);
-    return LMMC_STATUS_NUMERICAL_FAILURE;
-}

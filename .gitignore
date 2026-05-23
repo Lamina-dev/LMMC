@@ -51,3 +51,5 @@ describe.txt
 __pycache__/
 *.pyc
 *.py
+
+.kiro/

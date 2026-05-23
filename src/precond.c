@@ -956,10 +956,7 @@ lmmc_status_t lmmc_precond_apply(const lmmc_precond_t* precond, const lmmc_vec_t
     }
 
     if (precond->type == LMMC_PRECOND_NONE) {
-        for(i = 0; i < rhs->size; ++i) {
-            LMMC_REAL_SET(&out->data[i], &rhs->data[i]);
-        }
-        return LMMC_STATUS_OK;
+        return lmmc_vec_copy(rhs, out);
     }
 
     if (precond->type == LMMC_PRECOND_JACOBI) {

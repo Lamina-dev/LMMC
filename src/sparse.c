@@ -920,3 +920,700 @@ lmmc_status_t lmmc_sparse_builder_build(lmmc_sparse_builder_t* b, lmmc_sparse_fo
     lmmc_free(next);
     return LMMC_STATUS_OK;
 }
+
+/* === COO 格式操作 === */
+
+lmmc_status_t lmmc_sparse_coo_create(
+    size_t rows, size_t cols, size_t capacity,
+    lmmc_sparse_coo_t* out_coo
+) {
+    size_t sz_idx = 0;
+    size_t sz_vals = 0;
+    size_t actual_cap;
+
+    if (out_coo == NULL || rows == 0 || cols == 0) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    actual_cap = capacity > 0 ? capacity : 16;
+
+    if (lmmc_mul_overflow_size(actual_cap, sizeof(size_t), &sz_idx) ||
+        lmmc_mul_overflow_size(actual_cap, sizeof(lmmc_real_t), &sz_vals)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    out_coo->row_idx = (size_t*)lmmc_alloc(sz_idx);
+    out_coo->col_idx = (size_t*)lmmc_alloc(sz_idx);
+    out_coo->values = (lmmc_real_t*)lmmc_alloc(sz_vals);
+
+    if (out_coo->row_idx == NULL || out_coo->col_idx == NULL || out_coo->values == NULL) {
+        if (out_coo->row_idx) lmmc_free(out_coo->row_idx);
+        if (out_coo->col_idx) lmmc_free(out_coo->col_idx);
+        if (out_coo->values) lmmc_free(out_coo->values);
+        out_coo->row_idx = NULL;
+        out_coo->col_idx = NULL;
+        out_coo->values = NULL;
+        return LMMC_STATUS_ALLOCATION_FAILED;
+    }
+
+    for (size_t k = 0; k < actual_cap; ++k) {
+        LMMC_REAL_INIT(&out_coo->values[k]);
+    }
+
+    out_coo->rows = rows;
+    out_coo->cols = cols;
+    out_coo->nnz = 0;
+    out_coo->capacity = actual_cap;
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_sparse_coo_add_entry(
+    lmmc_sparse_coo_t* coo,
+    size_t row, size_t col, lmmc_real_t value
+) {
+    if (coo == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (row >= coo->rows || col >= coo->cols) {
+        return LMMC_STATUS_INDEX_OUT_OF_BOUNDS;
+    }
+
+    /* Auto-expand capacity with 2x strategy */
+    if (coo->nnz >= coo->capacity) {
+        size_t new_cap = 0;
+        size_t sz_idx = 0;
+        size_t sz_vals = 0;
+        size_t* nr = NULL;
+        size_t* nc = NULL;
+        lmmc_real_t* nv = NULL;
+
+        if (lmmc_mul_overflow_size(coo->capacity, 2, &new_cap) ||
+            lmmc_mul_overflow_size(new_cap, sizeof(size_t), &sz_idx) ||
+            lmmc_mul_overflow_size(new_cap, sizeof(lmmc_real_t), &sz_vals)) {
+            return LMMC_STATUS_ALLOCATION_FAILED;
+        }
+
+        nr = (size_t*)lmmc_alloc(sz_idx);
+        nc = (size_t*)lmmc_alloc(sz_idx);
+        nv = (lmmc_real_t*)lmmc_alloc(sz_vals);
+
+        if (nr == NULL || nc == NULL || nv == NULL) {
+            if (nr) lmmc_free(nr);
+            if (nc) lmmc_free(nc);
+            if (nv) lmmc_free(nv);
+            return LMMC_STATUS_ALLOCATION_FAILED;
+        }
+
+        for (size_t k = 0; k < new_cap; ++k) {
+            LMMC_REAL_INIT(&nv[k]);
+        }
+
+        if (coo->nnz > 0) {
+            memcpy(nr, coo->row_idx, coo->nnz * sizeof(size_t));
+            memcpy(nc, coo->col_idx, coo->nnz * sizeof(size_t));
+            for (size_t k = 0; k < coo->nnz; ++k) {
+                LMMC_REAL_SET(&nv[k], &coo->values[k]);
+            }
+        }
+
+        for (size_t k = 0; k < coo->capacity; ++k) {
+            LMMC_REAL_CLEAR(&coo->values[k]);
+        }
+        lmmc_free(coo->row_idx);
+        lmmc_free(coo->col_idx);
+        lmmc_free(coo->values);
+
+        coo->row_idx = nr;
+        coo->col_idx = nc;
+        coo->values = nv;
+        coo->capacity = new_cap;
+    }
+
+    coo->row_idx[coo->nnz] = row;
+    coo->col_idx[coo->nnz] = col;
+    LMMC_REAL_SET(&coo->values[coo->nnz], &value);
+    coo->nnz++;
+    return LMMC_STATUS_OK;
+}
+
+/* Helper: comparison function for sorting COO entries by (row, col) for CSR */
+typedef struct {
+    size_t row;
+    size_t col;
+    size_t orig_idx;
+} lmmc_coo_sort_entry_t;
+
+static int lmmc_coo_cmp_row_col(const void* a, const void* b) {
+    const lmmc_coo_sort_entry_t* ea = (const lmmc_coo_sort_entry_t*)a;
+    const lmmc_coo_sort_entry_t* eb = (const lmmc_coo_sort_entry_t*)b;
+    if (ea->row != eb->row) return (ea->row < eb->row) ? -1 : 1;
+    if (ea->col != eb->col) return (ea->col < eb->col) ? -1 : 1;
+    return 0;
+}
+
+/* Helper: comparison function for sorting COO entries by (col, row) for CSC */
+static int lmmc_coo_cmp_col_row(const void* a, const void* b) {
+    const lmmc_coo_sort_entry_t* ea = (const lmmc_coo_sort_entry_t*)a;
+    const lmmc_coo_sort_entry_t* eb = (const lmmc_coo_sort_entry_t*)b;
+    if (ea->col != eb->col) return (ea->col < eb->col) ? -1 : 1;
+    if (ea->row != eb->row) return (ea->row < eb->row) ? -1 : 1;
+    return 0;
+}
+
+lmmc_status_t lmmc_sparse_coo_to_csr(
+    const lmmc_sparse_coo_t* coo,
+    lmmc_sparse_mat_t* out_csr
+) {
+    lmmc_coo_sort_entry_t* entries = NULL;
+    size_t unique_nnz = 0;
+    size_t i;
+    lmmc_status_t st;
+
+    if (coo == NULL || out_csr == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    /* Handle empty matrix */
+    if (coo->nnz == 0) {
+        return lmmc_sparse_create_csr(coo->rows, coo->cols, 0, out_csr);
+    }
+
+    /* Allocate sort entries */
+    entries = (lmmc_coo_sort_entry_t*)lmmc_alloc(coo->nnz * sizeof(lmmc_coo_sort_entry_t));
+    if (entries == NULL) {
+        return LMMC_STATUS_ALLOCATION_FAILED;
+    }
+
+    for (i = 0; i < coo->nnz; ++i) {
+        entries[i].row = coo->row_idx[i];
+        entries[i].col = coo->col_idx[i];
+        entries[i].orig_idx = i;
+    }
+
+    /* Sort by (row, col) */
+    qsort(entries, coo->nnz, sizeof(lmmc_coo_sort_entry_t), lmmc_coo_cmp_row_col);
+
+    /* Count unique entries (merge duplicates) */
+    unique_nnz = 1;
+    for (i = 1; i < coo->nnz; ++i) {
+        if (entries[i].row != entries[i - 1].row || entries[i].col != entries[i - 1].col) {
+            unique_nnz++;
+        }
+    }
+
+    /* Create CSR matrix */
+    st = lmmc_sparse_create_csr(coo->rows, coo->cols, unique_nnz, out_csr);
+    if (st != LMMC_STATUS_OK) {
+        lmmc_free(entries);
+        return st;
+    }
+
+    /* Fill CSR data: merge duplicates by summing values, build row_ptr simultaneously */
+    {
+        size_t csr_idx = 0;
+        lmmc_real_t sum; LMMC_REAL_INIT(&sum);
+        lmmc_real_t tmp; LMMC_REAL_INIT(&tmp);
+
+        /* Initialize row_ptr to zero */
+        memset(out_csr->row_ptr, 0, (coo->rows + 1) * sizeof(size_t));
+
+        /* First pass: count unique entries per row */
+        {
+            size_t prev_row = entries[0].row;
+            size_t prev_col = entries[0].col;
+            out_csr->row_ptr[prev_row + 1]++;
+            for (i = 1; i < coo->nnz; ++i) {
+                if (entries[i].row != prev_row || entries[i].col != prev_col) {
+                    out_csr->row_ptr[entries[i].row + 1]++;
+                    prev_row = entries[i].row;
+                    prev_col = entries[i].col;
+                }
+            }
+        }
+
+        /* Prefix sum to build row_ptr */
+        for (i = 0; i < coo->rows; ++i) {
+            out_csr->row_ptr[i + 1] += out_csr->row_ptr[i];
+        }
+
+        /* Second pass: fill col_idx and values with merged duplicates */
+        LMMC_REAL_SET(&sum, &coo->values[entries[0].orig_idx]);
+        {
+            size_t cur_row = entries[0].row;
+            size_t cur_col = entries[0].col;
+
+            for (i = 1; i < coo->nnz; ++i) {
+                if (entries[i].row == cur_row && entries[i].col == cur_col) {
+                    /* Duplicate: sum values */
+                    LMMC_REAL_ADD(&tmp, &sum, &coo->values[entries[i].orig_idx]);
+                    LMMC_REAL_SET(&sum, &tmp);
+                } else {
+                    /* Store previous entry */
+                    out_csr->col_idx[csr_idx] = cur_col;
+                    LMMC_REAL_SET(&out_csr->values[csr_idx], &sum);
+                    csr_idx++;
+
+                    /* Start new entry */
+                    cur_row = entries[i].row;
+                    cur_col = entries[i].col;
+                    LMMC_REAL_SET(&sum, &coo->values[entries[i].orig_idx]);
+                }
+            }
+            /* Store last entry */
+            out_csr->col_idx[csr_idx] = cur_col;
+            LMMC_REAL_SET(&out_csr->values[csr_idx], &sum);
+        }
+
+        LMMC_REAL_CLEAR(&sum);
+        LMMC_REAL_CLEAR(&tmp);
+    }
+
+    lmmc_free(entries);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_sparse_coo_to_csc(
+    const lmmc_sparse_coo_t* coo,
+    lmmc_sparse_mat_t* out_csc
+) {
+    lmmc_coo_sort_entry_t* entries = NULL;
+    size_t unique_nnz = 0;
+    size_t i;
+    lmmc_status_t st;
+
+    if (coo == NULL || out_csc == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    /* Handle empty matrix */
+    if (coo->nnz == 0) {
+        return lmmc_sparse_create_csc(coo->rows, coo->cols, 0, out_csc);
+    }
+
+    /* Allocate sort entries */
+    entries = (lmmc_coo_sort_entry_t*)lmmc_alloc(coo->nnz * sizeof(lmmc_coo_sort_entry_t));
+    if (entries == NULL) {
+        return LMMC_STATUS_ALLOCATION_FAILED;
+    }
+
+    for (i = 0; i < coo->nnz; ++i) {
+        entries[i].row = coo->row_idx[i];
+        entries[i].col = coo->col_idx[i];
+        entries[i].orig_idx = i;
+    }
+
+    /* Sort by (col, row) */
+    qsort(entries, coo->nnz, sizeof(lmmc_coo_sort_entry_t), lmmc_coo_cmp_col_row);
+
+    /* Count unique entries (merge duplicates) */
+    unique_nnz = 1;
+    for (i = 1; i < coo->nnz; ++i) {
+        if (entries[i].row != entries[i - 1].row || entries[i].col != entries[i - 1].col) {
+            unique_nnz++;
+        }
+    }
+
+    /* Create CSC matrix */
+    st = lmmc_sparse_create_csc(coo->rows, coo->cols, unique_nnz, out_csc);
+    if (st != LMMC_STATUS_OK) {
+        lmmc_free(entries);
+        return st;
+    }
+
+    /* Fill CSC data: merge duplicates by summing values */
+    {
+        size_t csc_idx = 0;
+        lmmc_real_t sum; LMMC_REAL_INIT(&sum);
+        lmmc_real_t tmp; LMMC_REAL_INIT(&tmp);
+
+        LMMC_REAL_SET(&sum, &coo->values[entries[0].orig_idx]);
+        size_t cur_row = entries[0].row;
+        size_t cur_col = entries[0].col;
+
+        for (i = 1; i < coo->nnz; ++i) {
+            if (entries[i].row == cur_row && entries[i].col == cur_col) {
+                /* Duplicate: sum values */
+                LMMC_REAL_ADD(&tmp, &sum, &coo->values[entries[i].orig_idx]);
+                LMMC_REAL_SET(&sum, &tmp);
+            } else {
+                /* Store previous entry - in CSC, col_idx stores row indices */
+                out_csc->col_idx[csc_idx] = cur_row;
+                LMMC_REAL_SET(&out_csc->values[csc_idx], &sum);
+                csc_idx++;
+
+                /* Start new entry */
+                cur_row = entries[i].row;
+                cur_col = entries[i].col;
+                LMMC_REAL_SET(&sum, &coo->values[entries[i].orig_idx]);
+            }
+        }
+        /* Store last entry */
+        out_csc->col_idx[csc_idx] = cur_row;
+        LMMC_REAL_SET(&out_csc->values[csc_idx], &sum);
+
+        /* Build col_ptr (stored in row_ptr for CSC format) */
+        memset(out_csc->row_ptr, 0, (coo->cols + 1) * sizeof(size_t));
+
+        /* Count unique entries per column */
+        {
+            size_t prev_row = entries[0].row;
+            size_t prev_col = entries[0].col;
+
+            out_csc->row_ptr[entries[0].col + 1]++;
+            for (i = 1; i < coo->nnz; ++i) {
+                if (entries[i].row != prev_row || entries[i].col != prev_col) {
+                    out_csc->row_ptr[entries[i].col + 1]++;
+                    prev_row = entries[i].row;
+                    prev_col = entries[i].col;
+                }
+            }
+
+            /* Prefix sum */
+            for (i = 0; i < coo->cols; ++i) {
+                out_csc->row_ptr[i + 1] += out_csc->row_ptr[i];
+            }
+        }
+
+        LMMC_REAL_CLEAR(&sum);
+        LMMC_REAL_CLEAR(&tmp);
+    }
+
+    lmmc_free(entries);
+    return LMMC_STATUS_OK;
+}
+
+void lmmc_sparse_coo_destroy(lmmc_sparse_coo_t* coo) {
+    if (coo == NULL) {
+        return;
+    }
+    if (coo->values != NULL) {
+        for (size_t k = 0; k < coo->capacity; ++k) {
+            LMMC_REAL_CLEAR(&coo->values[k]);
+        }
+        lmmc_free(coo->values);
+    }
+    if (coo->row_idx != NULL) lmmc_free(coo->row_idx);
+    if (coo->col_idx != NULL) lmmc_free(coo->col_idx);
+    coo->rows = 0;
+    coo->cols = 0;
+    coo->nnz = 0;
+    coo->capacity = 0;
+    coo->row_idx = NULL;
+    coo->col_idx = NULL;
+    coo->values = NULL;
+}
+
+/* === 稀疏矩阵工具运算 === */
+
+lmmc_status_t lmmc_sparse_add(
+    lmmc_real_t alpha, const lmmc_sparse_mat_t* a,
+    lmmc_real_t beta, const lmmc_sparse_mat_t* b,
+    lmmc_sparse_mat_t* out_c
+) {
+    lmmc_sparse_mat_t a_csr = {0};
+    lmmc_sparse_mat_t b_csr = {0};
+    const lmmc_sparse_mat_t* pa = a;
+    const lmmc_sparse_mat_t* pb = b;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    size_t i;
+    size_t nnz_c = 0;
+    size_t* c_row_ptr = NULL;
+    size_t* c_col_idx = NULL;
+    lmmc_real_t* c_values = NULL;
+
+    if (a == NULL || b == NULL || out_c == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->rows != b->rows || a->cols != b->cols) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    st = lmmc_sparse_validate(a);
+    if (st != LMMC_STATUS_OK) return LMMC_STATUS_INVALID_ARGUMENT;
+    st = lmmc_sparse_validate(b);
+    if (st != LMMC_STATUS_OK) return LMMC_STATUS_INVALID_ARGUMENT;
+
+    /* Convert to CSR if needed */
+    if (a->format == LMMC_SPARSE_CSC) {
+        st = lmmc_sparse_to_csr(a, &a_csr);
+        if (st != LMMC_STATUS_OK) return st;
+        pa = &a_csr;
+    }
+    if (b->format == LMMC_SPARSE_CSC) {
+        st = lmmc_sparse_to_csr(b, &b_csr);
+        if (st != LMMC_STATUS_OK) {
+            lmmc_sparse_destroy(&a_csr);
+            return st;
+        }
+        pb = &b_csr;
+    }
+
+    /* First pass: count nnz in result using dual-pointer merge */
+    c_row_ptr = (size_t*)lmmc_alloc((pa->rows + 1) * sizeof(size_t));
+    if (c_row_ptr == NULL) {
+        st = LMMC_STATUS_ALLOCATION_FAILED;
+        goto cleanup;
+    }
+    c_row_ptr[0] = 0;
+
+    for (i = 0; i < pa->rows; ++i) {
+        size_t a_start = pa->row_ptr[i];
+        size_t a_end = pa->row_ptr[i + 1];
+        size_t b_start = pb->row_ptr[i];
+        size_t b_end = pb->row_ptr[i + 1];
+        size_t ai = a_start;
+        size_t bi = b_start;
+        size_t row_nnz = 0;
+
+        while (ai < a_end && bi < b_end) {
+            if (pa->col_idx[ai] < pb->col_idx[bi]) {
+                ai++;
+                row_nnz++;
+            } else if (pa->col_idx[ai] > pb->col_idx[bi]) {
+                bi++;
+                row_nnz++;
+            } else {
+                /* Same column: merge */
+                ai++;
+                bi++;
+                row_nnz++;
+            }
+        }
+        row_nnz += (a_end - ai) + (b_end - bi);
+        nnz_c += row_nnz;
+        c_row_ptr[i + 1] = nnz_c;
+    }
+
+    /* Allocate result arrays */
+    if (nnz_c > 0) {
+        c_col_idx = (size_t*)lmmc_alloc(nnz_c * sizeof(size_t));
+        c_values = (lmmc_real_t*)lmmc_alloc(nnz_c * sizeof(lmmc_real_t));
+        if (c_col_idx == NULL || c_values == NULL) {
+            st = LMMC_STATUS_ALLOCATION_FAILED;
+            goto cleanup;
+        }
+        for (size_t k = 0; k < nnz_c; ++k) {
+            LMMC_REAL_INIT(&c_values[k]);
+        }
+    }
+
+    /* Second pass: fill values using dual-pointer merge */
+    {
+        lmmc_real_t tmp_a; LMMC_REAL_INIT(&tmp_a);
+        lmmc_real_t tmp_b; LMMC_REAL_INIT(&tmp_b);
+        lmmc_real_t tmp_sum; LMMC_REAL_INIT(&tmp_sum);
+        size_t c_idx = 0;
+
+        for (i = 0; i < pa->rows; ++i) {
+            size_t a_start = pa->row_ptr[i];
+            size_t a_end = pa->row_ptr[i + 1];
+            size_t b_start = pb->row_ptr[i];
+            size_t b_end = pb->row_ptr[i + 1];
+            size_t ai = a_start;
+            size_t bi = b_start;
+
+            while (ai < a_end && bi < b_end) {
+                if (pa->col_idx[ai] < pb->col_idx[bi]) {
+                    /* Only A contributes */
+                    c_col_idx[c_idx] = pa->col_idx[ai];
+                    LMMC_REAL_MUL(&c_values[c_idx], &alpha, &pa->values[ai]);
+                    c_idx++;
+                    ai++;
+                } else if (pa->col_idx[ai] > pb->col_idx[bi]) {
+                    /* Only B contributes */
+                    c_col_idx[c_idx] = pb->col_idx[bi];
+                    LMMC_REAL_MUL(&c_values[c_idx], &beta, &pb->values[bi]);
+                    c_idx++;
+                    bi++;
+                } else {
+                    /* Both contribute: alpha*A[i,j] + beta*B[i,j] */
+                    c_col_idx[c_idx] = pa->col_idx[ai];
+                    LMMC_REAL_MUL(&tmp_a, &alpha, &pa->values[ai]);
+                    LMMC_REAL_MUL(&tmp_b, &beta, &pb->values[bi]);
+                    LMMC_REAL_ADD(&c_values[c_idx], &tmp_a, &tmp_b);
+                    c_idx++;
+                    ai++;
+                    bi++;
+                }
+            }
+            /* Remaining A entries */
+            while (ai < a_end) {
+                c_col_idx[c_idx] = pa->col_idx[ai];
+                LMMC_REAL_MUL(&c_values[c_idx], &alpha, &pa->values[ai]);
+                c_idx++;
+                ai++;
+            }
+            /* Remaining B entries */
+            while (bi < b_end) {
+                c_col_idx[c_idx] = pb->col_idx[bi];
+                LMMC_REAL_MUL(&c_values[c_idx], &beta, &pb->values[bi]);
+                c_idx++;
+                bi++;
+            }
+        }
+
+        LMMC_REAL_CLEAR(&tmp_a);
+        LMMC_REAL_CLEAR(&tmp_b);
+        LMMC_REAL_CLEAR(&tmp_sum);
+    }
+
+    /* Assign result */
+    out_c->rows = pa->rows;
+    out_c->cols = pa->cols;
+    out_c->nnz = nnz_c;
+    out_c->row_ptr = c_row_ptr;
+    out_c->col_idx = c_col_idx;
+    out_c->values = c_values;
+    out_c->format = LMMC_SPARSE_CSR;
+    out_c->owns_data = 1;
+
+    /* Prevent cleanup from freeing these */
+    c_row_ptr = NULL;
+    c_col_idx = NULL;
+    c_values = NULL;
+    st = LMMC_STATUS_OK;
+
+cleanup:
+    if (c_row_ptr) lmmc_free(c_row_ptr);
+    if (c_col_idx) lmmc_free(c_col_idx);
+    if (c_values) {
+        for (size_t k = 0; k < nnz_c; ++k) {
+            LMMC_REAL_CLEAR(&c_values[k]);
+        }
+        lmmc_free(c_values);
+    }
+    lmmc_sparse_destroy(&a_csr);
+    lmmc_sparse_destroy(&b_csr);
+    return st;
+}
+
+lmmc_status_t lmmc_sparse_scale(
+    lmmc_sparse_mat_t* a,
+    lmmc_real_t alpha
+) {
+    size_t i;
+    lmmc_real_t tmp; LMMC_REAL_INIT(&tmp);
+
+    if (a == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    lmmc_status_t st = lmmc_sparse_validate(a);
+    if (st != LMMC_STATUS_OK) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    for (i = 0; i < a->nnz; ++i) {
+        LMMC_REAL_MUL(&tmp, &a->values[i], &alpha);
+        LMMC_REAL_SET(&a->values[i], &tmp);
+    }
+
+    LMMC_REAL_CLEAR(&tmp);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_sparse_norm_fro(
+    const lmmc_sparse_mat_t* a,
+    lmmc_real_t* out_norm
+) {
+    size_t i;
+    lmmc_real_t sum; LMMC_REAL_INIT(&sum);
+    lmmc_real_t tmp; LMMC_REAL_INIT(&tmp);
+    lmmc_real_t tmp_add; LMMC_REAL_INIT(&tmp_add);
+
+    if (a == NULL || out_norm == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    lmmc_status_t st = lmmc_sparse_validate(a);
+    if (st != LMMC_STATUS_OK) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    LMMC_REAL_SET_D(&sum, 0.0);
+
+    for (i = 0; i < a->nnz; ++i) {
+        LMMC_REAL_MUL(&tmp, &a->values[i], &a->values[i]);
+        LMMC_REAL_ADD(&tmp_add, &sum, &tmp);
+        LMMC_REAL_SET(&sum, &tmp_add);
+    }
+
+    LMMC_REAL_SQRT(out_norm, &sum);
+
+    LMMC_REAL_CLEAR(&sum);
+    LMMC_REAL_CLEAR(&tmp);
+    LMMC_REAL_CLEAR(&tmp_add);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_sparse_diag(
+    const lmmc_sparse_mat_t* a,
+    lmmc_vec_t* out_diag
+) {
+    lmmc_sparse_mat_t a_csr = {0};
+    const lmmc_sparse_mat_t* pa = a;
+    lmmc_status_t st;
+    size_t i, p;
+    size_t n;
+
+    if (a == NULL || out_diag == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    st = lmmc_sparse_validate(a);
+    if (st != LMMC_STATUS_OK) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    /* Check square matrix */
+    if (a->rows != a->cols) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    n = a->rows;
+
+    /* Convert to CSR if needed */
+    if (a->format == LMMC_SPARSE_CSC) {
+        st = lmmc_sparse_to_csr(a, &a_csr);
+        if (st != LMMC_STATUS_OK) return st;
+        pa = &a_csr;
+    }
+
+    /* Create output vector if needed */
+    if (out_diag->data == NULL || out_diag->size != n) {
+        if (out_diag->data != NULL && out_diag->owns_data) {
+            lmmc_vec_destroy(out_diag);
+        }
+        st = lmmc_vec_create(n, out_diag);
+        if (st != LMMC_STATUS_OK) {
+            lmmc_sparse_destroy(&a_csr);
+            return st;
+        }
+    }
+
+    /* Initialize diagonal to zero */
+    {
+        lmmc_real_t zero;
+        LMMC_REAL_INIT(&zero);
+        LMMC_REAL_SET_D(&zero, 0.0);
+        st = lmmc_vec_fill(out_diag, zero);
+        LMMC_REAL_CLEAR(&zero);
+        if (st != LMMC_STATUS_OK) {
+            lmmc_sparse_destroy(&a_csr);
+            return st;
+        }
+    }
+
+    /* Extract diagonal elements from CSR */
+    for (i = 0; i < n; ++i) {
+        for (p = pa->row_ptr[i]; p < pa->row_ptr[i + 1]; ++p) {
+            if (pa->col_idx[p] == i) {
+                LMMC_REAL_SET(&out_diag->data[i], &pa->values[p]);
+                break;  /* CSR has sorted columns within a row (or at most one diagonal per row) */
+            }
+        }
+    }
+
+    lmmc_sparse_destroy(&a_csr);
+    return LMMC_STATUS_OK;
+}

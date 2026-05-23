@@ -26,3 +26,38 @@ add_lmmc_test(lmmc_test_math_utils test_math_utils.c)
 add_lmmc_test(lmmc_test_logging_ext test_logging_ext.c)
 add_lmmc_test(lmmc_test_sparse_builder test_sparse_builder.c)
 add_lmmc_test(lmmc_test_lammp_stats test_lammp_stats.c)
+add_lmmc_test(lmmc_test_internal test_internal.c)
+target_include_directories(lmmc_test_internal PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_lmmc_test(lmmc_test_dense_vec test_dense_vec.c)
+
+add_lmmc_test(lmmc_test_dense_mat test_dense_mat.c)
+
+add_lmmc_test(lmmc_test_dense_unit test_dense_unit.c)
+
+add_lmmc_test(lmmc_test_sparse_coo test_sparse_coo.c)
+
+add_lmmc_test(lmmc_test_interp_cspline test_interp_cspline.c)
+
+add_lmmc_test(lmmc_test_sparse_utils test_sparse_utils.c)
+
+add_lmmc_test(lmmc_test_interp_lagrange test_interp_lagrange.c)
+
+add_lmmc_test(lmmc_test_eigen_sym test_eigen_sym.c)
+
+add_lmmc_test(lmmc_test_eigen_general test_eigen_general.c)
+
+add_lmmc_test(lmmc_test_eigen_sym_property test_eigen_sym_property.c)
+
+add_lmmc_test(lmmc_test_eigen_gen_prop test_eigen_gen_prop.c)
+
+add_lmmc_test(lmmc_test_eigen_sym_prop test_eigen_sym_prop.c)
+
+add_lmmc_test(lmmc_test_svd test_svd.c)
+
+add_lmmc_test(lmmc_test_random_dist test_random_dist.c)
+
+add_lmmc_test(lmmc_test_sparse_cholesky test_sparse_cholesky.c)
+
+add_lmmc_test(lmmc_test_random_rng test_random_rng.c)
+
+

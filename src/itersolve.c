@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include "memory_bridge.h"
 #include "lmmc/config.h"
+#include "lmmc/dense.h"
 #include "lmmc/itersolve.h"
 
 static int lmmc_is_finite_number(lmmc_real_t v) {
@@ -10,68 +11,22 @@ static int lmmc_is_finite_number(lmmc_real_t v) {
     return isfinite(v) ? 1 : 0;
 }
 
-static lmmc_status_t lmmc_vec_copy(const lmmc_vec_t* src, lmmc_vec_t* dst) {
-    if (src == NULL || dst == NULL || src->data == NULL || dst->data == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (src->size != dst->size) {
-        return LMMC_STATUS_DIMENSION_MISMATCH;
-    }
-    size_t i = 0;
-    for (i = 0; i < src->size; ++i) {
-        LMMC_REAL_SET(&dst->data[i], &src->data[i]);
-    }
-    return LMMC_STATUS_OK;
-}
-
 static lmmc_status_t lmmc_vec_norm2_checked(const lmmc_vec_t* v, lmmc_real_t* out_norm) {
-    size_t i = 0;
-    lmmc_real_t sum;
-    LMMC_REAL_INIT(&sum);
-    LMMC_REAL_SET_D(&sum, 0.0);
-
-    lmmc_real_t tmp_mul;
-    LMMC_REAL_INIT(&tmp_mul);
-
-    lmmc_real_t tmp_add;
-    LMMC_REAL_INIT(&tmp_add);
-
     if (v == NULL || out_norm == NULL || v->data == NULL || v->size == 0) {
-        LMMC_REAL_CLEAR(&tmp_add);
-        LMMC_REAL_CLEAR(&tmp_mul);
-        LMMC_REAL_CLEAR(&sum);
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    for (i = 0; i < v->size; ++i) {
-        lmmc_real_t x;
-        LMMC_REAL_INIT(&x);
-        LMMC_REAL_SET(&x, &v->data[i]);
-        if (!lmmc_is_finite_number(x)) {
-            LMMC_REAL_CLEAR(&x);
-            LMMC_REAL_CLEAR(&tmp_add);
-            LMMC_REAL_CLEAR(&tmp_mul);
-            LMMC_REAL_CLEAR(&sum);
-            return LMMC_STATUS_NUMERICAL_FAILURE;
-        }
-        LMMC_REAL_MUL(&tmp_mul, &x, &x);
-        LMMC_REAL_ADD(&tmp_add, &sum, &tmp_mul);
-        LMMC_REAL_SET(&sum, &tmp_add);
-        LMMC_REAL_CLEAR(&x);
-
-        if (!lmmc_is_finite_number(sum)) {
-            LMMC_REAL_CLEAR(&tmp_add);
-            LMMC_REAL_CLEAR(&tmp_mul);
-            LMMC_REAL_CLEAR(&sum);
+    /* Check all elements are finite before computing norm */
+    for (size_t i = 0; i < v->size; ++i) {
+        if (!lmmc_is_finite_number(v->data[i])) {
             return LMMC_STATUS_NUMERICAL_FAILURE;
         }
     }
 
-    LMMC_REAL_SQRT(out_norm, &sum);
-
-    LMMC_REAL_CLEAR(&tmp_add);
-    LMMC_REAL_CLEAR(&tmp_mul);
-    LMMC_REAL_CLEAR(&sum);
+    lmmc_status_t st = lmmc_vec_norm2(v, out_norm);
+    if (st != LMMC_STATUS_OK) {
+        return st;
+    }
 
     if (!lmmc_is_finite_number(*out_norm)) {
         return LMMC_STATUS_NUMERICAL_FAILURE;
@@ -286,10 +241,6 @@ static lmmc_status_t lmmc_gmres_arnoldi_step(
     lmmc_vec_t* ax, lmmc_vec_t* w, lmmc_real_t* out_h_next
 ) {
     size_t ii = 0;
-    size_t i = 0;
-    lmmc_real_t tmp_mul; LMMC_REAL_INIT(&tmp_mul);
-    lmmc_real_t tmp_sub; LMMC_REAL_INIT(&tmp_sub);
-
     lmmc_status_t st = lmmc_sparse_mat_vec_mul(a, &basis[j], ax);
     if (st != LMMC_STATUS_OK) goto end;
     
@@ -304,10 +255,13 @@ static lmmc_status_t lmmc_gmres_arnoldi_step(
         }
         LMMC_REAL_SET(&h[ii * restart + j], &hij);
 
-        for (i = 0; i < w->size; ++i) {
-            LMMC_REAL_MUL(&tmp_mul, &hij, &basis[ii].data[i]);
-            LMMC_REAL_SUB(&tmp_sub, &w->data[i], &tmp_mul);
-            LMMC_REAL_SET(&w->data[i], &tmp_sub);
+        /* w = w + (-hij) * basis[ii] */
+        lmmc_real_t neg_hij; LMMC_REAL_INIT(&neg_hij);
+        LMMC_REAL_NEG(&neg_hij, &hij);
+        st = lmmc_vec_axpy(neg_hij, &basis[ii], w);
+        LMMC_REAL_CLEAR(&neg_hij);
+        if (st != LMMC_STATUS_OK) {
+            LMMC_REAL_CLEAR(&hij); goto end;
         }
         LMMC_REAL_CLEAR(&hij);
     }
@@ -318,8 +272,6 @@ static lmmc_status_t lmmc_gmres_arnoldi_step(
     }
 
 end:
-    LMMC_REAL_CLEAR(&tmp_sub);
-    LMMC_REAL_CLEAR(&tmp_mul);
     return st;
 }
 
@@ -537,13 +489,13 @@ lmmc_status_t lmmc_cg_solve(
                 }
             }
 
-            for (i = 0; i < r.size; ++i) {
-                LMMC_REAL_MUL(&tmp_mul, &alpha, &ap.data[i]);
-                lmmc_real_t tmp_sub;
-                LMMC_REAL_INIT(&tmp_sub);
-                LMMC_REAL_SUB(&tmp_sub, &r.data[i], &tmp_mul);
-                LMMC_REAL_SET(&r.data[i], &tmp_sub);
-                LMMC_REAL_CLEAR(&tmp_sub);
+            /* r = r + (-alpha) * ap */
+            {
+                lmmc_real_t neg_alpha; LMMC_REAL_INIT(&neg_alpha);
+                LMMC_REAL_NEG(&neg_alpha, &alpha);
+                st = lmmc_vec_axpy(neg_alpha, &ap, &r);
+                LMMC_REAL_CLEAR(&neg_alpha);
+                if (st != LMMC_STATUS_OK) goto cleanup;
             }
 
             st = lmmc_vec_norm2_checked(&r, &norm_r);
@@ -840,9 +792,15 @@ lmmc_status_t lmmc_bicgstab_solve(
             st = lmmc_bicgstab_compute_alpha(a, precond, &p, &y, &v, &r_hat, rho_hat, eps_30, &alpha);
             if (st != LMMC_STATUS_OK) goto cleanup;
 
-            for (i = 0; i < s.size; ++i) {
-                LMMC_REAL_MUL(&tmp_mul, &alpha, &v.data[i]);
-                LMMC_REAL_SUB(&s.data[i], &r.data[i], &tmp_mul);
+            /* s = r - alpha * v  (copy r to s, then s += (-alpha) * v) */
+            st = lmmc_vec_copy(&r, &s);
+            if (st != LMMC_STATUS_OK) goto cleanup;
+            {
+                lmmc_real_t neg_alpha; LMMC_REAL_INIT(&neg_alpha);
+                LMMC_REAL_NEG(&neg_alpha, &alpha);
+                st = lmmc_vec_axpy(neg_alpha, &v, &s);
+                LMMC_REAL_CLEAR(&neg_alpha);
+                if (st != LMMC_STATUS_OK) goto cleanup;
             }
 
             st = lmmc_vec_norm2_checked(&s, &norm_s);
@@ -887,9 +845,15 @@ lmmc_status_t lmmc_bicgstab_solve(
                 }
             }
 
-            for (i = 0; i < r.size; ++i) {
-                LMMC_REAL_MUL(&tmp_mul, &omega, &t.data[i]);
-                LMMC_REAL_SUB(&r.data[i], &s.data[i], &tmp_mul);
+            /* r = s - omega * t  (copy s to r, then r += (-omega) * t) */
+            st = lmmc_vec_copy(&s, &r);
+            if (st != LMMC_STATUS_OK) goto cleanup;
+            {
+                lmmc_real_t neg_omega; LMMC_REAL_INIT(&neg_omega);
+                LMMC_REAL_NEG(&neg_omega, &omega);
+                st = lmmc_vec_axpy(neg_omega, &t, &r);
+                LMMC_REAL_CLEAR(&neg_omega);
+                if (st != LMMC_STATUS_OK) goto cleanup;
             }
 
             st = lmmc_vec_norm2_checked(&r, &norm_r);
