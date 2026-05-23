@@ -60,4 +60,39 @@ add_lmmc_test(lmmc_test_sparse_cholesky test_sparse_cholesky.c)
 
 add_lmmc_test(lmmc_test_random_rng test_random_rng.c)
 
+add_lmmc_test(lmmc_test_quadrature test_quadrature.c)
 
+
+add_lmmc_test(lmmc_test_interp_linear test_interp_linear.c)
+
+add_lmmc_test(lmmc_test_precond test_precond.c)
+
+add_lmmc_test(lmmc_test_init test_init.c)
+
+add_lmmc_test(lmmc_test_linalg_extended test_linalg_extended.c)
+
+add_lmmc_test(lmmc_test_eigen_extended test_eigen_extended.c)
+
+add_lmmc_test(lmmc_test_itersolve_extended test_itersolve_extended.c)
+
+add_lmmc_test(lmmc_test_dense_extended test_dense_extended.c)
+
+add_lmmc_test(lmmc_test_interp_extended test_interp_extended.c)
+
+add_lmmc_test(lmmc_test_nonlinear_extended test_nonlinear_extended.c)
+
+add_lmmc_test(lmmc_test_ode_extended test_ode_extended.c)
+
+add_lmmc_test(lmmc_test_convergence test_convergence.c)
+
+add_lmmc_test(lmmc_test_memory_safety test_memory_safety.c)
+
+add_lmmc_test(lmmc_test_numeric_extended test_numeric_extended.c)
+
+add_lmmc_test(lmmc_test_stats_extended test_stats_extended.c)
+
+add_lmmc_test(lmmc_test_random_extended test_random_extended.c)
+
+add_lmmc_test(lmmc_test_sparse_extended test_sparse_extended.c)
+
+add_lmmc_test(lmmc_test_tensor_extended test_tensor_extended.c)
