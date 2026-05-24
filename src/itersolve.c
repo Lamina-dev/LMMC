@@ -178,6 +178,8 @@ lmmc_status_t lmmc_itersolve_default_config(size_t problem_size, lmmc_itersolve_
     out_cfg->verbose = 0;
     out_cfg->log_cb = NULL;
     out_cfg->log_user_data = NULL;
+    out_cfg->apply_op = NULL;
+    out_cfg->op_user_data = NULL;
     return LMMC_STATUS_OK;
 }
 

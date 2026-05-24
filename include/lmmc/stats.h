@@ -63,6 +63,112 @@ lmmc_status_t lmmc_mat_correlation_population(const lmmc_mat_t* x, lmmc_mat_t* o
 /** @brief 计算样本 Pearson 相关矩阵，要求行数 >= 2 。 */
 lmmc_status_t lmmc_mat_correlation_sample(const lmmc_mat_t* x, lmmc_mat_t* out_correlation);
 
+/* ===================== 描述性统计 ===================== */
+
+/**
+ * @brief 计算向量中位数。
+ *
+ * 内部会复制并排序数据。对偶数长度取中间两个值的平均。
+ *
+ * @param[in]  x   输入向量，size >= 1。
+ * @param[out] out 输出中位数。
+ * @return LMMC_STATUS_OK 成功。
+ */
+lmmc_status_t lmmc_vec_median(const lmmc_vec_t* x, lmmc_real_t* out);
+
+/**
+ * @brief 计算向量的 p 分位数（线性插值法）。
+ *
+ * @param[in]  x   输入向量，size >= 1。
+ * @param[in]  p   分位数，范围 [0, 1]。
+ * @param[out] out 输出分位数值。
+ * @return LMMC_STATUS_OK 成功；LMMC_STATUS_INVALID_ARGUMENT 若 p 不在 [0,1]。
+ */
+lmmc_status_t lmmc_vec_quantile(const lmmc_vec_t* x, lmmc_real_t p, lmmc_real_t* out);
+
+/**
+ * @brief 计算向量的等宽直方图。
+ *
+ * 将数据范围 [min, max] 等分为 nbins 个区间，统计每个区间的计数。
+ *
+ * @param[in]  x      输入向量，size >= 1。
+ * @param[in]  nbins  区间数，必须 >= 1。
+ * @param[out] edges  输出区间边界数组，长度 nbins+1，调用方预分配。
+ * @param[out] counts 输出每个区间的计数，长度 nbins，调用方预分配。
+ * @return LMMC_STATUS_OK 成功。
+ */
+lmmc_status_t lmmc_vec_histogram(const lmmc_vec_t* x, size_t nbins, lmmc_real_t* edges, size_t* counts);
+
+/* ===================== 概率分布 ===================== */
+
+/* --- 正态分布 --- */
+
+/** @brief 正态分布概率密度函数。 */
+lmmc_status_t lmmc_dist_normal_pdf(lmmc_real_t x, lmmc_real_t mu, lmmc_real_t sigma, lmmc_real_t* out);
+/** @brief 正态分布累积分布函数。 */
+lmmc_status_t lmmc_dist_normal_cdf(lmmc_real_t x, lmmc_real_t mu, lmmc_real_t sigma, lmmc_real_t* out);
+/** @brief 正态分布分位数函数（逆 CDF）。 */
+lmmc_status_t lmmc_dist_normal_quantile(lmmc_real_t p, lmmc_real_t mu, lmmc_real_t sigma, lmmc_real_t* out);
+
+/* --- t 分布 --- */
+
+/** @brief t 分布概率密度函数。 */
+lmmc_status_t lmmc_dist_t_pdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out);
+/** @brief t 分布累积分布函数。 */
+lmmc_status_t lmmc_dist_t_cdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out);
+/** @brief t 分布分位数函数。 */
+lmmc_status_t lmmc_dist_t_quantile(lmmc_real_t p, lmmc_real_t df, lmmc_real_t* out);
+
+/* --- χ² 分布 --- */
+
+/** @brief χ² 分布概率密度函数。 */
+lmmc_status_t lmmc_dist_chi2_pdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out);
+/** @brief χ² 分布累积分布函数。 */
+lmmc_status_t lmmc_dist_chi2_cdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out);
+/** @brief χ² 分布分位数函数。 */
+lmmc_status_t lmmc_dist_chi2_quantile(lmmc_real_t p, lmmc_real_t df, lmmc_real_t* out);
+
+/* --- F 分布 --- */
+
+/** @brief F 分布概率密度函数。 */
+lmmc_status_t lmmc_dist_f_pdf(lmmc_real_t x, lmmc_real_t df1, lmmc_real_t df2, lmmc_real_t* out);
+/** @brief F 分布累积分布函数。 */
+lmmc_status_t lmmc_dist_f_cdf(lmmc_real_t x, lmmc_real_t df1, lmmc_real_t df2, lmmc_real_t* out);
+/** @brief F 分布分位数函数。 */
+lmmc_status_t lmmc_dist_f_quantile(lmmc_real_t p, lmmc_real_t df1, lmmc_real_t df2, lmmc_real_t* out);
+
+/* --- 伽马分布 --- */
+
+/** @brief 伽马分布概率密度函数。 */
+lmmc_status_t lmmc_dist_gamma_pdf(lmmc_real_t x, lmmc_real_t shape, lmmc_real_t scale, lmmc_real_t* out);
+/** @brief 伽马分布累积分布函数。 */
+lmmc_status_t lmmc_dist_gamma_cdf(lmmc_real_t x, lmmc_real_t shape, lmmc_real_t scale, lmmc_real_t* out);
+/** @brief 伽马分布分位数函数。 */
+lmmc_status_t lmmc_dist_gamma_quantile(lmmc_real_t p, lmmc_real_t shape, lmmc_real_t scale, lmmc_real_t* out);
+
+/* --- 贝塔分布 --- */
+
+/** @brief 贝塔分布概率密度函数。 */
+lmmc_status_t lmmc_dist_beta_pdf(lmmc_real_t x, lmmc_real_t alpha, lmmc_real_t beta, lmmc_real_t* out);
+/** @brief 贝塔分布累积分布函数。 */
+lmmc_status_t lmmc_dist_beta_cdf(lmmc_real_t x, lmmc_real_t alpha, lmmc_real_t beta, lmmc_real_t* out);
+/** @brief 贝塔分布分位数函数。 */
+lmmc_status_t lmmc_dist_beta_quantile(lmmc_real_t p, lmmc_real_t alpha, lmmc_real_t beta, lmmc_real_t* out);
+
+/* --- 二项分布 --- */
+
+/** @brief 二项分布概率质量函数。 */
+lmmc_status_t lmmc_dist_binomial_pmf(size_t k, size_t n, lmmc_real_t p, lmmc_real_t* out);
+/** @brief 二项分布累积分布函数。 */
+lmmc_status_t lmmc_dist_binomial_cdf(size_t k, size_t n, lmmc_real_t p_param, lmmc_real_t* out);
+
+/* --- 泊松分布 --- */
+
+/** @brief 泊松分布概率质量函数。 */
+lmmc_status_t lmmc_dist_poisson_pmf(size_t k, lmmc_real_t lambda, lmmc_real_t* out);
+/** @brief 泊松分布累积分布函数。 */
+lmmc_status_t lmmc_dist_poisson_cdf(size_t k, lmmc_real_t lambda, lmmc_real_t* out);
+
 #ifdef __cplusplus
 }
 #endif

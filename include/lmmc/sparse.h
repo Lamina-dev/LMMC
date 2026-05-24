@@ -140,7 +140,13 @@ lmmc_status_t lmmc_sparse_to_csr(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
 
 /* ===================== 稀疏 LU 分解 ===================== */
 
-/** @brief 稀疏 LU 分解上下文（不透明类型）。 */
+/**
+ * @brief 稀疏 LU 分解上下文（不透明类型）。
+ *
+ * The @c col_perm field is populated by AMD (Approximate Minimum Degree)
+ * reordering during the symbolic phase to reduce fill-in. The factorization
+ * uses a three-stage pipeline: analyze (symbolic) -> factorize (numeric) -> solve.
+ */
 typedef struct lmmc_sparse_lu_t lmmc_sparse_lu_t;
 
 /**
@@ -173,7 +179,13 @@ void lmmc_sparse_lu_destroy(lmmc_sparse_lu_t* lu);
 
 /* ===================== 稀疏 Cholesky 分解 ===================== */
 
-/** @brief 稀疏 Cholesky 分解上下文（不透明类型，要求 @c A 对称正定）。 */
+/**
+ * @brief 稀疏 Cholesky 分解上下文（不透明类型，要求 @c A 对称正定）。
+ *
+ * The @c perm field is populated by AMD (Approximate Minimum Degree)
+ * reordering during the symbolic phase to reduce fill-in. The factorization
+ * uses a three-stage pipeline: analyze (symbolic) -> factorize (numeric) -> solve.
+ */
 typedef struct lmmc_sparse_chol_t lmmc_sparse_chol_t;
 
 /** @brief 稀疏 Cholesky 符号分析。 */
@@ -272,6 +284,111 @@ lmmc_status_t lmmc_sparse_diag(
     const lmmc_sparse_mat_t* a,
     lmmc_vec_t* out_diag
 );
+
+/* ===================== BSR (Block Sparse Row) 格式 ===================== */
+
+/**
+ * @brief 块稀疏行 (BSR) 格式矩阵。
+ *
+ * 每个非零块为 @c block_size × @c block_size 的稠密子矩阵，
+ * 按行优先存储在 @c values 中。
+ */
+typedef struct {
+    size_t rows;          /**< 块行数。 */
+    size_t cols;          /**< 块列数。 */
+    size_t block_size;    /**< r×r 块维度。 */
+    size_t nnz_blocks;    /**< 非零块数量。 */
+    size_t* row_ptr;      /**< 块行指针数组，长度 rows+1 。 */
+    size_t* col_idx;      /**< 块列索引数组，长度 nnz_blocks 。 */
+    lmmc_real_t* values;  /**< 块数值数组，长度 nnz_blocks * block_size^2 。 */
+    int owns_data;        /**< 是否拥有底层缓冲区。 */
+} lmmc_sparse_bsr_t;
+
+/**
+ * @brief 创建 BSR 矩阵（数组内容未初始化）。
+ *
+ * @param[in]  rows       块行数。
+ * @param[in]  cols       块列数。
+ * @param[in]  block_size 块维度 r（每块为 r×r）。
+ * @param[in]  nnz_blocks 非零块数量。
+ * @param[out] out        输出 BSR 矩阵。
+ */
+lmmc_status_t lmmc_sparse_bsr_create(size_t rows, size_t cols, size_t block_size,
+    size_t nnz_blocks, lmmc_sparse_bsr_t* out);
+
+/**
+ * @brief 将 BSR 矩阵展开为稠密矩阵。
+ *
+ * @param[in]  bsr 输入 BSR 矩阵。
+ * @param[out] out 输出稠密矩阵，必须已创建且维度为 (rows*block_size) × (cols*block_size)。
+ */
+lmmc_status_t lmmc_sparse_bsr_to_dense(const lmmc_sparse_bsr_t* bsr, lmmc_mat_t* out);
+
+/**
+ * @brief 将稠密矩阵转换为 BSR 格式。
+ *
+ * 绝对值不超过 @p eps 的块（块内所有元素绝对值均 <= eps）被丢弃。
+ *
+ * @param[in]  dense      输入稠密矩阵，维度必须为 block_size 的整数倍。
+ * @param[in]  block_size 块维度 r 。
+ * @param[in]  eps        丢弃阈值。
+ * @param[out] out        输出 BSR 矩阵。
+ */
+lmmc_status_t lmmc_sparse_dense_to_bsr(const lmmc_mat_t* dense, size_t block_size,
+    lmmc_real_t eps, lmmc_sparse_bsr_t* out);
+
+/** @brief 销毁 BSR 矩阵，必要时释放底层缓冲区。 */
+void lmmc_sparse_bsr_destroy(lmmc_sparse_bsr_t* bsr);
+
+/* ===================== 对称半存储 CSR 格式 ===================== */
+
+/**
+ * @brief 对称半存储选择：上三角或下三角。
+ */
+typedef enum {
+    LMMC_SPARSE_SYM_UPPER = 0, /**< 存储上三角（含对角线）。 */
+    LMMC_SPARSE_SYM_LOWER = 1  /**< 存储下三角（含对角线）。 */
+} lmmc_sparse_sym_half_t;
+
+/**
+ * @brief 对称半存储 CSR 格式矩阵。
+ *
+ * 仅存储上三角或下三角（含对角线），用于对称矩阵的紧凑表示。
+ */
+typedef struct {
+    size_t n;                        /**< 矩阵阶数（方阵）。 */
+    size_t nnz;                      /**< 存储的非零元个数（仅半三角）。 */
+    size_t* row_ptr;                 /**< 行指针数组，长度 n+1 。 */
+    size_t* col_idx;                 /**< 列索引数组，长度 nnz 。 */
+    lmmc_real_t* values;             /**< 数值数组，长度 nnz 。 */
+    lmmc_sparse_sym_half_t half;     /**< 存储的半三角类型。 */
+    int owns_data;                   /**< 是否拥有底层缓冲区。 */
+} lmmc_sparse_sym_csr_t;
+
+/**
+ * @brief 从完整 CSR 矩阵提取对称半存储。
+ *
+ * @param[in]  full 输入完整 CSR 矩阵（必须为方阵）。
+ * @param[in]  half 选择存储上三角或下三角。
+ * @param[out] out  输出对称半存储 CSR 矩阵。
+ */
+lmmc_status_t lmmc_sparse_sym_csr_from_csr(const lmmc_sparse_mat_t* full,
+    lmmc_sparse_sym_half_t half, lmmc_sparse_sym_csr_t* out);
+
+/**
+ * @brief 对称半存储 SpMV：@c y = A * x 。
+ *
+ * 利用对称性，仅存储半三角但计算完整矩阵-向量乘积。
+ *
+ * @param[in]  A 对称半存储 CSR 矩阵。
+ * @param[in]  x 输入向量，长度为 A->n 。
+ * @param[out] y 输出向量，长度为 A->n 。
+ */
+lmmc_status_t lmmc_sparse_sym_spmv(const lmmc_sparse_sym_csr_t* A,
+    const lmmc_vec_t* x, lmmc_vec_t* y);
+
+/** @brief 销毁对称半存储 CSR 矩阵，必要时释放底层缓冲区。 */
+void lmmc_sparse_sym_csr_destroy(lmmc_sparse_sym_csr_t* s);
 
 #ifdef __cplusplus
 }

@@ -46,6 +46,8 @@ add_lmmc_test(lmmc_test_eigen_sym test_eigen_sym.c)
 
 add_lmmc_test(lmmc_test_eigen_general test_eigen_general.c)
 
+add_lmmc_test(lmmc_test_eigen_full test_eigen_full.c)
+
 add_lmmc_test(lmmc_test_eigen_sym_property test_eigen_sym_property.c)
 
 add_lmmc_test(lmmc_test_eigen_gen_prop test_eigen_gen_prop.c)
@@ -96,3 +98,55 @@ add_lmmc_test(lmmc_test_random_extended test_random_extended.c)
 add_lmmc_test(lmmc_test_sparse_extended test_sparse_extended.c)
 
 add_lmmc_test(lmmc_test_tensor_extended test_tensor_extended.c)
+
+add_lmmc_test(lmmc_test_lambertw test_lambertw.c)
+
+add_lmmc_test(lmmc_test_ode_rk45_convergence_prop test_ode_rk45_convergence_prop.c)
+
+add_lmmc_test(lmmc_test_cholesky_prop test_cholesky_prop.c)
+
+add_lmmc_test(lmmc_test_lambertw_prop test_lambertw_prop.c)
+
+add_lmmc_test(lmmc_test_sparse_buffer_safety test_sparse_buffer_safety.c)
+
+add_lmmc_test(lmmc_test_rng_jump test_rng_jump.c)
+
+add_lmmc_test(lmmc_test_rng_uniformity_prop test_rng_uniformity_prop.c)
+
+add_lmmc_test(lmmc_test_fft_roundtrip_prop test_fft_roundtrip_prop.c)
+
+add_lmmc_test(lmmc_test_eigen_residual_prop test_eigen_residual_prop.c)
+
+add_lmmc_test(lmmc_test_tensor_nd test_tensor_nd.c)
+
+add_lmmc_test(lmmc_test_optimize test_optimize.c)
+
+add_lmmc_test(lmmc_test_gemm_accuracy_prop test_gemm_accuracy_prop.c)
+
+add_lmmc_test(lmmc_test_sparse_solve_residual_prop test_sparse_solve_residual_prop.c)
+
+add_lmmc_test(lmmc_test_tensor_contract_prop test_tensor_contract_prop.c)
+
+add_lmmc_test(lmmc_test_minres_lsqr test_minres_lsqr.c)
+
+add_lmmc_test(lmmc_test_special_functions test_special_functions.c)
+
+add_lmmc_test(lmmc_test_ode_implicit test_ode_implicit_quick.c)
+
+add_lmmc_test(lmmc_test_ode_implicit_solvers test_ode_implicit_solvers.c)
+
+add_lmmc_test(lmmc_test_interp_advanced test_interp_advanced.c)
+
+add_lmmc_test(lmmc_test_stats_dist test_stats_dist.c)
+
+add_lmmc_test(lmmc_test_quadrature_new test_quadrature_new.c)
+
+add_lmmc_test(lmmc_test_dist_roundtrip_prop test_dist_roundtrip_prop.c)
+
+add_lmmc_test(lmmc_test_interp_quad_unit test_interp_quad_unit.c)
+
+add_lmmc_test(lmmc_test_sparse_formats test_sparse_formats.c)
+
+add_lmmc_test(lmmc_test_random_dist_stats test_random_dist_stats.c)
+
+add_lmmc_test(lmmc_test_mat_inv_trisolve test_mat_inv_trisolve.c)

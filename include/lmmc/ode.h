@@ -67,6 +67,24 @@ typedef void (*lmmc_ode_log_callback_t)(
     void* user_data
 );
 
+/**
+ * @brief ODE Jacobian 回调签名 @f$J = \partial f / \partial y@f$ 。
+ *
+ * @param[in]  t          当前时间。
+ * @param[in]  y          当前状态向量，长度 @p dim 。
+ * @param[out] J          输出 Jacobian 矩阵（行优先，dim×dim）。
+ * @param[in]  dim        状态维度。
+ * @param[in]  user_data  用户上下文。
+ * @return ::LMMC_STATUS_OK 表示求值成功。
+ */
+typedef lmmc_status_t (*lmmc_ode_jac_t)(
+    lmmc_real_t t,
+    const lmmc_real_t* y,
+    lmmc_real_t* J,
+    size_t dim,
+    void* user_data
+);
+
 /** @brief ODE 求解配置。 */
 typedef struct {
     lmmc_real_t initial_step;                  /**< 初始步长建议。 */
@@ -79,6 +97,7 @@ typedef struct {
     int verbose;                               /**< 非 0 时打印日志。 */
     lmmc_ode_log_callback_t log_cb;            /**< 自定义日志回调。 */
     void* log_user_data;                       /**< 回调上下文。 */
+    lmmc_ode_jac_t jacobian;                   /**< 可选 Jacobian 回调（隐式方法使用，NULL 时用有限差分）。 */
 } lmmc_ode_config_t;
 
 /** @brief 获取失败原因对应的可读字符串。 */
@@ -124,6 +143,54 @@ lmmc_status_t lmmc_ode_rk4_solve(
 
 /** @brief 自适应 Runge-Kutta-Fehlberg (RK45) 求解器。 */
 lmmc_status_t lmmc_ode_rk45_solve(
+    lmmc_ode_rhs_t rhs,
+    void* user_data,
+    size_t dim,
+    lmmc_real_t t_start,
+    lmmc_real_t t_end,
+    lmmc_real_t* y,
+    const lmmc_ode_config_t* cfg,
+    lmmc_ode_result_t* out_result
+);
+
+/** @brief 隐式 Euler 法求解器（A-稳定，适用于刚性问题）。 */
+lmmc_status_t lmmc_ode_implicit_euler_solve(
+    lmmc_ode_rhs_t rhs,
+    void* user_data,
+    size_t dim,
+    lmmc_real_t t_start,
+    lmmc_real_t t_end,
+    lmmc_real_t* y,
+    const lmmc_ode_config_t* cfg,
+    lmmc_ode_result_t* out_result
+);
+
+/** @brief 梯形法求解器（A-稳定，二阶精度）。 */
+lmmc_status_t lmmc_ode_trapezoidal_solve(
+    lmmc_ode_rhs_t rhs,
+    void* user_data,
+    size_t dim,
+    lmmc_real_t t_start,
+    lmmc_real_t t_end,
+    lmmc_real_t* y,
+    const lmmc_ode_config_t* cfg,
+    lmmc_ode_result_t* out_result
+);
+
+/** @brief 4 阶 SDIRK 求解器（含嵌入误差估计，自适应步长）。 */
+lmmc_status_t lmmc_ode_sdirk4_solve(
+    lmmc_ode_rhs_t rhs,
+    void* user_data,
+    size_t dim,
+    lmmc_real_t t_start,
+    lmmc_real_t t_end,
+    lmmc_real_t* y,
+    const lmmc_ode_config_t* cfg,
+    lmmc_ode_result_t* out_result
+);
+
+/** @brief Rosenbrock-Wanner GRK4T 求解器（线性隐式，四阶，每步一次 LU）。 */
+lmmc_status_t lmmc_ode_rosenbrock_grk4t_solve(
     lmmc_ode_rhs_t rhs,
     void* user_data,
     size_t dim,

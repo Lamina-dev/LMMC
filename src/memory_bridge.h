@@ -18,9 +18,12 @@
 #define lmmc_alloc(sz) lmmp_alloc((sz))
 /** @brief 释放 ::lmmc_alloc 返回的指针。 */
 #define lmmc_free(ptr) lmmp_free((ptr))
+/** @brief 重新分配内存。 */
+#define lmmc_realloc(ptr, sz) lmmp_realloc((ptr), (sz))
 #else
 #define lmmc_alloc(sz) malloc((sz))
 #define lmmc_free(ptr) free((ptr))
+#define lmmc_realloc(ptr, sz) realloc((ptr), (sz))
 #endif
 
 #endif

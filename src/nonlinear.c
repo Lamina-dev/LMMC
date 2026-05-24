@@ -4,6 +4,7 @@
  */
 #include <math.h>
 #include <stdio.h>
+#include <float.h>
 #include "internal.h"
 #include "lmmc/nonlinear.h"
 
@@ -363,10 +364,17 @@ lmmc_status_t lmmc_newton_solve(
             return LMMC_STATUS_NUMERICAL_FAILURE;
         }
 
-        if (lmmc_abs(derivative) < local_cfg.min_derivative) {
-            out_result->num_iter = iter;
-            out_result->failure_reason = LMMC_NONLINEAR_FAILURE_ZERO_DERIVATIVE;
-            return LMMC_STATUS_NUMERICAL_FAILURE;
+        {
+            /* Relative derivative threshold: max(|x| * DBL_EPSILON * 64, DBL_EPSILON * 64) */
+            lmmc_real_t abs_x_val = lmmc_abs(x);
+            lmmc_real_t deriv_floor = DBL_EPSILON * 64.0;
+            lmmc_real_t rel_threshold = abs_x_val * DBL_EPSILON * 64.0;
+            lmmc_real_t threshold = lmmc_max(rel_threshold, deriv_floor);
+            if (lmmc_abs(derivative) < threshold) {
+                out_result->num_iter = iter;
+                out_result->failure_reason = LMMC_NONLINEAR_FAILURE_ZERO_DERIVATIVE;
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
         }
 
         LMMC_REAL_DIV(&step, &fx, &derivative);

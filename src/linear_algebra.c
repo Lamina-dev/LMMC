@@ -6,6 +6,7 @@
 #include <string.h>
 #include "memory_bridge.h"
 #include "lmmc/config.h"
+#include "lmmc/numeric.h"
 #include "lmmc/linear_algebra.h"
 
 static void lmmc_abs_to(lmmc_real_t* res, const lmmc_real_t* x) {
@@ -186,6 +187,7 @@ lmmc_status_t lmmc_cholesky_decompose_inplace(lmmc_mat_t* a) {
     size_t i = 0;
     size_t j = 0;
     size_t k = 0;
+    lmmc_real_t maxDiag;
 
     if (a == NULL || a->data == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
@@ -195,6 +197,9 @@ lmmc_status_t lmmc_cholesky_decompose_inplace(lmmc_mat_t* a) {
     }
 
     n = a->rows;
+    LMMC_REAL_INIT(&maxDiag);
+    LMMC_REAL_SET_D(&maxDiag, 0.0);
+
     for (i = 0; i < n; ++i) {
         for (j = 0; j <= i; ++j) {
             lmmc_real_t sum;
@@ -209,15 +214,22 @@ lmmc_status_t lmmc_cholesky_decompose_inplace(lmmc_mat_t* a) {
             }
 
             if (i == j) {
-                lmmc_real_t zero;
-                LMMC_REAL_INIT(&zero);
-                LMMC_REAL_SET_D(&zero, 0.0);
-                if (LMMC_REAL_CMP(&sum, &zero) <= 0) {
-                    LMMC_REAL_CLEAR(&zero);
+                /* Relative SPD threshold: reject when d_i <= LMMC_DEFAULT_REL_TOL * maxDiag */
+                lmmc_real_t threshold;
+                LMMC_REAL_INIT(&threshold);
+                LMMC_REAL_SET_D(&threshold, LMMC_DEFAULT_REL_TOL);
+                LMMC_REAL_MUL(&threshold, &threshold, &maxDiag);
+                if (LMMC_REAL_CMP(&sum, &threshold) <= 0) {
+                    LMMC_REAL_CLEAR(&threshold);
                     LMMC_REAL_CLEAR(&sum);
-                    return LMMC_STATUS_NUMERICAL_FAILURE;
+                    LMMC_REAL_CLEAR(&maxDiag);
+                    return LMMC_STATUS_NOT_POSITIVE_DEFINITE;
                 }
-                LMMC_REAL_CLEAR(&zero);
+                LMMC_REAL_CLEAR(&threshold);
+                /* Update maxDiag with the current diagonal entry */
+                if (LMMC_REAL_CMP(&sum, &maxDiag) > 0) {
+                    LMMC_REAL_SET(&maxDiag, &sum);
+                }
                 LMMC_REAL_SQRT(&a->data[i * a->stride + i], &sum);
             } else {
                 LMMC_REAL_DIV(&a->data[i * a->stride + j], &sum, &a->data[j * a->stride + j]);
@@ -233,6 +245,7 @@ lmmc_status_t lmmc_cholesky_decompose_inplace(lmmc_mat_t* a) {
         }
     }
 
+    LMMC_REAL_CLEAR(&maxDiag);
     return LMMC_STATUS_OK;
 }
 

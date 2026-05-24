@@ -31,6 +31,22 @@ typedef struct {
 } lmmc_eigen_gen_result_t;
 
 /**
+ * @brief 一般实矩阵完整特征分解结果（特征值 + 特征向量）。
+ *
+ * 对于实特征值 λ_i，对应特征向量存储在 vectors_real 的第 i 列，
+ * vectors_imag 的第 i 列全为零。
+ * 对于共轭复数对 λ_i = a + bi, λ_{i+1} = a - bi，
+ * 特征向量的实部存储在 vectors_real 的第 i 和 i+1 列，
+ * 虚部存储在 vectors_imag 的第 i 列（正号）和第 i+1 列（负号）。
+ */
+typedef struct {
+    lmmc_vec_t real_parts;      /**< 特征值实部数组，长度 n 。 */
+    lmmc_vec_t imag_parts;      /**< 特征值虚部数组，长度 n 。 */
+    lmmc_mat_t vectors_real;    /**< 特征向量实部矩阵，n×n 。 */
+    lmmc_mat_t vectors_imag;    /**< 特征向量虚部矩阵，n×n 。 */
+} lmmc_eigen_gen_full_result_t;
+
+/**
  * @brief 奇异值分解结果：@f$A = U \Sigma V^T@f$ 。
  */
 typedef struct {
@@ -93,10 +109,26 @@ lmmc_status_t lmmc_cond(
     lmmc_real_t* out_cond
 );
 
+/**
+ * @brief 计算一般实矩阵的特征值与特征向量。
+ *
+ * 使用 Hessenberg 约化 + Francis 双移位 QR 迭代求特征值，
+ * 再通过逆迭代（Wilkinson 移位）计算特征向量。
+ *
+ * @param[in]  a          n×n 实矩阵。
+ * @param[out] out_result 调用方需用 ::lmmc_eigen_gen_full_result_destroy 释放。
+ */
+lmmc_status_t lmmc_eigen_general_full(
+    const lmmc_mat_t* a,
+    lmmc_eigen_gen_full_result_t* out_result
+);
+
 /** @brief 释放 ::lmmc_eigen_symmetric 输出结果。 */
 void lmmc_eigen_sym_result_destroy(lmmc_eigen_sym_result_t* result);
 /** @brief 释放 ::lmmc_eigen_general 输出结果。 */
 void lmmc_eigen_gen_result_destroy(lmmc_eigen_gen_result_t* result);
+/** @brief 释放 ::lmmc_eigen_general_full 输出结果。 */
+void lmmc_eigen_gen_full_result_destroy(lmmc_eigen_gen_full_result_t* result);
 /** @brief 释放 ::lmmc_svd 输出结果。 */
 void lmmc_svd_result_destroy(lmmc_svd_result_t* result);
 

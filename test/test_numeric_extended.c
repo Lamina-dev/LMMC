@@ -335,13 +335,13 @@ int main(void) {
 
 
         st = lmmc_lambertw(-0.5, &res);
-        if (st != LMMC_STATUS_NUMERICAL_FAILURE) {
+        if (st != LMMC_STATUS_INVALID_ARGUMENT) {
             rc = 1; goto done;
         }
 
 
         st = lmmc_lambertw(-1.0, &res);
-        if (st != LMMC_STATUS_NUMERICAL_FAILURE) {
+        if (st != LMMC_STATUS_INVALID_ARGUMENT) {
             rc = 1; goto done;
         }
     }

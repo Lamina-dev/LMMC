@@ -92,8 +92,38 @@ lmmc_status_t lmmc_mat_copy(const lmmc_mat_t* src, lmmc_mat_t* dst);
 lmmc_status_t lmmc_mat_transpose_to(const lmmc_mat_t* src, lmmc_mat_t* dst);
 
 /**
+ * @brief 通用矩阵-矩阵乘法（GEMM）：@f$C \leftarrow \alpha \cdot \mathrm{op}(A) \cdot \mathrm{op}(B) + \beta \cdot C@f$ 。
+ *
+ * @param[in]     alpha  标量乘子 α 。
+ * @param[in]     A      输入矩阵 A 。
+ * @param[in]     transA 非零表示对 A 取转置。
+ * @param[in]     B      输入矩阵 B 。
+ * @param[in]     transB 非零表示对 B 取转置。
+ * @param[in]     beta   标量乘子 β 。
+ * @param[in,out] C      输出矩阵，维度须与 op(A)·op(B) 兼容。
+ * @return ::LMMC_STATUS_OK 成功；维度不匹配返回 ::LMMC_STATUS_DIMENSION_MISMATCH 。
+ */
+lmmc_status_t lmmc_mat_gemm(lmmc_real_t alpha, const lmmc_mat_t* A, int transA,
+    const lmmc_mat_t* B, int transB, lmmc_real_t beta, lmmc_mat_t* C);
+
+/**
+ * @brief 通用矩阵-向量乘法（GEMV）：@f$y \leftarrow \alpha \cdot \mathrm{op}(A) \cdot x + \beta \cdot y@f$ 。
+ *
+ * @param[in]     alpha  标量乘子 α 。
+ * @param[in]     A      输入矩阵 A 。
+ * @param[in]     transA 非零表示对 A 取转置。
+ * @param[in]     x      输入向量 x 。
+ * @param[in]     beta   标量乘子 β 。
+ * @param[in,out] y      输出向量 y 。
+ * @return ::LMMC_STATUS_OK 成功；维度不匹配返回 ::LMMC_STATUS_DIMENSION_MISMATCH 。
+ */
+lmmc_status_t lmmc_mat_gemv(lmmc_real_t alpha, const lmmc_mat_t* A, int transA,
+    const lmmc_vec_t* x, lmmc_real_t beta, lmmc_vec_t* y);
+
+/**
  * @brief 计算矩阵乘法 @c c = a * b 。
  *
+ * 等价于 @c lmmc_mat_gemm(1.0, a, 0, b, 0, 0.0, c) 。
  * @p a 为 @c m×k ， @p b 为 @c k×n ， @p c 为 @c m×n 且应与 @p a, @p b 不别名。
  */
 lmmc_status_t lmmc_mat_mul(const lmmc_mat_t* a, const lmmc_mat_t* b, lmmc_mat_t* c);
@@ -130,6 +160,8 @@ lmmc_status_t lmmc_vec_dot(const lmmc_vec_t* a, const lmmc_vec_t* b, lmmc_real_t
 
 /**
  * @brief 计算 @c y = a * x （矩阵-向量乘法）。
+ *
+ * 等价于 @c lmmc_mat_gemv(1.0, a, 0, x, 0.0, y) 。
  */
 lmmc_status_t lmmc_mat_vec_mul(const lmmc_mat_t* a, const lmmc_vec_t* x, lmmc_vec_t* y);
 
@@ -182,6 +214,31 @@ lmmc_status_t lmmc_mat_trace(const lmmc_mat_t* a, lmmc_real_t* out_trace);
  * @return ::LMMC_STATUS_OK 成功；矩阵奇异时返回 ::LMMC_STATUS_SINGULAR_MATRIX 。
  */
 lmmc_status_t lmmc_mat_det(const lmmc_mat_t* a, lmmc_real_t* out_det);
+
+/**
+ * @brief 计算方阵的逆矩阵。
+ *
+ * 内部通过 LU 分解 + 逐列求解 @f$A \cdot \text{col}_i = e_i@f$ 实现。
+ * 若 @p A 奇异，返回 ::LMMC_STATUS_SINGULAR_MATRIX 且 @p A_inv 不被修改。
+ *
+ * @param[in]  A     输入方阵。
+ * @param[out] A_inv 输出逆矩阵，须已创建且与 @p A 同维。
+ * @return ::LMMC_STATUS_OK 成功；奇异返回 ::LMMC_STATUS_SINGULAR_MATRIX 。
+ */
+lmmc_status_t lmmc_mat_inv(const lmmc_mat_t* A, lmmc_mat_t* A_inv);
+
+/**
+ * @brief 三角矩阵求解：@f$T x = b@f$ 。
+ *
+ * @param[in]  T         三角矩阵（上三角或下三角）。
+ * @param[in]  upper     非零表示 @p T 为上三角；零表示下三角。
+ * @param[in]  diag_unit 非零表示对角线视为 1（单位三角）。
+ * @param[in]  b         右端向量。
+ * @param[out] x         解向量，须已创建且与 @p b 同长。
+ * @return ::LMMC_STATUS_OK 成功；对角线为零返回 ::LMMC_STATUS_SINGULAR_MATRIX 。
+ */
+lmmc_status_t lmmc_solve_triangular(const lmmc_mat_t* T, int upper, int diag_unit,
+    const lmmc_vec_t* b, lmmc_vec_t* x);
 
 #ifdef __cplusplus
 }

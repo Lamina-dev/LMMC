@@ -1,10 +1,9 @@
 /**
  * @file tensor.h
- * @brief 三阶稠密张量数据结构与基本运算。
+ * @brief N-D 稠密张量数据结构与基本运算。
  *
- * 元素 (i,j,k) 位于
- * @c data[i*stride0 + j*stride1 + k*stride2] ，
- * 默认行优先布局；亦支持任意视图。
+ * 支持任意阶（1 至 LMMC_TENSOR_MAX_NDIM）的张量，
+ * 以及向后兼容的三阶张量接口。
  */
 #ifndef LMMC_TENSOR_H
 #define LMMC_TENSOR_H
@@ -17,8 +16,56 @@
 extern "C" {
 #endif
 
+/* ===================== N-D Tensor API ===================== */
+
+/** @brief 支持的最大张量维度。 */
+#define LMMC_TENSOR_MAX_NDIM 8
+
 /**
- * @brief 三阶张量结构。
+ * @brief N-D 张量结构。
+ *
+ * 支持 1 至 LMMC_TENSOR_MAX_NDIM 维的张量。
+ * 通过 reshape_view 等得到的视图共享底层缓冲区且 @c owns_data == 0 。
+ */
+typedef struct {
+    size_t ndim;                            /**< 维度数（1..LMMC_TENSOR_MAX_NDIM）。 */
+    size_t dims[LMMC_TENSOR_MAX_NDIM];      /**< 各维大小（仅前 ndim 个有效）。 */
+    size_t strides[LMMC_TENSOR_MAX_NDIM];   /**< 各维步距（仅前 ndim 个有效）。 */
+    lmmc_real_t* data;                      /**< 数据缓冲区。 */
+    int owns_data;                          /**< 是否拥有缓冲区所有权。 */
+} lmmc_tensor_nd_t;
+
+/** @brief 创建 N-D 张量，行优先连续存储，元素初始化为零。 */
+lmmc_status_t lmmc_tensor_create(size_t ndim, const size_t* dims, lmmc_tensor_nd_t* out);
+
+/** @brief 读取 N-D 张量元素。 */
+lmmc_status_t lmmc_tensor_get_nd(const lmmc_tensor_nd_t* t, const size_t* idx, lmmc_real_t* out);
+
+/** @brief 写入 N-D 张量元素。 */
+lmmc_status_t lmmc_tensor_set_nd(lmmc_tensor_nd_t* t, const size_t* idx, lmmc_real_t value);
+
+/** @brief 对张量维度进行置换，产生新的拥有数据的张量。 */
+lmmc_status_t lmmc_tensor_permute(const lmmc_tensor_nd_t* in, const size_t* perm, lmmc_tensor_nd_t* out);
+
+/** @brief 张量收缩：沿匹配轴对求和。 */
+lmmc_status_t lmmc_tensor_contract(const lmmc_tensor_nd_t* a, const lmmc_tensor_nd_t* b,
+    const size_t* axes_a, const size_t* axes_b, size_t naxes, lmmc_tensor_nd_t* out);
+
+/** @brief 模-n 乘积：沿指定模与矩阵收缩。 */
+lmmc_status_t lmmc_tensor_mode_n_product(const lmmc_tensor_nd_t* t, const lmmc_mat_t* mat,
+    size_t mode, lmmc_tensor_nd_t* out);
+
+/** @brief N-D 张量重塑视图（不拷贝，步距兼容时返回非拥有视图）。 */
+lmmc_status_t lmmc_tensor_nd_reshape_view(const lmmc_tensor_nd_t* src,
+    size_t new_ndim, const size_t* new_dims, lmmc_tensor_nd_t* out_view);
+
+/** @brief 销毁 N-D 张量。 */
+void lmmc_tensor_nd_destroy(lmmc_tensor_nd_t* t);
+
+/* ===================== Legacy Rank-3 API (backward compatible) ===================== */
+
+/**
+ * @brief 三阶张量结构（向后兼容）。
  *
  * 通过 ::lmmc_tensor_reshape_view / ::lmmc_tensor_slice_view 得到的
  * 视图共享底层缓冲区且 @c owns_data == 0 。

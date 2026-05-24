@@ -72,15 +72,19 @@ if(NOT LAMMP_STATIC_LIBRARY)
 endif()
 
 set(LMMC_SOURCES
+    src/blas_backend.c
     src/dense.c
     src/eigen.c
+    src/fft.c
     src/init.c
     src/interp.c
     src/itersolve.c
+    src/itersolve_minres_lsqr.c
     src/linear_algebra.c
     src/nonlinear.c
     src/numeric.c
     src/ode.c
+    src/optimize.c
     src/precond.c
     src/quadrature.c
     src/random.c

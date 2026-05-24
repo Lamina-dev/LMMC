@@ -86,6 +86,82 @@ lmmc_status_t lmmc_quad_adaptive(
     lmmc_quad_result_t* out_result
 );
 
+/**
+ * @brief Romberg 积分（Richardson 外推加速梯形法则）。
+ *
+ * @param[in]  f         被积函数。
+ * @param[in]  ud        用户数据指针，传递给 @p f 。
+ * @param[in]  a         积分下限。
+ * @param[in]  b         积分上限。
+ * @param[in]  abs_tol   绝对容差，范围 [1e-15, 1e-1]。
+ * @param[in]  max_iter  最大迭代次数（Romberg 表行数），范围 [1, 1000000]。
+ * @param[out] out       积分结果（值、误差估计、求值次数）。
+ */
+lmmc_status_t lmmc_quad_romberg(
+    lmmc_quad_func_t f,
+    void* ud,
+    lmmc_real_t a,
+    lmmc_real_t b,
+    lmmc_real_t abs_tol,
+    size_t max_iter,
+    lmmc_quad_result_t* out
+);
+
+/**
+ * @brief Tanh-Sinh（双指数）积分，适用于端点奇异性。
+ *
+ * @param[in]  f         被积函数。
+ * @param[in]  ud        用户数据指针，传递给 @p f 。
+ * @param[in]  a         积分下限。
+ * @param[in]  b         积分上限。
+ * @param[in]  abs_tol   绝对容差，范围 [1e-15, 1e-1]。
+ * @param[in]  max_nodes 最大节点数，范围 [1, 1000000]。
+ * @param[out] out       积分结果（值、误差估计、求值次数）。
+ */
+lmmc_status_t lmmc_quad_tanh_sinh(
+    lmmc_quad_func_t f,
+    void* ud,
+    lmmc_real_t a,
+    lmmc_real_t b,
+    lmmc_real_t abs_tol,
+    size_t max_nodes,
+    lmmc_quad_result_t* out
+);
+
+/**
+ * @brief Gauss-Hermite 求积：权函数 @f$\exp(-x^2)@f$ ，积分域 @f$(-\infty, +\infty)@f$ 。
+ *
+ * 计算 @f$\int_{-\infty}^{+\infty} f(x) \exp(-x^2) dx@f$ 。
+ *
+ * @param[in]  f      被积函数（不含权函数部分）。
+ * @param[in]  ud     用户数据指针。
+ * @param[in]  order  节点数（阶数），范围 [1, 20]。
+ * @param[out] out    积分结果值。
+ */
+lmmc_status_t lmmc_quad_gauss_hermite(
+    lmmc_quad_func_t f,
+    void* ud,
+    size_t order,
+    lmmc_real_t* out
+);
+
+/**
+ * @brief Gauss-Laguerre 求积：权函数 @f$\exp(-x)@f$ ，积分域 @f$[0, +\infty)@f$ 。
+ *
+ * 计算 @f$\int_0^{+\infty} f(x) \exp(-x) dx@f$ 。
+ *
+ * @param[in]  f      被积函数（不含权函数部分）。
+ * @param[in]  ud     用户数据指针。
+ * @param[in]  order  节点数（阶数），范围 [1, 20]。
+ * @param[out] out    积分结果值。
+ */
+lmmc_status_t lmmc_quad_gauss_laguerre(
+    lmmc_quad_func_t f,
+    void* ud,
+    size_t order,
+    lmmc_real_t* out
+);
+
 #ifdef __cplusplus
 }
 #endif
