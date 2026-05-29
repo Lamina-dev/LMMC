@@ -1,7 +1,11 @@
+/**
+ * @file example_ode_logging.c
+ * @brief 演示 LMMC 中 ode logging 相关接口的使用。
+ */
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 
-// Custom ODE callback
+
 static void my_ode_logger(size_t step, lmmc_real_t t, const lmmc_real_t* y, size_t dim, void* user_data) {
     (void)user_data;
     printf("[Step %zu] Time = %.3f, State = [", step, t);
@@ -11,7 +15,7 @@ static void my_ode_logger(size_t step, lmmc_real_t t, const lmmc_real_t* y, size
     printf("]\n");
 }
 
-// Simple RHS: y' = -y
+
 static lmmc_status_t decay_rhs(lmmc_real_t t, const lmmc_real_t* y, lmmc_real_t* y_prime, size_t dim, void* user_data) {
     (void)t; (void)user_data;
     for (size_t i = 0; i < dim; ++i) {
@@ -42,7 +46,7 @@ int main(void) {
     }
 
     printf("--- Part 2: ODE RK45 with Custom Callback ---\n");
-    LMMC_REAL_SET_D(&y[0], 1.0); // Reset
+    LMMC_REAL_SET_D(&y[0], 1.0);
     cfg.verbose = 0;
     cfg.log_cb = my_ode_logger;
     st = lmmc_ode_rk45_solve(decay_rhs, NULL, 1, 0.0, 1.0, y, &cfg, &res);

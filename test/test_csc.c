@@ -1,3 +1,7 @@
+/**
+ * @file test_csc.c
+ * 针对 LMMC 中 csc 相关接口的单元测试。
+ */
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"
@@ -13,7 +17,7 @@ int main(void) {
     lmmc_status_t st = LMMC_STATUS_OK;
     int rc = 0;
 
-    // 1. Create a dense matrix and convert to CSR
+
     st = lmmc_mat_create(3, 3, &dense);
     if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
     LMMC_REAL_SET_D(&dense.data[0], 1.0); LMMC_REAL_SET_D(&dense.data[1], 0.0); LMMC_REAL_SET_D(&dense.data[2], 2.0);
@@ -23,7 +27,7 @@ int main(void) {
     st = lmmc_sparse_from_dense(&dense, 1e-14, &csr);
     if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
 
-    // 2. Convert CSR to CSC
+
     st = lmmc_sparse_to_csc(&csr, &csc);
     if (st != LMMC_STATUS_OK) {
         printf("CSR to CSC failed: %s\n", lmmc_status_string(st));
@@ -37,7 +41,7 @@ int main(void) {
         goto cleanup;
     }
 
-    // 3. Verify CSC SpMV
+
     st = lmmc_vec_create(3, &x);
     st = lmmc_vec_create(3, &y_csr);
     st = lmmc_vec_create(3, &y_csc);
@@ -54,7 +58,7 @@ int main(void) {
         }
     }
 
-    // 4. Convert back to CSR and verify
+
     st = lmmc_sparse_to_csr(&csc, &csr_back);
     if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
 
@@ -77,7 +81,7 @@ int main(void) {
         }
     }
 
-    // 5. Test CSC Transpose (Should result in CSC of transposed matrix)
+
     lmmc_sparse_mat_t csc_t = {0};
     st = lmmc_sparse_transpose(&csc, &csc_t);
     if (st != LMMC_STATUS_OK) { rc = 1; goto cleanup; }
@@ -85,13 +89,13 @@ int main(void) {
         rc = 1;
         goto cleanup;
     }
-    
-    // Verify values via dense matrix
+
+
     lmmc_mat_t t_dense;
     lmmc_mat_create(3, 3, &t_dense);
     st = lmmc_sparse_to_dense(&csc_t, &t_dense);
     if (st != LMMC_STATUS_OK) { rc = 1; lmmc_mat_destroy(&t_dense); goto cleanup; }
-    
+
     for (size_t i = 0; i < 3; ++i) {
         for (size_t j = 0; j < 3; ++j) {
             if (!lmmc_test_nearly_equal(t_dense.data[i * t_dense.stride + j], dense.data[j * dense.stride + i], 1e-12)) {

@@ -1,0 +1,312 @@
+/**
+ * @file fft.c
+ * @brief True N-point FFT with radix-2 Cooley-Tukey and Bluestein chirp-z.
+ *
+ * Provides lmmc_fft / lmmc_fft_forward / lmmc_fft_inverse for arbitrary N,
+ * plus the explicit padding helper lmmc_fft_radix4_pad_into.
+ *
+ * Dispatch:
+ *   - N is power of 4 -> existing radix-4 path (lmmc_fft_radix4)
+ *   - N is power of 2 -> radix-2 Cooley-Tukey (in-place, iterative)
+ *   - Otherwise        -> Bluestein chirp-z (pad to next power-of-2 >= 2N-1)
+ */
+#include <math.h>
+#include <string.h>
+#include "memory_bridge.h"
+#include "lmmc/config.h"
+#include "lmmc/numeric.h"
+
+/* ======================== Utility helpers ======================== */
+
+/**
+ * @brief Check if n is a power of 2.
+ */
+static int fft_is_power_of_two(size_t n) {
+    return (n > 0) && ((n & (n - 1)) == 0);
+}
+
+/**
+ * @brief Check if n is a power of 4.
+ */
+static int fft_is_power_of_four(size_t n) {
+    if (n == 0) return 0;
+    if ((n & (n - 1)) != 0) return 0;
+    /* A power of 2 is a power of 4 iff the single set bit is at an even position */
+    return (n & 0x5555555555555555ULL) != 0;
+}
+
+/**
+ * @brief Compute the next power of 2 >= n.
+ */
+static size_t fft_next_power_of_two(size_t n) {
+    size_t p = 1;
+    if (n == 0) return 1;
+    while (p < n) {
+        p <<= 1;
+    }
+    return p;
+}
+
+/* ======================== Radix-2 Cooley-Tukey FFT ======================== */
+
+/**
+ * @brief Bit-reversal permutation for power-of-2 length.
+ */
+static void fft_bit_reverse(lmmc_real_t* real, lmmc_real_t* imag, size_t n) {
+    size_t i, j, bit;
+    lmmc_real_t tmp;
+
+    j = 0;
+    for (i = 1; i < n; ++i) {
+        bit = n >> 1;
+        while (j & bit) {
+            j ^= bit;
+            bit >>= 1;
+        }
+        j ^= bit;
+
+        if (i < j) {
+            tmp = real[i]; real[i] = real[j]; real[j] = tmp;
+            tmp = imag[i]; imag[i] = imag[j]; imag[j] = tmp;
+        }
+    }
+}
+
+/**
+ * @brief In-place radix-2 Cooley-Tukey FFT for power-of-2 lengths.
+ * @param inverse  If non-zero, compute inverse FFT (with 1/N normalization).
+ */
+static lmmc_status_t fft_radix2(lmmc_real_t* real, lmmc_real_t* imag, size_t n, int inverse) {
+    size_t len, i, j;
+    double angle_sign;
+
+    if (n <= 1) return LMMC_STATUS_OK;
+
+    fft_bit_reverse(real, imag, n);
+
+    angle_sign = inverse ? 1.0 : -1.0;
+
+    for (len = 2; len <= n; len <<= 1) {
+        double angle = angle_sign * 2.0 * LMMC_PI / (double)len;
+        double wlen_r = cos(angle);
+        double wlen_i = sin(angle);
+
+        for (i = 0; i < n; i += len) {
+            double w_r = 1.0, w_i = 0.0;
+            size_t half = len >> 1;
+
+            for (j = 0; j < half; ++j) {
+                size_t u_idx = i + j;
+                size_t v_idx = i + j + half;
+
+                /* twiddle * x[v] */
+                double t_r = w_r * real[v_idx] - w_i * imag[v_idx];
+                double t_i = w_r * imag[v_idx] + w_i * real[v_idx];
+
+                /* butterfly */
+                real[v_idx] = real[u_idx] - t_r;
+                imag[v_idx] = imag[u_idx] - t_i;
+                real[u_idx] = real[u_idx] + t_r;
+                imag[u_idx] = imag[u_idx] + t_i;
+
+                /* advance twiddle */
+                {
+                    double new_w_r = w_r * wlen_r - w_i * wlen_i;
+                    double new_w_i = w_r * wlen_i + w_i * wlen_r;
+                    w_r = new_w_r;
+                    w_i = new_w_i;
+                }
+            }
+        }
+    }
+
+    if (inverse) {
+        double scale = 1.0 / (double)n;
+        for (i = 0; i < n; ++i) {
+            real[i] *= scale;
+            imag[i] *= scale;
+        }
+    }
+
+    return LMMC_STATUS_OK;
+}
+
+/* ======================== Bluestein Chirp-Z ======================== */
+
+/**
+ * @brief Bluestein chirp-z transform for arbitrary length N.
+ *
+ * Algorithm:
+ *   1. Compute chirp sequence: w[k] = exp(±i*pi*k^2/N)
+ *   2. Multiply input by chirp: a[k] = x[k] * conj(w[k])
+ *   3. Build convolution kernel: b[k] = w[k] (zero-padded)
+ *   4. Convolve a and b using power-of-2 FFT (length M >= 2N-1)
+ *   5. Multiply result by conj(w[k]) to get X[k]
+ */
+static lmmc_status_t fft_bluestein(lmmc_real_t* real, lmmc_real_t* imag, size_t n, int inverse) {
+    size_t m;           /* padded power-of-2 length */
+    size_t k;
+    double sign;
+    lmmc_real_t *a_r = NULL, *a_i = NULL;
+    lmmc_real_t *b_r = NULL, *b_i = NULL;
+    lmmc_status_t st = LMMC_STATUS_OK;
+
+    if (n <= 1) {
+        return LMMC_STATUS_OK;
+    }
+
+    /* Padded length: next power of 2 >= 2N - 1 */
+    m = fft_next_power_of_two(2 * n - 1);
+
+    /* Allocate working arrays */
+    a_r = (lmmc_real_t*)lmmc_alloc(m * sizeof(lmmc_real_t));
+    a_i = (lmmc_real_t*)lmmc_alloc(m * sizeof(lmmc_real_t));
+    b_r = (lmmc_real_t*)lmmc_alloc(m * sizeof(lmmc_real_t));
+    b_i = (lmmc_real_t*)lmmc_alloc(m * sizeof(lmmc_real_t));
+
+    if (a_r == NULL || a_i == NULL || b_r == NULL || b_i == NULL) {
+        st = LMMC_STATUS_ALLOCATION_FAILED;
+        goto cleanup;
+    }
+
+    /* Zero-fill */
+    memset(a_r, 0, m * sizeof(lmmc_real_t));
+    memset(a_i, 0, m * sizeof(lmmc_real_t));
+    memset(b_r, 0, m * sizeof(lmmc_real_t));
+    memset(b_i, 0, m * sizeof(lmmc_real_t));
+
+    /* Sign for forward/inverse: forward DFT uses exp(-2*pi*i*k*n/N),
+     * so chirp phase sign is -1 for forward, +1 for inverse. */
+    sign = inverse ? 1.0 : -1.0;
+
+    /* Build chirp-modulated input a[k] = x[k] * exp(sign * i * pi * k^2 / N)
+     * (Bluestein identity: modulate by exp(-i*pi*k^2/N) for forward) */
+    for (k = 0; k < n; ++k) {
+        double phase = sign * LMMC_PI * (double)(k * k) / (double)n;
+        double c = cos(phase);
+        double s = sin(phase);
+        /* a[k] = x[k] * exp(sign*i*pi*k^2/N) = x[k] * (c + i*s) */
+        a_r[k] = real[k] * c - imag[k] * s;
+        a_i[k] = imag[k] * c + real[k] * s;
+    }
+
+    /* Build convolution kernel b[k] = exp(-sign * i * pi * k^2 / N)
+     * with wrap-around for negative indices */
+    for (k = 0; k < n; ++k) {
+        double phase = -sign * LMMC_PI * (double)(k * k) / (double)n;
+        double c = cos(phase);
+        double s = sin(phase);
+        b_r[k] = c;
+        b_i[k] = s;
+    }
+    /* Wrap-around: b[m-k] = b[k] for k = 1..n-1 */
+    for (k = 1; k < n; ++k) {
+        b_r[m - k] = b_r[k];
+        b_i[m - k] = b_i[k];
+    }
+
+    /* FFT both a and b (forward, length m which is power of 2) */
+    st = fft_radix2(a_r, a_i, m, 0);
+    if (st != LMMC_STATUS_OK) goto cleanup;
+
+    st = fft_radix2(b_r, b_i, m, 0);
+    if (st != LMMC_STATUS_OK) goto cleanup;
+
+    /* Pointwise multiply: a = a * b */
+    for (k = 0; k < m; ++k) {
+        double tr = a_r[k] * b_r[k] - a_i[k] * b_i[k];
+        double ti = a_r[k] * b_i[k] + a_i[k] * b_r[k];
+        a_r[k] = tr;
+        a_i[k] = ti;
+    }
+
+    /* Inverse FFT of the product */
+    st = fft_radix2(a_r, a_i, m, 1);
+    if (st != LMMC_STATUS_OK) goto cleanup;
+
+    /* Extract result: X[k] = a[k] * exp(sign * i * pi * k^2 / N) */
+    for (k = 0; k < n; ++k) {
+        double phase = sign * LMMC_PI * (double)(k * k) / (double)n;
+        double c = cos(phase);
+        double s = sin(phase);
+        /* result[k] = a[k] * exp(sign*i*pi*k^2/N) = a[k] * (c + i*s) */
+        real[k] = a_r[k] * c - a_i[k] * s;
+        imag[k] = a_i[k] * c + a_r[k] * s;
+    }
+
+    /* For inverse FFT, normalize by 1/N */
+    if (inverse) {
+        double scale = 1.0 / (double)n;
+        for (k = 0; k < n; ++k) {
+            real[k] *= scale;
+            imag[k] *= scale;
+        }
+    }
+
+cleanup:
+    if (a_r) lmmc_free(a_r);
+    if (a_i) lmmc_free(a_i);
+    if (b_r) lmmc_free(b_r);
+    if (b_i) lmmc_free(b_i);
+    return st;
+}
+
+/* ======================== Public API ======================== */
+
+lmmc_status_t lmmc_fft(lmmc_real_t* real, lmmc_real_t* imag, size_t n, int inverse) {
+    if (real == NULL || imag == NULL || n == 0) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (n == 1) {
+        /* DFT of length 1 is identity */
+        return LMMC_STATUS_OK;
+    }
+
+    /* Dispatch: power-of-4 -> radix-4, power-of-2 -> radix-2, else -> Bluestein */
+    if (fft_is_power_of_four(n)) {
+        return lmmc_fft_radix4(real, imag, n, inverse ? 1 : 0);
+    } else if (fft_is_power_of_two(n)) {
+        return fft_radix2(real, imag, n, inverse ? 1 : 0);
+    } else {
+        return fft_bluestein(real, imag, n, inverse ? 1 : 0);
+    }
+}
+
+lmmc_status_t lmmc_fft_forward(lmmc_real_t* real, lmmc_real_t* imag, size_t n) {
+    return lmmc_fft(real, imag, n, 0);
+}
+
+lmmc_status_t lmmc_fft_inverse(lmmc_real_t* real, lmmc_real_t* imag, size_t n) {
+    return lmmc_fft(real, imag, n, 1);
+}
+
+lmmc_status_t lmmc_fft_radix4_pad_into(
+    const lmmc_real_t* real_in, const lmmc_real_t* imag_in, size_t n,
+    lmmc_real_t* real_out, lmmc_real_t* imag_out, size_t* out_nfft)
+{
+    size_t nfft = 0;
+    lmmc_status_t st;
+
+    if (real_in == NULL || imag_in == NULL || real_out == NULL ||
+        imag_out == NULL || out_nfft == NULL || n == 0) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    st = lmmc_fft_radix4_next_size(n, &nfft);
+    if (st != LMMC_STATUS_OK) {
+        return st;
+    }
+
+    /* Copy input data */
+    memcpy(real_out, real_in, n * sizeof(lmmc_real_t));
+    memcpy(imag_out, imag_in, n * sizeof(lmmc_real_t));
+
+    /* Zero-pad the remainder */
+    if (nfft > n) {
+        memset(real_out + n, 0, (nfft - n) * sizeof(lmmc_real_t));
+        memset(imag_out + n, 0, (nfft - n) * sizeof(lmmc_real_t));
+    }
+
+    *out_nfft = nfft;
+    return LMMC_STATUS_OK;
+}

@@ -1,3 +1,7 @@
+/**
+ * @file example_linear_solve.c
+ * @brief 演示 LMMC 中 linear solve 相关接口的使用。
+ */
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 

@@ -1,3 +1,7 @@
+/**
+ * @file test_bicgstab_autogen.c
+ * 针对 LMMC 中 bicgstab autogen 相关接口的单元测试。
+ */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>

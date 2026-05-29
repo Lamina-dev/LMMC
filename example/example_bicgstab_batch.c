@@ -1,3 +1,7 @@
+/**
+ * @file example_bicgstab_batch.c
+ * @brief 演示 LMMC 中 bicgstab batch 相关接口的使用。
+ */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>

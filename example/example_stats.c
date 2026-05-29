@@ -1,3 +1,7 @@
+/**
+ * @file example_stats.c
+ * @brief 演示 LMMC 中 stats 相关接口的使用。
+ */
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 

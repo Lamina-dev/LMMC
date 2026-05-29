@@ -1,68 +1,69 @@
+/**
+ * @file init.c
+ * @brief LMMC 库初始化与栈分配器桥接实现。
+ *
+ * 使用原子引用计数保证多线程安全的初始化/反初始化。
+ * 当定义 LMMC_DEBUG_LEAKS 编译宏时，追踪分配计数并在最终反初始化时输出摘要。
+ */
 #include "lmmc/init.h"
 
-/* LAMMP — the low-level multi-precision library */
+#include <stdatomic.h>
+#include <stdio.h>
+
 #include "lammp/lmmp.h"
 
-/*
- * Reference-counted initialisation counter.
- * The first lmmc_init() initialises LAMMP resources; the last
- * lmmc_deinit() tears them down.
- *
- * Not yet thread-safe — planned for the multi-threaded LAMMP.
- */
-static int lmmc_init_count = 0;
+/* ─── 原子引用计数 ─── */
+static _Atomic int lmmc_ref_count = 0;
+
+/* ─── 调试泄漏追踪 ─── */
+#ifdef LMMC_DEBUG_LEAKS
+static _Atomic long long lmmc_alloc_count = 0;
+
+void lmmc_debug_leaks_alloc(void) {
+    atomic_fetch_add_explicit(&lmmc_alloc_count, 1, memory_order_relaxed);
+}
+
+void lmmc_debug_leaks_free(void) {
+    atomic_fetch_sub_explicit(&lmmc_alloc_count, 1, memory_order_relaxed);
+}
+
+long long lmmc_debug_leaks_get_count(void) {
+    return atomic_load_explicit(&lmmc_alloc_count, memory_order_relaxed);
+}
+#endif /* LMMC_DEBUG_LEAKS */
 
 void lmmc_init(void) {
-    if (++lmmc_init_count != 1)
-        return;
-
-    /*
-     * Current LAMMP: initialise the internal operation stack.
-     *
-     * When the new LAMMP ships with lmmp_global_init_() /
-     * lmmp_global_deinit(), replace the call below with:
-     *
-     *     lmmp_global_init_();   // thread-local / process-wide init
-     *
-     * and add to lmmc_deinit():
-     *
-     *     lmmp_global_deinit();  // teardown
-     *
-     * The {stack_init,stack_reset} hacks in LMCAS's bigint.hpp
-     * should then be removed because the new LAMMP manages its
-     * own internal stack without leaking.
-     */
-    lmmp_stack_init();
+    int prev = atomic_fetch_add_explicit(&lmmc_ref_count, 1, memory_order_acq_rel);
+    if (prev == 0) {
+        /* 0→1 转换：执行真正的全局初始化 */
+        lmmp_global_init();
+    }
 }
 
 void lmmc_deinit(void) {
-    if (--lmmc_init_count != 0)
-        return;
+    int prev = atomic_fetch_sub_explicit(&lmmc_ref_count, 1, memory_order_acq_rel);
+    if (prev == 1) {
+        /* 1→0 转换：执行真正的全局清理 */
 
-    /*
-     * Current LAMMP: release the stack allocation.
-     *
-     * In the new LAMMP, replace with:
-     *
-     *     lmmp_global_deinit();
-     *
-     * and remove the lmmp_stack_reset workaround from the callers.
-     */
+#ifdef LMMC_DEBUG_LEAKS
+        long long remaining = atomic_load_explicit(&lmmc_alloc_count, memory_order_relaxed);
+        if (remaining != 0) {
+            fprintf(stderr,
+                    "[LMMC_DEBUG_LEAKS] Final deinit: %lld allocation(s) still outstanding.\n",
+                    remaining);
+        }
+        /* 重置计数器 */
+        atomic_store_explicit(&lmmc_alloc_count, 0, memory_order_relaxed);
+#endif /* LMMC_DEBUG_LEAKS */
 
-    /* Future: lmmp_global_deinit(); */
+        /* 释放栈分配器 */
+        lmmp_stack_reset(0);
+
+        /* 释放全局堆资源 */
+        lmmp_global_deinit();
+    }
 }
 
 void lmmc_stack_reset(size_t size) {
-    /*
-     * Delegate to the underlying LAMMP stack reset.
-     *
-     * When the new LAMMP manages its own internal stack correctly
-     * (i.e. it reuses / frees scratch space rather than letting it
-     * accumulate), this function can become a no-op:
-     *
-     *     (void)size;
-     *
-     * and the callers in LMCAS can be removed entirely.
-     */
     lmmp_stack_reset(size);
 }

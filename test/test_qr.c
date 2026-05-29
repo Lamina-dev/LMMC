@@ -1,3 +1,7 @@
+/**
+ * @file test_qr.c
+ * 针对 LMMC 中 qr 相关接口的单元测试。
+ */
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"

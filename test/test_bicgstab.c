@@ -1,3 +1,7 @@
+/**
+ * @file test_bicgstab.c
+ * 针对 LMMC 中 bicgstab 相关接口的单元测试。
+ */
 #include <math.h>
 #include <stdio.h>
 #include "lmmc/lmmc.h"

@@ -1,3 +1,7 @@
+/**
+ * @file test_numeric.c
+ * 针对 LMMC 中 numeric 相关接口的单元测试。
+ */
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -158,7 +162,20 @@ int main(void) {
             imag_ref[i] = imag_auto[i];
         }
 
+        /* lmmc_fft_radix4 is now strict: n=10 is not power of 4, must fail */
         st = lmmc_fft_radix4_forward(real_auto, imag_auto, n);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT) {
+            rc = 1;
+            goto done;
+        }
+
+        /* Use lmmc_fft for arbitrary-length transforms */
+        for (i = 0; i < n; ++i) {
+            double x = (double)i;
+            real_auto[i] = sin(0.27 * x) + 0.2 * cos(0.13 * x);
+            imag_auto[i] = cos(0.19 * x) - 0.3 * sin(0.07 * x);
+        }
+        st = lmmc_fft_forward(real_auto, imag_auto, n);
         if (st != LMMC_STATUS_OK) {
             rc = 1;
             goto done;
@@ -169,46 +186,45 @@ int main(void) {
             rc = 1;
             goto done;
         }
-
-        for (i = 0; i < n; ++i) {
-            if (!lmmc_test_close(real_auto[i], real_ref[i], 1e-10, 1e-10) || !lmmc_test_close(imag_auto[i], imag_ref[i], 1e-10, 1e-10)) {
-                rc = 1;
-                goto done;
-            }
-        }
     }
 
     {
         size_t i = 0;
         const size_t n = 10;
-        const size_t nfft = 16;
         double real_auto[10] = {0.0};
         double imag_auto[10] = {0.0};
-        double real_ref[16] = {0.0};
-        double imag_ref[16] = {0.0};
+        double real_orig[10] = {0.0};
+        double imag_orig[10] = {0.0};
 
         for (i = 0; i < n; ++i) {
             double x = (double)i;
             real_auto[i] = 0.5 * cos(0.41 * x) - 0.2 * sin(0.23 * x);
             imag_auto[i] = 0.6 * sin(0.17 * x) + 0.1 * cos(0.29 * x);
-            real_ref[i] = real_auto[i];
-            imag_ref[i] = imag_auto[i];
+            real_orig[i] = real_auto[i];
+            imag_orig[i] = imag_auto[i];
         }
 
+        /* lmmc_fft_radix4 is now strict: n=10 is not power of 4, must fail */
         st = lmmc_fft_radix4_inverse(real_auto, imag_auto, n);
-        if (st != LMMC_STATUS_OK) {
+        if (st != LMMC_STATUS_INVALID_ARGUMENT) {
             rc = 1;
             goto done;
         }
 
-        st = lmmc_fft_radix4_inverse(real_ref, imag_ref, nfft);
+        /* Use lmmc_fft for round-trip test */
+        st = lmmc_fft_forward(real_auto, imag_auto, n);
+        if (st != LMMC_STATUS_OK) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_fft_inverse(real_auto, imag_auto, n);
         if (st != LMMC_STATUS_OK) {
             rc = 1;
             goto done;
         }
 
         for (i = 0; i < n; ++i) {
-            if (!lmmc_test_close(real_auto[i], real_ref[i], 1e-10, 1e-10) || !lmmc_test_close(imag_auto[i], imag_ref[i], 1e-10, 1e-10)) {
+            if (!lmmc_test_close(real_auto[i], real_orig[i], 1e-9, 1e-9) || !lmmc_test_close(imag_auto[i], imag_orig[i], 1e-9, 1e-9)) {
                 rc = 1;
                 goto done;
             }

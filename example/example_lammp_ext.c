@@ -1,3 +1,7 @@
+/**
+ * @file example_lammp_ext.c
+ * @brief 演示 LMMC 中 lammp ext 相关接口的使用。
+ */
 #include <stdint.h>
 #include <stdio.h>
 
