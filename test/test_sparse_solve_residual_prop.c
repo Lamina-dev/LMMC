@@ -1,15 +1,8 @@
-/**
- * @file test_sparse_solve_residual_prop.c
- * @brief Property-based test for sparse solve residual accuracy.
+﻿/*
+ * test_sparse_solve_residual_prop.c — 稀疏求解残差属性测试。
  *
- * **Validates: Requirements 10.8, 10.9**
- *
- * Property 5: Sparse solve residual
- * Verifies that for random sparse systems solved via the three-stage pipeline
- * (symbolic -> numeric -> solve), the residual satisfies:
- *   ||Ax - b||_2 <= 1e-8 * (||A||_F * ||x||_2 + ||b||_2)
- *
- * Tests both LU (general non-singular) and Cholesky (SPD) paths.
+ * 验证 ||Ax - b||_2 <= 1e-8 * (||A||_F * ||x||_2 + ||b||_2)，
+ * 覆盖 LU 和 Cholesky 两条路径。
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -399,7 +392,6 @@ int main(void)
 
     printf("=== Property Test: Sparse Solve Residual ===\n");
     printf("Property: ||Ax - b||_2 <= 1e-8 * (||A||_F * ||x||_2 + ||b||_2)\n");
-    printf("Validates: Requirements 10.8, 10.9\n\n");
 
     /* Create RNG with time-based seed */
     st = lmmc_rng_create(&rng);

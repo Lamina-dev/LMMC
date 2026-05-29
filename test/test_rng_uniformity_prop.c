@@ -1,12 +1,6 @@
 /**
  * @file test_rng_uniformity_prop.c
- * @brief Property-based test for RNG uniformity.
- *
- * **Property 8: RNG uniformity**
- * - Draw 1M samples, bin into 256 bins, chi-squared test yields p-value > 1e-6
- * - Verify two RNGs created in same second produce different sequences
- *
- * **Validates: Requirements 9.8**
+ * RNG 均匀性属性测试。
  */
 #include <math.h>
 #include <stdio.h>
@@ -280,7 +274,6 @@ int main(void)
     size_t n_failed = 0;
 
     printf("=== Property 8: RNG uniformity ===\n");
-    printf("Validates: Requirements 9.8\n");
     printf("- Chi-squared test on 1M samples binned into 256 bins\n");
     printf("- Two RNGs created in same second produce different sequences\n\n");
 

@@ -1,6 +1,6 @@
 /**
  * @file test_special_functions.c
- * @brief 针对 LMMC 特殊函数（erf, erfc, lgamma, tgamma, beta, digamma）的单元测试。
+ * 针对 LMMC 特殊函数（erf, erfc, lgamma, tgamma, beta, digamma）的单元测试。
  */
 #include <math.h>
 #include <stdio.h>

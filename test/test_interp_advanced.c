@@ -1,6 +1,6 @@
 /**
  * @file test_interp_advanced.c
- * @brief 测试扩展插值功能：边界条件、PCHIP、Akima、二维插值。
+ * 测试扩展插值功能：边界条件、PCHIP、Akima、二维插值。
  */
 #include <math.h>
 #include <stdio.h>

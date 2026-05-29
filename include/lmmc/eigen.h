@@ -58,8 +58,21 @@ typedef struct {
 /**
  * @brief 计算实对称矩阵的全部特征值与特征向量。
  *
- * @param[in]  a          n×n 对称矩阵。
- * @param[out] out_result 调用方需用 ::lmmc_eigen_sym_result_destroy 释放。
+ * 算法：Householder 三对角化 → 隐式 QL 迭代。
+ * 特征值按升序排列，第 i 个特征值对应 eigenvectors 的第 i 列。
+ *
+ * @param[in]  a          n×n 对称矩阵（不被修改）。
+ * @param[out] out_result 输出结果，调用方需配对调用 ::lmmc_eigen_sym_result_destroy 释放。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL 或矩阵非方阵。
+ * - ::LMMC_STATUS_CONVERGENCE_FAILED — QL 迭代未收敛（超过 30 次）。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存（eigenvalues 向量 + eigenvectors 矩阵 + 临时工作空间）。
+ * - a 不被修改。
  */
 lmmc_status_t lmmc_eigen_symmetric(
     const lmmc_mat_t* a,
@@ -69,8 +82,20 @@ lmmc_status_t lmmc_eigen_symmetric(
 /**
  * @brief 计算一般实矩阵的特征值（不输出特征向量）。
  *
- * @param[in]  a          n×n 实矩阵。
- * @param[out] out_result 调用方需用 ::lmmc_eigen_gen_result_destroy 释放。
+ * 算法：Householder Hessenberg 约化 → Francis 双移位 QR 迭代。
+ * 复数特征值以共轭对形式出现在 real_parts/imag_parts 中。
+ *
+ * @param[in]  a          n×n 实矩阵（不被修改）。
+ * @param[out] out_result 输出结果，调用方需配对调用 ::lmmc_eigen_gen_result_destroy 释放。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL 或矩阵非方阵。
+ * - ::LMMC_STATUS_CONVERGENCE_FAILED — QR 迭代未收敛。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存。a 不被修改。
  */
 lmmc_status_t lmmc_eigen_general(
     const lmmc_mat_t* a,
@@ -78,10 +103,23 @@ lmmc_status_t lmmc_eigen_general(
 );
 
 /**
- * @brief 计算奇异值分解 @f$A = U \Sigma V^T@f$ 。
+ * @brief 计算奇异值分解：A = U * Σ * V^T。
  *
- * @param[in]  a          m×n 矩阵。
- * @param[out] out_result 调用方需用 ::lmmc_svd_result_destroy 释放。
+ * 算法：Householder 双对角化 → Golub-Kahan 隐式 QR 迭代。
+ * 奇异值按降序排列。
+ *
+ * @param[in]  a          m×n 矩阵（不被修改）。
+ * @param[out] out_result 输出 U(m×m)、sigma(min(m,n))、Vt(n×n)。
+ *                        调用方需配对调用 ::lmmc_svd_result_destroy 释放。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL。
+ * - ::LMMC_STATUS_CONVERGENCE_FAILED — 迭代未收敛。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存。a 不被修改。
  */
 lmmc_status_t lmmc_svd(
     const lmmc_mat_t* a,
@@ -89,11 +127,23 @@ lmmc_status_t lmmc_svd(
 );
 
 /**
- * @brief 计算 Moore-Penrose 伪逆 @f$A^+@f$ 。
+ * @brief 计算 Moore-Penrose 伪逆 A^+。
  *
- * @param[in]  a       m×n 矩阵。
- * @param[in]  tol     奇异值截断阈值；@c <=0 时使用默认机器精度规则。
- * @param[out] out_pinv n×m 输出矩阵，需事先创建。
+ * 内部通过 SVD 实现：A^+ = V * Σ^{-1}_trunc * U^T，
+ * 其中奇异值 < tol * σ_max 的被截断为零。
+ *
+ * @param[in]  a        m×n 矩阵（不被修改）。
+ * @param[in]  tol      奇异值截断阈值；<=0 时使用 max(m,n)*eps*σ_max。
+ * @param[out] out_pinv n×m 输出矩阵，须已创建。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL。
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH — out_pinv 维度不是 n×m。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ *
+ * @par 副作用
+ * - 覆写 out_pinv->data。内部分配并释放 SVD 工作空间。
  */
 lmmc_status_t lmmc_pinv(
     const lmmc_mat_t* a,
@@ -102,7 +152,20 @@ lmmc_status_t lmmc_pinv(
 );
 
 /**
- * @brief 计算矩阵的 2-范数条件数 @f$\sigma_{\max}/\sigma_{\min}@f$ 。
+ * @brief 计算矩阵的 2-范数条件数：κ₂(A) = σ_max / σ_min。
+ *
+ * 内部通过 SVD 计算。若 σ_min ≈ 0 则条件数为 Inf。
+ *
+ * @param[in]  a        输入矩阵（不被修改）。
+ * @param[out] out_cond 输出条件数。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ *
+ * @par 副作用
+ * - 内部分配并释放 SVD 工作空间。a 不被修改。
  */
 lmmc_status_t lmmc_cond(
     const lmmc_mat_t* a,

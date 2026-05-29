@@ -20,11 +20,27 @@ extern "C" {
 /** @brief 随机数发生器（不透明类型）。 */
 typedef struct lmmc_rng_t lmmc_rng_t;
 
-/** @brief 创建发生器，初始种子由库实现确定。 */
+/**
+ * @brief 创建随机数发生器实例。
+ *
+ * 分配并初始化一个 xoshiro256** 发生器，初始种子由系统时间或固定值确定
+ * （具体取决于编译配置）。生成器为线程不安全，多线程环境下每个线程应
+ * 独立创建或使用 ::lmmc_rng_clone + ::lmmc_rng_jump 拆分子流。
+ *
+ * @param[out] out_rng 输出新创建的 RNG 句柄。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out_rng 为 NULL；
+ *         ::LMMC_STATUS_ALLOC_FAILED 若内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存存储 RNG 内部状态，调用方必须调用 ::lmmc_rng_destroy 释放。
+ */
 lmmc_status_t lmmc_rng_create(lmmc_rng_t** out_rng);
+
 /** @brief 重新设定种子。 */
 lmmc_status_t lmmc_rng_seed(lmmc_rng_t* rng, uint64_t seed);
-/** @brief 销毁发生器。 */
+/** @brief 销毁发生器，释放内部分配的所有内存。 */
 void lmmc_rng_destroy(lmmc_rng_t* rng);
 
 /**
@@ -35,6 +51,9 @@ void lmmc_rng_destroy(lmmc_rng_t* rng);
  * @param[in]  src     源 RNG（不可为 NULL）。
  * @param[out] out_rng 输出新分配的 RNG 副本。
  * @return LMMC_STATUS_OK 成功；LMMC_STATUS_INVALID_ARGUMENT 若 src 或 out_rng 为 NULL。
+ *
+ * @par 副作用
+ * - 分配堆内存存储副本状态，调用方必须调用 ::lmmc_rng_destroy 释放。
  */
 lmmc_status_t lmmc_rng_clone(const lmmc_rng_t* src, lmmc_rng_t** out_rng);
 
@@ -45,6 +64,9 @@ lmmc_status_t lmmc_rng_clone(const lmmc_rng_t* src, lmmc_rng_t** out_rng);
  *
  * @param[in,out] rng 已初始化的 RNG（不可为 NULL）。
  * @return LMMC_STATUS_OK 成功；LMMC_STATUS_INVALID_ARGUMENT 若 rng 为 NULL。
+ *
+ * @par 副作用
+ * - 就地修改 @p rng 的内部状态。
  */
 lmmc_status_t lmmc_rng_jump(lmmc_rng_t* rng);
 
@@ -55,6 +77,9 @@ lmmc_status_t lmmc_rng_jump(lmmc_rng_t* rng);
  *
  * @param[in,out] rng 已初始化的 RNG（不可为 NULL）。
  * @return LMMC_STATUS_OK 成功；LMMC_STATUS_INVALID_ARGUMENT 若 rng 为 NULL。
+ *
+ * @par 副作用
+ * - 就地修改 @p rng 的内部状态。
  */
 lmmc_status_t lmmc_rng_long_jump(lmmc_rng_t* rng);
 
@@ -71,7 +96,23 @@ lmmc_status_t lmmc_rng_uniform(
     lmmc_real_t* out_value
 );
 
-/** @brief 生成正态分布 @f$\mathcal{N}(\mu, \sigma^2)@f$ 样本。 */
+/**
+ * @brief 生成正态分布 @f$\mathcal{N}(\mu, \sigma^2)@f$ 样本。
+ *
+ * 使用 Box-Muller 或 Ziggurat 方法生成标准正态样本后进行仿射变换。
+ *
+ * @param[in]     rng       已初始化的 RNG。
+ * @param[in]     mean      均值 @f$\mu@f$ 。
+ * @param[in]     stddev    标准差 @f$\sigma@f$ ，必须 > 0。
+ * @param[out]    out_value 输出样本值。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 stddev <= 0 或指针为 NULL。
+ *
+ * @par 副作用
+ * - 就地修改 @p rng 的内部状态（消耗随机数）。
+ * - 不分配堆内存。
+ */
 lmmc_status_t lmmc_rng_normal(
     lmmc_rng_t* rng,
     lmmc_real_t mean,
@@ -98,7 +139,14 @@ lmmc_status_t lmmc_rng_fill_uniform(
 /**
  * @brief Fisher-Yates 洗牌：就地随机重排 @p array 中的 @p count 个元素。
  *
+ * @param[in]     rng       已初始化的 RNG。
+ * @param[in,out] array     待洗牌的数组，就地重排。
+ * @param[in]     count     元素个数。
  * @param[in]     elem_size 每个元素的字节大小。
+ *
+ * @par 副作用
+ * - 就地修改 @p array 中元素的顺序。
+ * - 就地修改 @p rng 的内部状态。
  */
 lmmc_status_t lmmc_rng_shuffle(
     lmmc_rng_t* rng,
@@ -108,15 +156,22 @@ lmmc_status_t lmmc_rng_shuffle(
 );
 
 /**
- * @brief 生成 Gamma 分布样本 Gamma(shape, scale)。
+ * @brief 生成 Gamma 分布样本 @f$\mathrm{Gamma}(\alpha, \beta)@f$ 。
  *
- * 使用 Marsaglia-Tsang 方法（shape >= 1），shape < 1 时使用变换法。
+ * 使用 Marsaglia-Tsang 方法（shape >= 1），shape < 1 时使用
+ * @f$X = Y \cdot U^{1/\alpha}@f$ 变换法（Y ~ Gamma(1+α, β)）。
  *
  * @param[in]  rng    已初始化的 RNG。
- * @param[in]  shape  形状参数（> 0）。
- * @param[in]  scale  尺度参数（> 0）。
+ * @param[in]  shape  形状参数 @f$\alpha@f$ （> 0）。
+ * @param[in]  scale  尺度参数 @f$\beta@f$ （> 0）。
  * @param[out] out    输出样本值。
- * @return LMMC_STATUS_OK 成功。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 shape <= 0、scale <= 0 或指针为 NULL。
+ *
+ * @par 副作用
+ * - 就地修改 @p rng 的内部状态（消耗多个随机数，次数不确定）。
+ * - 不分配堆内存。
  */
 lmmc_status_t lmmc_rng_gamma(
     lmmc_rng_t* rng,
@@ -186,14 +241,21 @@ lmmc_status_t lmmc_rng_f(
 );
 
 /**
- * @brief 生成 Poisson 分布样本 Poisson(lambda)。
+ * @brief 生成 Poisson 分布样本 @f$\mathrm{Poisson}(\lambda)@f$ 。
  *
- * lambda >= 10 使用 PTRD（Hörmann）算法，lambda < 10 使用逆变换法。
+ * lambda >= 10 使用 PTRD（Hörmann）算法（接受-拒绝），
+ * lambda < 10 使用逆变换法（Knuth 方法）。
  *
  * @param[in]  rng     已初始化的 RNG。
  * @param[in]  lambda  期望值（> 0）。
- * @param[out] out     输出样本值。
- * @return LMMC_STATUS_OK 成功。
+ * @param[out] out     输出样本值（非负整数）。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 lambda <= 0 或指针为 NULL。
+ *
+ * @par 副作用
+ * - 就地修改 @p rng 的内部状态（消耗随机数次数不确定，取决于接受-拒绝过程）。
+ * - 不分配堆内存。
  */
 lmmc_status_t lmmc_rng_poisson(
     lmmc_rng_t* rng,

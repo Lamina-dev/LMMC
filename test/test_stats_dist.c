@@ -1,6 +1,6 @@
 /**
  * @file test_stats_dist.c
- * @brief 概率分布与描述性统计测试。
+ * 概率分布与描述性统计测试。
  */
 #include <stdio.h>
 #include <math.h>

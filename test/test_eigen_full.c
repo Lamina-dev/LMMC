@@ -1,8 +1,6 @@
 /**
  * @file test_eigen_full.c
- * @brief Unit tests for lmmc_eigen_general_full (eigenvalues + eigenvectors).
- *
- * Validates Requirements 6.1, 6.2, 6.3, 6.4, 6.5, 6.7
+ * Unit tests for lmmc_eigen_general_full (eigenvalues + eigenvectors).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -390,7 +388,6 @@ int main(void)
     size_t n_failed = 0;
 
     printf("=== Eigen General Full (Eigenvalues + Eigenvectors) Tests ===\n");
-    printf("Validates: Requirements 6.1, 6.2, 6.3, 6.4, 6.5, 6.7\n\n");
 
     for (size_t i = 0; i < n_tests; i++) {
         printf("[%zu/%zu] %s ... ", i + 1, n_tests, tests[i].name);

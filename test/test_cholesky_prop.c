@@ -1,14 +1,6 @@
 /**
  * @file test_cholesky_prop.c
- * @brief Property-based test for Cholesky reconstruction accuracy.
- *
- * **Validates: Requirements 3.4**
- *
- * Property 3: Cholesky reconstruction
- * Verifies that for random SPD matrices A, the Cholesky factor L satisfies:
- *   ||L * L^T - A||_F <= 1e-10 * ||A||_F
- *
- * SPD matrices are generated as A = B * B^T + eps * I for random B.
+ * Cholesky 分解重构精度属性测试。
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -199,7 +191,6 @@ int main(void) {
 
     printf("=== Property Test: Cholesky Reconstruction ===\n");
     printf("Property: ||L*L^T - A||_F <= 1e-10 * ||A||_F for random SPD inputs\n");
-    printf("Validates: Requirements 3.4\n\n");
 
     /* Create RNG with a seed based on time for randomness */
     st = lmmc_rng_create(&rng);

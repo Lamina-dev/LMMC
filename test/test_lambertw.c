@@ -1,8 +1,6 @@
 /**
  * @file test_lambertw.c
- * @brief Unit tests for Lambert W₀ domain fix and W₋₁ branch.
- *
- * Validates Requirements 2.1–2.6.
+ * Unit tests for Lambert W₀ domain fix and W₋₁ branch.
  */
 #include <math.h>
 #include <stdio.h>

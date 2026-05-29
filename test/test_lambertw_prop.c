@@ -1,12 +1,6 @@
 /**
  * @file test_lambertw_prop.c
- * @brief Property-based test for Lambert W identity.
- *
- * **Property 2: Lambert W identity**
- * Verify W(z) * exp(W(z)) == z within 1e-10 * (1 + |z|) for random z in domain.
- * Tests both W_0 and W_{-1} branches.
- *
- * **Validates: Requirements 2.7**
+ * Lambert W 恒等式属性测试。
  */
 #include <math.h>
 #include <stdio.h>
@@ -242,7 +236,6 @@ int main(void)
     size_t n_failed = 0;
 
     printf("=== Property 2: Lambert W identity ===\n");
-    printf("Validates: Requirements 2.7\n");
     printf("Verify W(z) * exp(W(z)) == z within 1e-10 * (1 + |z|)\n\n");
 
     rng_seed(RNG_SEED);

@@ -1,12 +1,6 @@
 /**
  * @file test_sparse_buffer_safety.c
- * @brief Unit tests for sparse LU/Cholesky buffer safety with capacity tracking.
- *
- * Tests exercise the reallocation path by using matrices with high fill-in
- * (arrowhead structure, dense SPD) and verify that the destroy function works
- * correctly after both successful and failed factorizations.
- *
- * Validates: Requirements 4.6, 4.7
+ * 稀疏 LU/Cholesky 缓冲区安全测试。
  */
 #include <stdio.h>
 #include <stdlib.h>

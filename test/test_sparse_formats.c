@@ -1,6 +1,6 @@
 /**
  * @file test_sparse_formats.c
- * @brief BSR 格式和对称半存储 CSR 格式的单元测试。
+ * BSR 格式和对称半存储 CSR 格式的单元测试。
  */
 #include <stdio.h>
 #include <math.h>

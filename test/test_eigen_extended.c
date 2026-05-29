@@ -1,8 +1,6 @@
 /**
  * @file test_eigen_extended.c
- * @brief 针对 LMMC 中 eigen extended 相关接口的单元测试。
- *
- * @internal
+ * 针对 LMMC 中 eigen extended 相关接口的单元测试。
  */
 #include <stdio.h>
 #include <stdlib.h>

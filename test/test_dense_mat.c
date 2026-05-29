@@ -1,8 +1,6 @@
 /**
  * @file test_dense_mat.c
- * @brief 针对 LMMC 中 dense mat 相关接口的单元测试。
- *
- * @internal
+ * 针对 LMMC 中 dense mat 相关接口的单元测试。
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -273,7 +271,6 @@ int main(void)
     srand((unsigned int)time(NULL));
 
     printf("=== Property 6: 矩阵加减法互逆性 ===\n");
-    printf("  Validates: Requirements 3.1, 3.2\n\n");
 
     if (test_mat_add_sub_inverse()) { rc = 1; printf("  [FAIL] mat_add then mat_sub inverse\n"); }
     else { printf("  [PASS] mat_add then mat_sub inverse\n"); }
@@ -282,7 +279,6 @@ int main(void)
     else { printf("  [PASS] mat_sub then mat_add inverse\n"); }
 
     printf("\n=== Property 7: 单位矩阵性质 ===\n");
-    printf("  Validates: Requirements 3.4, 3.5, 3.6\n\n");
 
     if (test_identity_structure()) { rc = 1; printf("  [FAIL] identity structure\n"); }
     else { printf("  [PASS] identity structure\n"); }

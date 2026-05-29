@@ -1,15 +1,6 @@
 /**
  * @file test_eigen_residual_prop.c
- * @brief Property-based test for eigenpair residual accuracy.
- *
- * **Validates: Requirements 6.6**
- *
- * Property 4: Eigenpair residual
- * For random real matrices A of size n <= 100, verifies that every eigenpair
- * (lambda, v) returned by lmmc_eigen_general_full satisfies:
- *   ||A*v - lambda*v||_2 <= 1e-8 * (1 + ||A||_F) * ||v||_2
- *
- * Tests both real eigenvalues and complex-conjugate pairs.
+ * 特征对残差精度属性测试。
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -198,7 +189,6 @@ int main(void) {
 
     printf("=== Property Test: Eigenpair Residual ===\n");
     printf("Property 4: ||A*v - lambda*v||_2 <= 1e-8 * (1 + ||A||_F) * ||v||_2\n");
-    printf("Validates: Requirements 6.6\n\n");
 
     /* Create RNG with time-based seed for randomness */
     st = lmmc_rng_create(&rng);

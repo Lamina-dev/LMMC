@@ -1,12 +1,6 @@
 /**
  * @file test_dist_roundtrip_prop.c
- * @brief Property-based test for distribution CDF/quantile round-trip and erf accuracy.
- *
- * **Property 10: Distribution round-trip**
- * - Verify |quantile(cdf(x)) - x| <= 1e-8 for x in bulk of each continuous distribution
- * - Test erf accuracy against C standard library erf(x) for x in [-5, 5]
- *
- * **Validates: Requirements 16.4, 16.5**
+ * 分布函数 CDF/quantile 往返属性测试。
  */
 #include <math.h>
 #include <stdio.h>
@@ -462,7 +456,6 @@ int main(void)
     size_t n_failed = 0;
 
     printf("=== Property 10: Distribution round-trip ===\n");
-    printf("Validates: Requirements 16.4, 16.5\n");
     printf("Verify |quantile(cdf(x)) - x| <= 1e-8 for continuous distributions\n");
     printf("Test erf accuracy against high-precision reference for x in [-5, 5]\n\n");
 

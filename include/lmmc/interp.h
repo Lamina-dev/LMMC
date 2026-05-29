@@ -60,6 +60,14 @@ typedef enum {
  * @param[in]  ys          对应 y 值数组。
  * @param[in]  n           节点数，至少 3 。
  * @param[out] out_spline  返回的样条句柄。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n < 3 或指针为 NULL；
+ *         ::LMMC_STATUS_ALLOC_FAILED 若内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存存储样条系数，调用方必须调用 ::lmmc_interp_cspline_destroy 释放。
+ * - 内部复制节点数据，调用后可安全释放 xs/ys。
  */
 lmmc_status_t lmmc_interp_cspline_create(
     const lmmc_real_t* xs,
@@ -71,6 +79,10 @@ lmmc_status_t lmmc_interp_cspline_create(
 /**
  * @brief 由节点构造带指定边界条件的三次样条。
  *
+ * 支持自然、固定（clamped）、not-a-knot 和周期四种边界条件。
+ * 对于 LMMC_SPLINE_CLAMPED，需通过 deriv_left/deriv_right 指定端点导数；
+ * 其他边界条件下这两个参数被忽略。
+ *
  * @param[in]  xs          严格升序节点 x 数组。
  * @param[in]  ys          对应 y 值数组。
  * @param[in]  n           节点数，至少 3 。
@@ -79,8 +91,17 @@ lmmc_status_t lmmc_interp_cspline_create(
  * @param[in]  deriv_right 右端点一阶导数（仅 LMMC_SPLINE_CLAMPED 时使用）。
  * @param[out] out_spline  返回的样条句柄。
  *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n < 3、xs 非严格升序、
+ *         PERIODIC 模式下首尾 y 值不匹配、或指针为 NULL；
+ *         ::LMMC_STATUS_ALLOC_FAILED 若内存分配失败。
+ *
  * @note 对于 LMMC_SPLINE_PERIODIC，要求 |ys[0] - ys[n-1]| <= 1e-12，否则返回
  *       LMMC_STATUS_INVALID_ARGUMENT。
+ *
+ * @par 副作用
+ * - 分配堆内存存储样条系数，调用方必须调用 ::lmmc_interp_cspline_destroy 释放。
+ * - 内部复制节点数据，调用后可安全释放 xs/ys。
  */
 lmmc_status_t lmmc_interp_cspline_create_ex(
     const lmmc_real_t* xs,
@@ -99,7 +120,7 @@ lmmc_status_t lmmc_interp_cspline_eval(
     lmmc_real_t* out_y
 );
 
-/** @brief 销毁三次样条上下文。 */
+/** @brief 销毁三次样条上下文，释放内部分配的所有内存。 */
 void lmmc_interp_cspline_destroy(lmmc_interp_cspline_t* spline);
 
 /* ========================================================================
@@ -112,10 +133,21 @@ typedef struct lmmc_interp_pchip_t lmmc_interp_pchip_t;
 /**
  * @brief 由节点构造 PCHIP 单调三次插值。
  *
+ * PCHIP（Piecewise Cubic Hermite Interpolating Polynomial）保证在单调数据上
+ * 插值结果也保持单调性，不会产生虚假振荡。使用 Fritsch-Carlson 方法计算导数。
+ *
  * @param[in]  xs   严格升序节点 x 数组。
  * @param[in]  ys   对应 y 值数组。
  * @param[in]  n    节点数，至少 2 。
  * @param[out] out  返回的 PCHIP 句柄。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n < 2、xs 非严格升序或指针为 NULL；
+ *         ::LMMC_STATUS_ALLOC_FAILED 若内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存存储插值系数，调用方必须调用 ::lmmc_interp_pchip_destroy 释放。
+ * - 内部复制节点数据，调用后可安全释放 xs/ys。
  */
 lmmc_status_t lmmc_interp_pchip_create(
     const lmmc_real_t* xs,
@@ -131,7 +163,7 @@ lmmc_status_t lmmc_interp_pchip_eval(
     lmmc_real_t* out_y
 );
 
-/** @brief 销毁 PCHIP 插值上下文。 */
+/** @brief 销毁 PCHIP 插值上下文，释放内部分配的所有内存。 */
 void lmmc_interp_pchip_destroy(lmmc_interp_pchip_t* p);
 
 /* ========================================================================
@@ -144,10 +176,21 @@ typedef struct lmmc_interp_akima_t lmmc_interp_akima_t;
 /**
  * @brief 由节点构造 Akima 局部三次插值。
  *
+ * Akima 插值使用局部加权平均计算节点导数，相比全局样条对离群点更鲁棒，
+ * 不会产生全局振荡。需要至少 5 个节点以计算边界处的导数。
+ *
  * @param[in]  xs   严格升序节点 x 数组。
  * @param[in]  ys   对应 y 值数组。
  * @param[in]  n    节点数，至少 5（Akima 需要至少 5 个点）。
  * @param[out] out  返回的 Akima 句柄。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n < 5、xs 非严格升序或指针为 NULL；
+ *         ::LMMC_STATUS_ALLOC_FAILED 若内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存存储插值系数，调用方必须调用 ::lmmc_interp_akima_destroy 释放。
+ * - 内部复制节点数据，调用后可安全释放 xs/ys。
  */
 lmmc_status_t lmmc_interp_akima_create(
     const lmmc_real_t* xs,
@@ -163,7 +206,7 @@ lmmc_status_t lmmc_interp_akima_eval(
     lmmc_real_t* out_y
 );
 
-/** @brief 销毁 Akima 插值上下文。 */
+/** @brief 销毁 Akima 插值上下文，释放内部分配的所有内存。 */
 void lmmc_interp_akima_destroy(lmmc_interp_akima_t* a);
 
 /* ========================================================================

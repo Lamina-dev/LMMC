@@ -1,8 +1,6 @@
 /**
  * @file test_rng_jump.c
- * @brief Unit tests for RNG robust seeding, jump, long_jump, and clone.
- *
- * Validates Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7
+ * RNG 种子、jump、long_jump、clone 单元测试。
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,8 +21,7 @@ static int test_failures = 0;
 } while (0)
 
 /**
- * Test: Two RNGs created without explicit seed in the same second
- * produce different sequences (Req 9.6).
+ * 两个不指定种子的 RNG 在同一秒内创建，应产生不同序列。
  */
 static int test_unique_default_seeds(void)
 {
@@ -58,9 +55,7 @@ static int test_unique_default_seeds(void)
     return 0;
 }
 
-/**
- * Test: lmmc_rng_clone produces an independent deep copy (Req 9.7).
- */
+/* clone 应产生独立的深拷贝。 */
 static int test_clone_deep_copy(void)
 {
     lmmc_rng_t* rng = NULL;
@@ -92,9 +87,7 @@ static int test_clone_deep_copy(void)
     return 0;
 }
 
-/**
- * Test: After jump, clone and original produce different sequences (Req 9.7).
- */
+/* jump 后 clone 与原始 RNG 应产生不同序列。 */
 static int test_clone_then_jump_diverges(void)
 {
     lmmc_rng_t* rng = NULL;
@@ -133,9 +126,7 @@ static int test_clone_then_jump_diverges(void)
     return 0;
 }
 
-/**
- * Test: lmmc_rng_jump with NULL returns LMMC_STATUS_INVALID_ARGUMENT (Req 9.5).
- */
+/* NULL 参数应返回 LMMC_STATUS_INVALID_ARGUMENT。 */
 static int test_jump_null_returns_error(void)
 {
     lmmc_status_t st;
@@ -256,7 +247,7 @@ static int test_long_jump_deterministic_and_different(void)
 /**
  * Test: Verify no overlap between original and jumped clone over many samples.
  * This is a statistical check — draw many samples from both and verify
- * no common values appear (Req 9.7 partial check with smaller sample).
+ * no common values appear .
  */
 static int test_jump_no_overlap_short(void)
 {
@@ -312,7 +303,6 @@ int main(void)
     int rc = 0;
 
     printf("=== RNG Jump/Clone/Seeding Unit Tests ===\n");
-    printf("  Validates: Requirements 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7\n\n");
 
     printf("--- Unique default seeds ---\n");
     if (test_unique_default_seeds()) { rc = 1; }

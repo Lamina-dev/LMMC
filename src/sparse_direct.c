@@ -1,11 +1,6 @@
-/**
+﻿/**
  * @file sparse_direct.c
- * @brief Sparse LU / Cholesky direct factorization with AMD reordering
- *        and Gilbert-Peierls numerical factorization.
- *
- * Three-stage pipeline: analyze (symbolic) -> factorize (numeric) -> solve.
- * AMD reordering minimizes fill-in. Gilbert-Peierls uses depth-first reach
- * in L^T to determine the non-zero pattern before numeric update.
+ * 稀疏 LU / Cholesky 直接分解，含 AMD 重排序与 Gilbert-Peierls 数值分解。
  */
 #include <string.h>
 #include <math.h>
@@ -47,7 +42,7 @@ struct lmmc_sparse_chol_t {
 
 
 /* ======================================================================== */
-/* Utility: ensure CSC format                                               */
+/* 确保 CSC 格式                                                            */
 /* ======================================================================== */
 
 static lmmc_status_t ensure_csc(const lmmc_sparse_mat_t* a,
@@ -64,7 +59,7 @@ static lmmc_status_t ensure_csc(const lmmc_sparse_mat_t* a,
 }
 
 /* ======================================================================== */
-/* Capacity-tracked buffer growth (Req 4 safety net)                        */
+/* 动态容量缓冲区增长                                                       */
 /* ======================================================================== */
 
 static lmmc_status_t sparse_ensure_capacity(size_t** idx, lmmc_real_t** vals,

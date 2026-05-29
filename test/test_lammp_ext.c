@@ -1,8 +1,6 @@
 /**
  * @file test_lammp_ext.c
- * @brief 针对 LMMC 中 lammp ext 相关接口的单元测试。
- *
- * @internal
+ * 针对 LMMC 中 lammp ext 相关接口的单元测试。
  */
 #include <assert.h>
 #include <stdint.h>

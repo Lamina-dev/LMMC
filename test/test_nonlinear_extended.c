@@ -1,8 +1,6 @@
 /**
  * @file test_nonlinear_extended.c
- * @brief 针对 LMMC 中 nonlinear extended 相关接口的单元测试。
- *
- * @internal
+ * 针对 LMMC 中 nonlinear extended 相关接口的单元测试。
  */
 #include <math.h>
 #include <stdio.h>

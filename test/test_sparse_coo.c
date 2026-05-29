@@ -1,8 +1,6 @@
 /**
  * @file test_sparse_coo.c
- * @brief 针对 LMMC 中 sparse coo 相关接口的单元测试。
- *
- * @internal
+ * 针对 LMMC 中 sparse coo 相关接口的单元测试。
  */
 #include <stdio.h>
 #include <assert.h>

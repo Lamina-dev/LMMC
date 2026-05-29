@@ -1,22 +1,8 @@
-/**
- * @file test_ode_rk45_convergence_prop.c
- * @brief Property test for ODE RK45 convergence order (Property 9).
+﻿/*
+ * test_ode_rk45_convergence_prop.c — ODE RK45 收敛阶属性测试。
  *
- * **Validates: Requirements 1.11**
- *
- * Property 9: ODE convergence order
- * Verifies that the RK45 adaptive solver demonstrates 4th-order convergence
- * by checking that halving the tolerance reduces global error by a factor
- * >= 16 across >= 3 tolerance levels.
- *
- * Test problem: y' = -y, y(0) = 1, t in [0, 1]
- * Exact solution: y(t) = e^{-t}
- *
- * Strategy:
- * 1. Canonical test with fixed step sizes (not adaptive) to verify the
- *    underlying RK45 method is 4th-order: halving h gives 16x error reduction.
- * 2. Adaptive tolerance test: verify errors decrease monotonically and are
- *    bounded by C*tol for a reasonable constant C across many random problems.
+ * 验证容差减半时全局误差缩小 >=16 倍（4 阶收敛）。
+ * 测试问题：y' = -y, y(0)=1, 精确解 e^{-t}。
  */
 #include <math.h>
 #include <stdio.h>

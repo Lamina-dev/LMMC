@@ -1,16 +1,6 @@
 /**
  * @file test_gemm_accuracy_prop.c
- * @brief Property-based test for GEMM accuracy.
- *
- * **Validates: Requirements 12.8**
- *
- * Property 6: GEMM accuracy
- * Verifies that lmmc_mat_gemm produces results matching a naive triple-loop
- * reference within tolerance:
- *   |C_ij - C_ref_ij| <= 1e-10 * (1 + |alpha| * ||A||_F * ||B||_F + |beta| * ||C0||_F)
- *
- * Tests with random alpha, beta, transA, transB combinations and various
- * matrix sizes.
+ * GEMM 精度属性测试。
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -210,7 +200,6 @@ int main(void) {
     printf("=== Property Test: GEMM Accuracy ===\n");
     printf("Property 6: GEMM result matches naive triple-loop within tolerance\n");
     printf("Tolerance: 1e-10 * (1 + |alpha| * ||A||_F * ||B||_F + |beta| * ||C0||_F)\n");
-    printf("Validates: Requirements 12.8\n\n");
 
     /* Create RNG with time-based seed */
     st = lmmc_rng_create(&rng);

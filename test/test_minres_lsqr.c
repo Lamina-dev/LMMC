@@ -1,14 +1,6 @@
 /**
  * @file test_minres_lsqr.c
- * @brief Unit tests for MINRES and LSQR iterative solvers.
- *
- * Tests:
- *   1. MINRES on symmetric indefinite sparse system: residual <= tol * ||b||_2
- *   2. LSQR on over-determined system: normal equation residual check
- *   3. Matrix-free path agrees with sparse-operator path within 1e-10 * ||b||_2
- *   4. Error handling: LMMC_STATUS_INVALID_ARGUMENT when both a and apply_op provided
- *
- * Validates: Requirements 14.5, 14.6, 14.7
+ * MINRES / LSQR 迭代求解器单元测试。
  */
 #include <math.h>
 #include <stdio.h>

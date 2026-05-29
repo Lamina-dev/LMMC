@@ -1,16 +1,6 @@
 /**
  * @file test_optimize.c
- * @brief Unit tests for the LMMC optimization module.
- *
- * Tests:
- * 1. L-BFGS on Rosenbrock function for n=2,5,10,20 (gradient norm < 1e-6)
- * 2. Newton solver quadratic convergence on SPD linear system
- * 3. Broyden on a simple nonlinear system
- * 4. Gradient descent converges on a simple quadratic
- * 5. Levenberg-Marquardt on a simple least-squares problem
- *
- * Validates: Requirements 13.8, 13.9
- * @internal
+ * 优化模块单元测试。
  */
 #include <stdio.h>
 #include <stdlib.h>

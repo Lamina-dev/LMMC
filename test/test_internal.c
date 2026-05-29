@@ -1,8 +1,6 @@
 /**
  * @file test_internal.c
- * @brief 针对 LMMC 中 internal 相关接口的单元测试。
- *
- * @internal
+ * 针对 LMMC 中 internal 相关接口的单元测试。
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -430,7 +428,6 @@ int main(void)
     srand((unsigned int)time(NULL));
 
     printf("=== Property 1: Integer overflow detection correctness ===\n");
-    printf("  Validates: Requirements 1.1\n\n");
 
     if (test_safe_mul_overflow()) { rc = 1; printf("  [FAIL] safe_mul overflow\n"); }
     else { printf("  [PASS] safe_mul overflow\n"); }
@@ -445,7 +442,6 @@ int main(void)
     else { printf("  [PASS] safe_add normal\n"); }
 
     printf("\n=== Property 2: Real utility function mathematical properties ===\n");
-    printf("  Validates: Requirements 1.3\n\n");
 
     if (test_abs_property()) { rc = 1; printf("  [FAIL] abs property\n"); }
     else { printf("  [PASS] abs property\n"); }

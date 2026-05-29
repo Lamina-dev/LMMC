@@ -23,12 +23,37 @@ void lmmc_stats_nPr(lmmc_real_t* out_val, uint32_t n, uint32_t r);
 /** @brief 计算组合数 @f$C(n,r)=\binom{n}{r}@f$ 。 */
 void lmmc_stats_nCr(lmmc_real_t* out_val, uint32_t n, uint32_t r);
 
-/** @brief 计算向量样本均值 @f$\bar{x}@f$ 。 */
+/**
+ * @brief 计算向量样本均值 @f$\bar{x} = \frac{1}{n}\sum_{i=1}^{n} x_i@f$ 。
+ *
+ * @param[in]  x        输入向量，size >= 1。
+ * @param[out] out_mean 输出均值。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 x 为空向量（size == 0）或指针为 NULL。
+ *
+ * @par 副作用
+ * - 无。只读访问输入向量，不分配内存。
+ */
 lmmc_status_t lmmc_vec_mean(const lmmc_vec_t* x, lmmc_real_t* out_mean);
 
 /** @brief 总体方差 @f$\sigma^2 = \frac{1}{n}\sum (x_i-\bar{x})^2@f$ 。 */
 lmmc_status_t lmmc_vec_variance_population(const lmmc_vec_t* x, lmmc_real_t* out_variance);
-/** @brief 样本方差 @f$s^2 = \frac{1}{n-1}\sum (x_i-\bar{x})^2@f$ ，要求 n>=2 。 */
+
+/**
+ * @brief 计算样本方差 @f$s^2 = \frac{1}{n-1}\sum_{i=1}^{n}(x_i-\bar{x})^2@f$ 。
+ *
+ * 使用 Bessel 校正（除以 n-1），要求至少 2 个样本。
+ *
+ * @param[in]  x            输入向量，size >= 2。
+ * @param[out] out_variance 输出样本方差。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 x->size < 2 或指针为 NULL。
+ *
+ * @par 副作用
+ * - 无。只读访问输入向量，不分配内存。
+ */
 lmmc_status_t lmmc_vec_variance_sample(const lmmc_vec_t* x, lmmc_real_t* out_variance);
 
 /** @brief 总体标准差。 */
@@ -55,7 +80,23 @@ lmmc_status_t lmmc_mat_column_mean(const lmmc_mat_t* x, lmmc_vec_t* out_means);
 
 /** @brief 计算总体协方差矩阵（cols × cols）。 */
 lmmc_status_t lmmc_mat_covariance_population(const lmmc_mat_t* x, lmmc_mat_t* out_covariance);
-/** @brief 计算样本协方差矩阵（cols × cols），要求行数 >= 2 。 */
+
+/**
+ * @brief 计算样本协方差矩阵（cols × cols），要求行数 >= 2 。
+ *
+ * 输出矩阵 @p out_covariance 的 (i,j) 元素为第 i 列与第 j 列的样本协方差。
+ * 使用 Bessel 校正（除以 rows-1）。
+ *
+ * @param[in]  x              输入矩阵，rows >= 2，每行为一次观测。
+ * @param[out] out_covariance 输出协方差矩阵，大小 cols × cols，调用方需预分配。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 rows < 2、维度不匹配或指针为 NULL。
+ *
+ * @par 副作用
+ * - 就地写入 @p out_covariance 矩阵的全部元素。
+ * - 内部可能分配临时向量用于列均值计算，函数返回前释放。
+ */
 lmmc_status_t lmmc_mat_covariance_sample(const lmmc_mat_t* x, lmmc_mat_t* out_covariance);
 
 /** @brief 计算总体 Pearson 相关矩阵。 */
@@ -72,7 +113,14 @@ lmmc_status_t lmmc_mat_correlation_sample(const lmmc_mat_t* x, lmmc_mat_t* out_c
  *
  * @param[in]  x   输入向量，size >= 1。
  * @param[out] out 输出中位数。
- * @return LMMC_STATUS_OK 成功。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 x->size == 0 或指针为 NULL；
+ *         ::LMMC_STATUS_ALLOC_FAILED 若临时数组分配失败。
+ *
+ * @par 副作用
+ * - 内部分配长度为 x->size 的临时数组用于排序，函数返回前释放。
+ * - 不修改输入向量 @p x 。
  */
 lmmc_status_t lmmc_vec_median(const lmmc_vec_t* x, lmmc_real_t* out);
 

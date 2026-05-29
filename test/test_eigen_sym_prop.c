@@ -1,8 +1,6 @@
 /**
  * @file test_eigen_sym_prop.c
- * @brief 针对 LMMC 中 eigen sym prop 相关接口的单元测试。
- *
- * @internal
+ * 针对 LMMC 中 eigen sym prop 相关接口的单元测试。
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -182,7 +180,6 @@ int main(void)
     srand(0xC0FFEEu);
 
     printf("=== Property 8: 对称特征值分解重构 ===\n");
-    printf("  Validates: Requirements 5.1, 5.4, 5.5\n");
     printf("  Iterations: %d, sizes 2x2..6x6\n\n", NUM_ITERATIONS);
 
     if (test_eigen_sym_property()) {

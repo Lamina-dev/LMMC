@@ -1,16 +1,6 @@
 /**
  * @file test_mat_inv_trisolve.c
- * @brief Unit tests for lmmc_mat_inv and lmmc_solve_triangular.
- *
- * Tests:
- * 1. Matrix inversion: ‖A·A_inv - I‖_F ≤ 1e-8 * κ(A) for random non-singular matrices.
- * 2. Triangular solve: ‖Tx - b‖_2 ≤ 1e-10 * (‖T‖_F * ‖x‖_2 + ‖b‖_2) for random triangular.
- * 3. Singular matrix: lmmc_mat_inv returns LMMC_STATUS_SINGULAR_MATRIX.
- * 4. Unit diagonal mode for triangular solve.
- *
- * Validates: Requirements 22.4, 22.5
- *
- * @internal
+ * 矩阵求逆与三角求解单元测试。
  */
 #include <stdio.h>
 #include <math.h>

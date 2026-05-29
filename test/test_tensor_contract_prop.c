@@ -1,15 +1,6 @@
 /**
  * @file test_tensor_contract_prop.c
- * @brief Property-based test for tensor contraction accuracy.
- *
- * **Validates: Requirements 11.11**
- *
- * Property 7: Tensor contraction
- * Verifies that for random tensors a and b contracted along various axis
- * combinations, the output matches an unrolled nested-loop reference within:
- *   1e-10 * (1 + ||a||_F * ||b||_F)
- *
- * Tests 2-D, 3-D, and 4-D tensors with multiple random trials.
+ * 张量缩并精度属性测试。
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -305,7 +296,6 @@ int main(void) {
     printf("=== Property Test: Tensor Contraction ===\n");
     printf("Property 7: output matches unrolled nested-loop reference\n");
     printf("Tolerance: 1e-10 * (1 + ||a||_F * ||b||_F)\n");
-    printf("Validates: Requirements 11.11\n\n");
 
     /* Create RNG */
     st = lmmc_rng_create(&rng);

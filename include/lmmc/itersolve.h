@@ -71,12 +71,43 @@ typedef struct {
 } lmmc_itersolve_config_t;
 
 /**
- * @brief 根据问题规模生成默认配置。
+ * @brief 根据问题规模生成迭代求解器默认配置。
+ *
+ * 默认值：abs_tol=1e-12, rel_tol=1e-8, max_iter=max(100, 20*n), restart=min(n,30)。
+ *
+ * @param[in]  problem_size 问题维度 n，必须 > 0。
+ * @param[out] out_cfg      输出配置结构体。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — problem_size==0 或 out_cfg==NULL。
+ *
+ * @par 副作用
+ * - 覆写 out_cfg 的所有字段。无内存分配。
  */
 lmmc_status_t lmmc_itersolve_default_config(size_t problem_size, lmmc_itersolve_config_t* out_cfg);
 
 /**
- * @brief 共轭梯度法求解对称正定稀疏系统 A x = b 。
+ * @brief 共轭梯度法（CG）求解对称正定稀疏系统 A*x = b。
+ *
+ * 要求 A 对称正定。x 作为初始猜测输入，收敛后存储解。
+ * 收敛判据：||r||_2 <= abs_tol + rel_tol * ||b||_2。
+ *
+ * @param[in]     a          对称正定稀疏矩阵（不被修改）。
+ * @param[in]     b          右端向量（不被修改）。
+ * @param[in]     precond    预处理子，可为 NULL（无预处理）。
+ * @param[in]     cfg        配置参数，可为 NULL（使用默认值）。
+ * @param[in,out] x          初始猜测 / 输出解向量。
+ * @param[out]    out_result 迭代统计结果，可为 NULL。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功（含收敛和达到最大步数两种情况，通过 out_result->converged 区分）。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL 或维度为 0。
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH — 矩阵/向量/预处理子维度不匹配。
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE — 出现 NaN/Inf 或分母退化。
+ *
+ * @par 副作用
+ * - 就地修改 x->data。分配并释放 4 个长度为 n 的临时向量。
  */
 lmmc_status_t lmmc_cg_solve(
     const lmmc_sparse_mat_t* a,
@@ -88,7 +119,21 @@ lmmc_status_t lmmc_cg_solve(
 );
 
 /**
- * @brief 稳定双共轭梯度法（BiCGSTAB）求解一般非对称稀疏系统。
+ * @brief 稳定双共轭梯度法（BiCGSTAB）求解一般非对称稀疏系统 A*x = b。
+ *
+ * 适用于非对称或不定矩阵。x 作为初始猜测输入。
+ *
+ * @param[in]     a          稀疏矩阵（不被修改）。
+ * @param[in]     b          右端向量（不被修改）。
+ * @param[in]     precond    预处理子，可为 NULL。
+ * @param[in]     cfg        配置参数，可为 NULL。
+ * @param[in,out] x          初始猜测 / 输出解向量。
+ * @param[out]    out_result 迭代统计结果，可为 NULL。
+ *
+ * @return 同 ::lmmc_cg_solve。
+ *
+ * @par 副作用
+ * - 就地修改 x->data。分配并释放 9 个长度为 n 的临时向量。
  */
 lmmc_status_t lmmc_bicgstab_solve(
     const lmmc_sparse_mat_t* a,
@@ -100,7 +145,23 @@ lmmc_status_t lmmc_bicgstab_solve(
 );
 
 /**
- * @brief 重启型 GMRES 求解一般非对称稀疏系统。
+ * @brief 重启型 GMRES 求解一般非对称稀疏系统 A*x = b。
+ *
+ * 使用 Arnoldi 过程构建 Krylov 子空间，Givens 旋转求解最小残差。
+ * 重启长度由 cfg->restart 控制（默认 30）。
+ *
+ * @param[in]     a          稀疏矩阵（不被修改）。
+ * @param[in]     b          右端向量（不被修改）。
+ * @param[in]     precond    预处理子，可为 NULL。
+ * @param[in]     cfg        配置参数，可为 NULL。cfg->restart 控制重启长度。
+ * @param[in,out] x          初始猜测 / 输出解向量。
+ * @param[out]    out_result 迭代统计结果，可为 NULL。
+ *
+ * @return 同 ::lmmc_cg_solve。
+ *
+ * @par 副作用
+ * - 就地修改 x->data。
+ * - 分配 (restart+1) 个长度为 n 的 Arnoldi 基向量 + Hessenberg 矩阵等工作空间。
  */
 lmmc_status_t lmmc_gmres_solve(
     const lmmc_sparse_mat_t* a,

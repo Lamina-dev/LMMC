@@ -104,7 +104,22 @@ typedef struct {
 const char* lmmc_ode_failure_string(lmmc_ode_failure_t reason);
 
 /**
- * @brief 根据积分区间与维度生成默认配置。
+ * @brief 根据积分区间与维度生成合理的默认求解配置。
+ *
+ * 根据 @p t_start 与 @p t_end 的跨度自动设置初始步长、最小/最大步长、
+ * 容差及最大步数等参数，适合大多数非刚性问题。
+ *
+ * @param[in]  t_start     积分起始时间。
+ * @param[in]  t_end       积分终止时间。
+ * @param[in]  problem_dim 状态向量维度（>= 1）。
+ * @param[out] out_cfg     输出配置结构体，所有字段将被覆盖写入。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 problem_dim == 0 或 out_cfg 为 NULL。
+ *
+ * @par 副作用
+ * - 将 @p out_cfg 指向的结构体全部字段覆盖写入默认值。
+ * - 不分配堆内存。
  */
 lmmc_status_t lmmc_ode_default_config(
     lmmc_real_t t_start,
@@ -114,9 +129,29 @@ lmmc_status_t lmmc_ode_default_config(
 );
 
 /**
- * @brief 显式 Euler 法求解 @f$y' = f(t,y)@f$ 。
+ * @brief 显式 Euler 法求解常微分方程初值问题 @f$y' = f(t,y)@f$ 。
  *
- * @param[in,out] y          初始条件 / 输出末态，长度 @p dim 。
+ * 使用固定步长（由 cfg->initial_step 决定）逐步推进，一阶精度。
+ * 适用于快速原型验证，不建议用于高精度需求。
+ *
+ * @param[in]     rhs        右端函数回调。
+ * @param[in]     user_data  传递给 @p rhs 的用户上下文指针。
+ * @param[in]     dim        状态向量维度（>= 1）。
+ * @param[in]     t_start    积分起始时间。
+ * @param[in]     t_end      积分终止时间。
+ * @param[in,out] y          输入初始条件，输出终态向量，长度 @p dim 。
+ * @param[in]     cfg        求解配置（步长、容差等）。
+ * @param[out]    out_result 求解统计信息（步数、RHS 求值次数、收敛状态等）。
+ *
+ * @return ::LMMC_STATUS_OK 成功抵达终点；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若参数非法（dim==0、NULL 指针等）；
+ *         ::LMMC_STATUS_NUMERICAL_FAILURE 若积分过程中出现 NaN/Inf。
+ *
+ * @par 副作用
+ * - 就地修改 @p y 数组为终态值。
+ * - 内部分配临时工作数组（1 个长度为 dim 的缓冲区），函数返回前释放。
+ * - 回调 @p rhs 被调用 num_steps 次（每步一次）。
+ * - 若 cfg->log_cb 非 NULL，则每步额外调用一次日志回调。
  */
 lmmc_status_t lmmc_ode_euler_solve(
     lmmc_ode_rhs_t rhs,
@@ -129,7 +164,31 @@ lmmc_status_t lmmc_ode_euler_solve(
     lmmc_ode_result_t* out_result
 );
 
-/** @brief 经典四阶 Runge-Kutta 求解器（固定步长）。 */
+/**
+ * @brief 经典四阶 Runge-Kutta 法求解 @f$y' = f(t,y)@f$ （固定步长）。
+ *
+ * 使用固定步长（由 cfg->initial_step 决定），四阶精度。
+ * 每步需要 4 次 RHS 求值。
+ *
+ * @param[in]     rhs        右端函数回调。
+ * @param[in]     user_data  传递给 @p rhs 的用户上下文指针。
+ * @param[in]     dim        状态向量维度（>= 1）。
+ * @param[in]     t_start    积分起始时间。
+ * @param[in]     t_end      积分终止时间。
+ * @param[in,out] y          输入初始条件，输出终态向量，长度 @p dim 。
+ * @param[in]     cfg        求解配置（步长、容差等）。
+ * @param[out]    out_result 求解统计信息。
+ *
+ * @return ::LMMC_STATUS_OK 成功抵达终点；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若参数非法；
+ *         ::LMMC_STATUS_NUMERICAL_FAILURE 若积分过程中出现 NaN/Inf。
+ *
+ * @par 副作用
+ * - 就地修改 @p y 数组为终态值。
+ * - 内部分配临时工作数组（4 个长度为 dim 的缓冲区用于 k1~k4），函数返回前释放。
+ * - 回调 @p rhs 被调用 4 × num_steps 次。
+ * - 若 cfg->log_cb 非 NULL，则每步额外调用一次日志回调。
+ */
 lmmc_status_t lmmc_ode_rk4_solve(
     lmmc_ode_rhs_t rhs,
     void* user_data,
@@ -141,7 +200,33 @@ lmmc_status_t lmmc_ode_rk4_solve(
     lmmc_ode_result_t* out_result
 );
 
-/** @brief 自适应 Runge-Kutta-Fehlberg (RK45) 求解器。 */
+/**
+ * @brief 自适应 Runge-Kutta-Fehlberg (RK45) 求解器。
+ *
+ * 使用嵌入式 4(5) 阶公式进行局部误差估计，自动调整步长以满足
+ * cfg->abs_tol 和 cfg->rel_tol 指定的精度要求。每步需要 6 次 RHS 求值。
+ * 适用于大多数非刚性问题。
+ *
+ * @param[in]     rhs        右端函数回调。
+ * @param[in]     user_data  传递给 @p rhs 的用户上下文指针。
+ * @param[in]     dim        状态向量维度（>= 1）。
+ * @param[in]     t_start    积分起始时间。
+ * @param[in]     t_end      积分终止时间。
+ * @param[in,out] y          输入初始条件，输出终态向量，长度 @p dim 。
+ * @param[in]     cfg        求解配置（步长范围、容差、最大步数等）。
+ * @param[out]    out_result 求解统计信息。
+ *
+ * @return ::LMMC_STATUS_OK 成功抵达终点；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若参数非法；
+ *         ::LMMC_STATUS_NUMERICAL_FAILURE 若积分过程中出现 NaN/Inf；
+ *         ::LMMC_STATUS_MAX_ITERATIONS 若达到 cfg->max_steps 仍未抵达终点。
+ *
+ * @par 副作用
+ * - 就地修改 @p y 数组为终态值。
+ * - 内部分配临时工作数组（6 个长度为 dim 的缓冲区用于 k1~k6 及误差估计），函数返回前释放。
+ * - 回调 @p rhs 被调用约 6 × num_steps 次（被拒绝的步也会消耗求值次数）。
+ * - 若 cfg->log_cb 非 NULL，则每个被接受的步调用一次日志回调。
+ */
 lmmc_status_t lmmc_ode_rk45_solve(
     lmmc_ode_rhs_t rhs,
     void* user_data,

@@ -1,8 +1,6 @@
 /**
  * @file test_dense_unit.c
- * @brief 针对 LMMC 中 dense unit 相关接口的单元测试。
- *
- * @internal
+ * 针对 LMMC 中 dense unit 相关接口的单元测试。
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -233,7 +231,6 @@ int main(void)
     int rc = 0;
 
     printf("=== Dense Module Unit Tests ===\n");
-    printf("  Validates: Requirements 2.9, 2.10, 3.7, 3.8\n\n");
 
 
     printf("--- Vector Error Cases ---\n");

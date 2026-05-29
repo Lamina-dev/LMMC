@@ -102,8 +102,22 @@ lmmc_status_t lmmc_nextafter(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out_res)
 lmmc_status_t lmmc_approx_eq(lmmc_real_t a, lmmc_real_t b, lmmc_real_t epsilon, int* out_equal);
 
 /**
- * @brief 同时考虑绝对与相对容差的近似相等：
- * @f$|a-b| \le \max(\mathrm{abs\_tol}, \mathrm{rel\_tol}\cdot\max(|a|,|b|))@f$ 。
+ * @brief 同时考虑绝对与相对容差的近似相等判定。
+ *
+ * 判定条件：@f$|a-b| \le \max(\mathrm{abs\_tol},\; \mathrm{rel\_tol}\cdot\max(|a|,|b|))@f$ 。
+ * 适用于数值计算中需要同时处理接近零和远离零的数值比较场景。
+ *
+ * @param[in]  a        第一个比较值。
+ * @param[in]  b        第二个比较值。
+ * @param[in]  abs_tol  绝对容差（>= 0）。
+ * @param[in]  rel_tol  相对容差（>= 0）。
+ * @param[out] out_equal 输出比较结果：1 表示近似相等，0 表示不等。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out_equal 为 NULL 或容差为负。
+ *
+ * @par 副作用
+ * - 无。纯计算函数，不分配内存，不修改输入。
  */
 lmmc_status_t lmmc_double_nearly_equal_tol(
     lmmc_real_t a,
@@ -124,13 +138,23 @@ lmmc_status_t lmmc_double_nearly_equal(lmmc_real_t a, lmmc_real_t b, int* out_eq
 lmmc_status_t lmmc_fft_radix4_next_size(size_t n, size_t* out_nfft);
 
 /**
- * @brief 严格 radix-4 FFT 入口。
+ * @brief 严格 radix-4 就地 FFT。
  *
- * @param[in,out] real    实部数组，长度 @p n （要求为 4 的幂）。
- * @param[in,out] imag    虚部数组，长度 @p n 。
+ * 对长度为 4 的幂的复数序列执行快速傅里叶变换。变换结果就地写回输入数组。
+ * 逆变换时自动除以 N 进行归一化。
+ *
+ * @param[in,out] real    实部数组，长度 @p n ；变换后就地覆盖为频域实部。
+ * @param[in,out] imag    虚部数组，长度 @p n ；变换后就地覆盖为频域虚部。
  * @param[in]     n       FFT 长度，必须为 4 的幂。
- * @param[in]     inverse 非 0 时执行逆变换并归一化。
- * @return LMMC_STATUS_OK 成功；LMMC_STATUS_INVALID_ARGUMENT 若 n 不是 4 的幂。
+ * @param[in]     inverse 非 0 时执行逆变换并归一化（除以 n）。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n 不是 4 的幂或指针为 NULL。
+ *
+ * @par 副作用
+ * - 就地修改 @p real 和 @p imag 数组的全部 n 个元素。
+ * - 不分配堆内存。
+ * - @p real 和 @p imag 不可指向重叠的内存区域。
  */
 lmmc_status_t lmmc_fft_radix4(lmmc_real_t* real, lmmc_real_t* imag, size_t n, int inverse);
 
@@ -163,13 +187,21 @@ lmmc_status_t lmmc_fft_radix4_pad_into(
  * 调度逻辑：
  * - N 为 4 的幂 → radix-4 快速路径
  * - N 为 2 的幂 → radix-2 Cooley-Tukey
- * - 其他 → Bluestein chirp-z 算法
+ * - 其他 → Bluestein chirp-z 算法（内部分配辅助缓冲区）
  *
- * @param[in,out] real    实部数组，长度 @p n 。
- * @param[in,out] imag    虚部数组，长度 @p n 。
+ * @param[in,out] real    实部数组，长度 @p n ；变换后就地覆盖。
+ * @param[in,out] imag    虚部数组，长度 @p n ；变换后就地覆盖。
  * @param[in]     n       FFT 长度，任意正整数。
- * @param[in]     inverse 非 0 时执行逆变换并归一化。
- * @return LMMC_STATUS_OK 成功。
+ * @param[in]     inverse 非 0 时执行逆变换并归一化（除以 n）。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n == 0 或指针为 NULL；
+ *         ::LMMC_STATUS_ALLOC_FAILED 若 Bluestein 路径内存分配失败。
+ *
+ * @par 副作用
+ * - 就地修改 @p real 和 @p imag 数组的全部 n 个元素。
+ * - 当 n 非 2 的幂时，内部通过 Bluestein 算法分配临时缓冲区，函数返回前释放。
+ * - @p real 和 @p imag 不可指向重叠的内存区域。
  */
 lmmc_status_t lmmc_fft(lmmc_real_t* real, lmmc_real_t* imag, size_t n, int inverse);
 
@@ -178,8 +210,6 @@ lmmc_status_t lmmc_fft_forward(lmmc_real_t* real, lmmc_real_t* imag, size_t n);
 
 /** @brief 等价于 ::lmmc_fft(real, imag, n, 1) 。 */
 lmmc_status_t lmmc_fft_inverse(lmmc_real_t* real, lmmc_real_t* imag, size_t n);
-
-/* ===================== 特殊函数 ===================== */
 
 /* ===================== 特殊函数（误差函数、伽马函数等） ===================== */
 
@@ -206,11 +236,16 @@ lmmc_status_t lmmc_erfc(lmmc_real_t x, lmmc_real_t* out);
 /**
  * @brief 计算对数伽马函数 @f$\ln\Gamma(x)@f$ ，要求 @f$x > 0@f$ 。
  *
- * 使用 Lanczos 近似（g=7, n=9 系数）。
+ * 使用 Lanczos 近似（g=7, n=9 系数），精度约 15 位有效数字。
  *
  * @param[in]  x   输入值，必须为正数。
  * @param[out] out 输出 @f$\ln\Gamma(x)@f$ 。
- * @return LMMC_STATUS_OK 成功；LMMC_STATUS_INVALID_ARGUMENT 若 x ≤ 0 或 out 为 NULL。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 x ≤ 0 或 out 为 NULL。
+ *
+ * @par 副作用
+ * - 无。纯计算函数，不分配内存，不修改输入。
  */
 lmmc_status_t lmmc_lgamma(lmmc_real_t x, lmmc_real_t* out);
 
@@ -248,11 +283,19 @@ lmmc_status_t lmmc_digamma(lmmc_real_t x, lmmc_real_t* out);
 /* ===================== Lambert W 函数 ===================== */
 
 /**
- * @brief 计算 Lambert W 函数主分支 @f$W_0(z)@f$ ，要求 @f$z \ge -1/e@f$ 。
+ * @brief 计算 Lambert W 函数主分支 @f$W_0(z)@f$ 。
+ *
+ * 满足 @f$W_0(z) e^{W_0(z)} = z@f$ ，使用 Halley 迭代求解。
+ * 定义域为 @f$z \ge -1/e@f$ ，在 @f$z = -1/e@f$ 处 @f$W_0 = -1@f$ 。
  *
  * @param[in]  z       输入值，必须满足 @f$z \ge -1/e@f$ 。
  * @param[out] out_res 输出 @f$W_0(z)@f$ 。
- * @return LMMC_STATUS_OK 成功；LMMC_STATUS_INVALID_ARGUMENT 若 z 超出定义域。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 z 超出定义域或 out_res 为 NULL。
+ *
+ * @par 副作用
+ * - 无。纯计算函数，不分配内存，不修改输入。
  */
 lmmc_status_t lmmc_lambertw(lmmc_real_t z, lmmc_real_t* out_res);
 

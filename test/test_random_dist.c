@@ -1,8 +1,6 @@
 /**
  * @file test_random_dist.c
- * @brief 针对 LMMC 中 random dist 相关接口的单元测试。
- *
- * @internal
+ * 针对 LMMC 中 random dist 相关接口的单元测试。
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -445,7 +443,6 @@ int main(void)
     srand((unsigned int)time(NULL));
 
     printf("=== Property 23: 均匀分布范围约束 ===\n");
-    printf("  Validates: Requirements 17.1, 17.4\n\n");
 
     if (test_uniform_range_single()) { rc = 1; printf("  [FAIL] uniform range (single)\n"); }
     else { printf("  [PASS] uniform range single (%d configs x %d samples)\n", NUM_CONFIGS, NUM_SAMPLES); }
@@ -460,7 +457,6 @@ int main(void)
     else { printf("  [PASS] uniform large interval (%d samples)\n", NUM_SAMPLES); }
 
     printf("\n=== Property 24: 指数分布非负性 ===\n");
-    printf("  Validates: Requirements 17.3\n\n");
 
     if (test_exponential_nonneg()) { rc = 1; printf("  [FAIL] exponential non-negative\n"); }
     else { printf("  [PASS] exponential non-negative (%d configs x %d samples)\n", NUM_CONFIGS, NUM_SAMPLES); }
@@ -472,7 +468,6 @@ int main(void)
     else { printf("  [PASS] exponential large rate (%d samples)\n", NUM_SAMPLES); }
 
     printf("\n=== Property 25: Shuffle 保持元素集合不变 ===\n");
-    printf("  Validates: Requirements 17.5\n\n");
 
     if (test_shuffle_preserves_elements_real()) { rc = 1; printf("  [FAIL] shuffle preserves (real)\n"); }
     else { printf("  [PASS] shuffle preserves elements real (%d configs)\n", NUM_CONFIGS); }

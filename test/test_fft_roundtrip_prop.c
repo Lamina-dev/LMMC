@@ -1,13 +1,6 @@
 /**
  * @file test_fft_roundtrip_prop.c
- * @brief Property-based test for FFT round-trip correctness.
- *
- * **Property 1: Round-trip FFT**
- * - Verify forward then inverse recovers input within 1e-9 * (1 + max|x|)
- *   for N in [1, 2048].
- * - Test single-sinusoid spectral purity (criterion 7.9).
- *
- * **Validates: Requirements 7.8, 7.9**
+ * FFT 往返精度属性测试。
  */
 #include <math.h>
 #include <stdio.h>
@@ -342,7 +335,6 @@ int main(void)
     size_t n_failed = 0;
 
     printf("=== Property 1: Round-trip FFT ===\n");
-    printf("Validates: Requirements 7.8, 7.9\n");
     printf("Verify forward then inverse recovers input within 1e-9 * (1 + max|x|)\n");
     printf("Test single-sinusoid spectral purity\n\n");
 

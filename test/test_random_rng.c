@@ -1,8 +1,6 @@
 /**
  * @file test_random_rng.c
- * @brief 针对 LMMC 中 random rng 相关接口的单元测试。
- *
- * @internal
+ * 针对 LMMC 中 random rng 相关接口的单元测试。
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -264,7 +262,6 @@ int main(void)
     srand((unsigned int)time(NULL));
 
     printf("=== Property 22: RNG Reproducibility ===\n");
-    printf("  Validates: Requirements 16.1, 16.2, 16.5\n\n");
 
     printf("--- Same seed produces identical sequences ---\n");
     if (test_multiple_specific_seeds()) { rc = 1; printf("  [FAIL] specific seeds\n"); }

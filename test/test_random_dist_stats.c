@@ -1,20 +1,6 @@
 /**
  * @file test_random_dist_stats.c
- * @brief Unit tests for random distribution samplers: mean/variance verification
- *        and chi-squared goodness-of-fit for Ziggurat normal.
- *
- * For each distribution (normal/Ziggurat, gamma, beta, chi-squared, student-t,
- * F, Poisson, binomial):
- *   - Draw 1,000,000 samples
- *   - Compute empirical mean and variance
- *   - Verify they match theoretical values within 5*sigma/sqrt(N)
- *
- * Chi-squared goodness-of-fit for Ziggurat normal:
- *   - Draw 1,000,000 samples, bin into 256 bins
- *   - Compute chi-squared statistic against expected normal distribution
- *   - Verify p-value > 1e-6
- *
- * Validates: Requirements 19.4, 19.5
+ * 随机分布采样器统计测试（均值/方差 + 卡方拟合优度）。
  */
 #include <math.h>
 #include <stdio.h>
@@ -507,7 +493,6 @@ int main(void)
     int failures = 0;
 
     printf("=== Random Distribution Statistical Tests ===\n");
-    printf("Validates: Requirements 19.4, 19.5\n");
     printf("- 1M samples per distribution, mean/variance within 5*sigma/sqrt(N)\n");
     printf("- Chi-squared GOF for Ziggurat normal (256 bins, alpha=1e-6)\n\n");
 

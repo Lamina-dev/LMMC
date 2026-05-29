@@ -1,9 +1,6 @@
 /**
  * @file test_interp_quad_unit.c
- * @brief Unit tests for interpolation (PCHIP monotonicity) and quadrature
- *        (Tanh-Sinh endpoint singularity, Romberg smooth function).
- *
- * Validates: Requirements 17.6, 17.7
+ * 插值（PCHIP 单调性）与积分（Tanh-Sinh、Romberg）单元测试。
  */
 #include <math.h>
 #include <stdio.h>

@@ -40,10 +40,47 @@ typedef struct {
 /** @brief 创建恒等预处理子（仅记录尺寸，apply 时直接复制）。 */
 lmmc_status_t lmmc_precond_create_none(size_t size, lmmc_precond_t* out_precond);
 
-/** @brief 由稀疏矩阵 @p a 的对角线创建 Jacobi 预处理子。 */
+/**
+ * @brief 由稀疏矩阵的对角线创建 Jacobi 预处理子：M = diag(A)。
+ *
+ * 提取 A 的对角线元素并取倒数存储。若某对角元为零或过小（<1e-15），
+ * 返回 SINGULAR_MATRIX。
+ *
+ * @param[in]  a          输入稀疏矩阵（CSR 格式，不被修改）。
+ * @param[out] out_precond 输出预处理子句柄。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL 或结构非法。
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH — 矩阵非方阵。
+ * - ::LMMC_STATUS_SINGULAR_MATRIX — 对角线存在零元素。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存存储对角线倒数。调用方需配对调用 ::lmmc_precond_destroy 释放。
+ */
 lmmc_status_t lmmc_precond_create_jacobi(const lmmc_sparse_mat_t* a, lmmc_precond_t* out_precond);
 
-/** @brief 创建 ILU(0) 预处理子，填充模式与 @p a 完全一致。 */
+/**
+ * @brief 创建 ILU(0) 预处理子（零填充不完全 LU 分解）。
+ *
+ * 填充模式与输入矩阵 A 完全一致（不产生新的非零位置）。
+ * 内部复制 A 的结构并就地执行 IKJ 版本的 ILU 分解。
+ *
+ * @param[in]  a          输入稀疏矩阵（CSR 格式，不被修改）。
+ * @param[out] out_precond 输出预处理子句柄。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL 或结构非法。
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH — 矩阵非方阵。
+ * - ::LMMC_STATUS_SINGULAR_MATRIX — 对角线为零或缺失。
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE — 分解过程中出现 NaN/Inf。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存。调用方需配对调用 ::lmmc_precond_destroy 释放。
+ */
 lmmc_status_t lmmc_precond_create_ilu0(const lmmc_sparse_mat_t* a, lmmc_precond_t* out_precond);
 
 /**
@@ -62,13 +99,37 @@ lmmc_status_t lmmc_precond_create_ilut(
 );
 
 /**
- * @brief 应用预处理子：求解 @c M @c out = @c rhs 。
+ * @brief 应用预处理子：求解 M*out = rhs。
  *
- * @p out 必须与 @p rhs 同长度且互不别名。
+ * 根据 precond->type 分派到对应的求解逻辑：
+ * - NONE：直接复制 rhs 到 out。
+ * - JACOBI：逐元素乘以对角线倒数。
+ * - ILU0/ILUT：前代 + 回代。
+ *
+ * @param[in]  precond 预处理子句柄（不被修改）。
+ * @param[in]  rhs     右端向量（不被修改）。
+ * @param[out] out     输出向量，长度须与 rhs 相同，内容被覆写。out 不可与 rhs 别名。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL。
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH — 向量长度与预处理子尺寸不匹配。
+ *
+ * @par 副作用
+ * - 覆写 out->data。无内存分配。
  */
 lmmc_status_t lmmc_precond_apply(const lmmc_precond_t* precond, const lmmc_vec_t* rhs, lmmc_vec_t* out);
 
-/** @brief 销毁预处理子，必要时释放内部资源。 */
+/**
+ * @brief 销毁预处理子，释放内部资源。
+ *
+ * 对 NULL 指针安全。销毁后句柄不可再使用。
+ *
+ * @param[in,out] precond 预处理子句柄，可为 NULL。
+ *
+ * @par 副作用
+ * - 释放 impl 指向的内部数据结构。
+ */
 void lmmc_precond_destroy(lmmc_precond_t* precond);
 
 #ifdef __cplusplus

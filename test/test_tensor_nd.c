@@ -1,6 +1,6 @@
 /**
  * @file test_tensor_nd.c
- * @brief Unit tests for the N-D tensor API (lmmc_tensor_nd_t).
+ * Unit tests for the N-D tensor API (lmmc_tensor_nd_t).
  */
 #include <math.h>
 #include <stdio.h>

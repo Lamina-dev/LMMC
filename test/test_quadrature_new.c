@@ -1,6 +1,6 @@
 /**
  * @file test_quadrature_new.c
- * @brief Tests for new quadrature functions: Romberg, Tanh-Sinh, Gauss-Hermite, Gauss-Laguerre.
+ * Tests for new quadrature functions: Romberg, Tanh-Sinh, Gauss-Hermite, Gauss-Laguerre.
  */
 #include <math.h>
 #include <stdio.h>

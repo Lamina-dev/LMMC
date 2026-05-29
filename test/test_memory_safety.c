@@ -1,8 +1,6 @@
 /**
  * @file test_memory_safety.c
- * @brief 针对 LMMC 中 memory safety 相关接口的单元测试。
- *
- * @internal
+ * 针对 LMMC 中 memory safety 相关接口的单元测试。
  */
 #include <stdio.h>
 #include <string.h>

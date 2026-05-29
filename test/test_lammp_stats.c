@@ -1,8 +1,6 @@
 /**
  * @file test_lammp_stats.c
- * @brief 针对 LMMC 中 lammp stats 相关接口的单元测试。
- *
- * @internal
+ * 针对 LMMC 中 lammp stats 相关接口的单元测试。
  */
 #include <stdio.h>
 #include <assert.h>

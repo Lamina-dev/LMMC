@@ -1,8 +1,6 @@
 /**
  * @file test_sparse_utils.c
- * @brief 针对 LMMC 中 sparse utils 相关接口的单元测试。
- *
- * @internal
+ * 针对 LMMC 中 sparse utils 相关接口的单元测试。
  */
 #include <stdio.h>
 #include <math.h>

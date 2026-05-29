@@ -82,7 +82,25 @@ const char* lmmc_nonlinear_failure_string(lmmc_nonlinear_failure_t reason);
 lmmc_status_t lmmc_nonlinear_default_config(lmmc_nonlinear_config_t* out_cfg);
 
 /**
- * @brief 二分法求根（要求 @c f(left)*f(right) < 0 ）。
+ * @brief 二分法求根。
+ *
+ * 要求 f(left)*f(right) < 0（区间端点异号）。每步将区间减半，
+ * 收敛判据：|f(mid)| <= abs_tol 或半区间宽度 <= x_tol。
+ *
+ * @param[in]  func       标量函数 f(x)。
+ * @param[in]  user_data  传递给 func 的用户上下文。
+ * @param[in]  left       区间左端点，要求 left < right。
+ * @param[in]  right      区间右端点。
+ * @param[in]  cfg        配置参数，可为 NULL（使用默认值）。
+ * @param[out] out_result 求根结果统计。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功（含收敛情况）。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 参数非法或区间不变号。
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE — 出现 NaN/Inf 或达到最大步数。
+ *
+ * @par 副作用
+ * - 无内存分配。多次调用 func。
  */
 lmmc_status_t lmmc_bisection_solve(
     lmmc_scalar_func_t func,
@@ -94,7 +112,26 @@ lmmc_status_t lmmc_bisection_solve(
 );
 
 /**
- * @brief Newton 法求根，需要解析导数 @p dfunc 。
+ * @brief Newton 法求根。
+ *
+ * 若 dfunc 为 NULL，使用中心差分自动计算导数。
+ * 收敛判据：|f(x)| <= abs_tol 或 |x_{k+1}-x_k| <= x_tol。
+ * 导数过小时报告 ZERO_DERIVATIVE 失败。
+ *
+ * @param[in]  func       标量函数 f(x)。
+ * @param[in]  dfunc      解析导数 f'(x)，可为 NULL（自动差分）。
+ * @param[in]  user_data  传递给 func/dfunc 的用户上下文。
+ * @param[in]  x0         初始猜测。
+ * @param[in]  cfg        配置参数，可为 NULL。
+ * @param[out] out_result 求根结果统计。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 参数非法。
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE — 数值问题或未收敛。
+ *
+ * @par 副作用
+ * - 无内存分配。多次调用 func（和 dfunc）。
  */
 lmmc_status_t lmmc_newton_solve(
     lmmc_scalar_func_t func,
@@ -106,7 +143,22 @@ lmmc_status_t lmmc_newton_solve(
 );
 
 /**
- * @brief 割线法求根，仅需函数值，初始两点 @p x0 ≠ @p x1 。
+ * @brief 割线法求根。
+ *
+ * 仅需函数值，不需要导数。使用两个初始点 x0 ≠ x1 逼近。
+ * 收敛判据同 Newton 法。
+ *
+ * @param[in]  func       标量函数 f(x)。
+ * @param[in]  user_data  传递给 func 的用户上下文。
+ * @param[in]  x0         第一个初始点。
+ * @param[in]  x1         第二个初始点，须 x0 ≠ x1。
+ * @param[in]  cfg        配置参数，可为 NULL。
+ * @param[out] out_result 求根结果统计。
+ *
+ * @return 同 ::lmmc_newton_solve。
+ *
+ * @par 副作用
+ * - 无内存分配。多次调用 func。
  */
 lmmc_status_t lmmc_secant_solve(
     lmmc_scalar_func_t func,

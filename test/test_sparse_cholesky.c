@@ -1,8 +1,6 @@
 /**
  * @file test_sparse_cholesky.c
- * @brief 针对 LMMC 中 sparse cholesky 相关接口的单元测试。
- *
- * @internal
+ * 针对 LMMC 中 sparse cholesky 相关接口的单元测试。
  */
 #include <stdio.h>
 #include <math.h>

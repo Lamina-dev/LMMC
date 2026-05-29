@@ -1,6 +1,6 @@
 /**
  * @file itersolve_minres_lsqr.c
- * @brief MINRES and LSQR iterative solver implementations with matrix-free support.
+ * MINRES / LSQR 迭代求解器实现。
  */
 #include <math.h>
 #include <string.h>
@@ -10,41 +10,40 @@
 #include "lmmc/dense.h"
 #include "lmmc/itersolve.h"
 
-/* Forward declarations of helpers from itersolve.c */
-static int lmmc_is_finite_number_ml(lmmc_real_t v) {
+static int is_finite_val(lmmc_real_t v) {
     return isfinite(v) ? 1 : 0;
 }
 
-static lmmc_status_t vec_norm2_checked_ml(const lmmc_vec_t* v, lmmc_real_t* out_norm) {
+static lmmc_status_t vec_norm2_checked(const lmmc_vec_t* v, lmmc_real_t* out_norm) {
     if (v == NULL || out_norm == NULL || v->data == NULL || v->size == 0)
         return LMMC_STATUS_INVALID_ARGUMENT;
     for (size_t i = 0; i < v->size; ++i) {
-        if (!lmmc_is_finite_number_ml(v->data[i]))
+        if (!is_finite_val(v->data[i]))
             return LMMC_STATUS_NUMERICAL_FAILURE;
     }
     lmmc_status_t st = lmmc_vec_norm2(v, out_norm);
     if (st != LMMC_STATUS_OK) return st;
-    if (!lmmc_is_finite_number_ml(*out_norm))
+    if (!is_finite_val(*out_norm))
         return LMMC_STATUS_NUMERICAL_FAILURE;
     return LMMC_STATUS_OK;
 }
 
-static lmmc_status_t vec_dot_checked_ml(const lmmc_vec_t* a, const lmmc_vec_t* b, lmmc_real_t* out_dot) {
+static lmmc_status_t vec_dot_checked(const lmmc_vec_t* a, const lmmc_vec_t* b, lmmc_real_t* out_dot) {
     lmmc_status_t st = lmmc_vec_dot(a, b, out_dot);
     if (st != LMMC_STATUS_OK) return st;
-    if (!lmmc_is_finite_number_ml(*out_dot))
+    if (!is_finite_val(*out_dot))
         return LMMC_STATUS_NUMERICAL_FAILURE;
     return LMMC_STATUS_OK;
 }
 
-static lmmc_status_t apply_precond_ml(
+static lmmc_status_t apply_precond(
     const lmmc_precond_t* precond, const lmmc_vec_t* rhs, lmmc_vec_t* out
 ) {
     if (precond == NULL) return lmmc_vec_copy(rhs, out);
     return lmmc_precond_apply(precond, rhs, out);
 }
 
-static void do_log_ml(const lmmc_itersolve_config_t* cfg, size_t iter, lmmc_real_t rn) {
+static void do_log(const lmmc_itersolve_config_t* cfg, size_t iter, lmmc_real_t rn) {
     if (cfg->log_cb != NULL)
         cfg->log_cb(iter, rn, cfg->log_user_data);
     else if (cfg->verbose)
@@ -204,19 +203,19 @@ lmmc_status_t lmmc_minres_solve(
     }
 
     /* Apply preconditioner */
-    st = apply_precond_ml(precond, &v_curr, &z_vec);
+    st = apply_precond(precond, &v_curr, &z_vec);
     if (st != LMMC_STATUS_OK) goto minres_end;
 
     /* beta_1 = sqrt(r^T * z) */
     {
         double dot_rz;
-        st = vec_dot_checked_ml(&v_curr, &z_vec, &dot_rz);
+        st = vec_dot_checked(&v_curr, &z_vec, &dot_rz);
         if (st != LMMC_STATUS_OK) goto minres_end;
         if (dot_rz < 0.0) dot_rz = -dot_rz;
         beta_k = sqrt(dot_rz);
     }
 
-    st = vec_norm2_checked_ml(b, &norm_b_val);
+    st = vec_norm2_checked(b, &norm_b_val);
     if (st != LMMC_STATUS_OK) goto minres_end;
 
     norm_r = beta_k;
@@ -227,7 +226,7 @@ lmmc_status_t lmmc_minres_solve(
         out_result->initial_residual_norm = norm_r;
         out_result->final_residual_norm = norm_r;
     }
-    do_log_ml(&local_cfg, 0, norm_r);
+    do_log(&local_cfg, 0, norm_r);
 
     if (norm_r <= threshold) {
         converged = 1;
@@ -266,11 +265,11 @@ lmmc_status_t lmmc_minres_solve(
             if (st != LMMC_STATUS_OK) goto minres_end;
 
             /* Apply preconditioner */
-            st = apply_precond_ml(precond, &av, &z_vec);
+            st = apply_precond(precond, &av, &z_vec);
             if (st != LMMC_STATUS_OK) goto minres_end;
 
             /* alpha_k = v_curr^T * z_vec */
-            st = vec_dot_checked_ml(&v_curr, &z_vec, &alpha_k);
+            st = vec_dot_checked(&v_curr, &z_vec, &alpha_k);
             if (st != LMMC_STATUS_OK) goto minres_end;
 
             /* v_next = z_vec - alpha_k * v_curr - beta_k * v_prev */
@@ -280,7 +279,7 @@ lmmc_status_t lmmc_minres_solve(
             /* beta_{k+1} = sqrt(v_next^T * v_next) */
             {
                 double dot_vv;
-                st = vec_dot_checked_ml(&v_next, &v_next, &dot_vv);
+                st = vec_dot_checked(&v_next, &v_next, &dot_vv);
                 if (st != LMMC_STATUS_OK) goto minres_end;
                 if (dot_vv < 0.0) dot_vv = -dot_vv;
                 beta_kp1 = sqrt(dot_vv);
@@ -313,7 +312,7 @@ lmmc_status_t lmmc_minres_solve(
             /* Update solution: x = x + phi * w_new */
             for (i = 0; i < n; ++i) {
                 x->data[i] += phi_val * z_vec.data[i];
-                if (!lmmc_is_finite_number_ml(x->data[i])) {
+                if (!is_finite_val(x->data[i])) {
                     st = LMMC_STATUS_NUMERICAL_FAILURE;
                     goto minres_end;
                 }
@@ -336,7 +335,7 @@ lmmc_status_t lmmc_minres_solve(
             iter_count = iter + 1;
             if (out_result != NULL)
                 out_result->final_residual_norm = norm_r;
-            do_log_ml(&local_cfg, iter_count, norm_r);
+            do_log(&local_cfg, iter_count, norm_r);
 
             if (norm_r <= threshold) { converged = 1; break; }
 
@@ -441,10 +440,10 @@ lmmc_status_t lmmc_lsqr_solve(
     }
 
     /* beta = ||u|| */
-    st = vec_norm2_checked_ml(&u, &beta_l);
+    st = vec_norm2_checked(&u, &beta_l);
     if (st != LMMC_STATUS_OK) goto lsqr_end;
 
-    st = vec_norm2_checked_ml(b, &norm_b_val);
+    st = vec_norm2_checked(b, &norm_b_val);
     if (st != LMMC_STATUS_OK) goto lsqr_end;
 
     norm_r = beta_l;
@@ -454,7 +453,7 @@ lmmc_status_t lmmc_lsqr_solve(
         out_result->initial_residual_norm = norm_r;
         out_result->final_residual_norm = norm_r;
     }
-    do_log_ml(&local_cfg, 0, norm_r);
+    do_log(&local_cfg, 0, norm_r);
 
     if (norm_r <= threshold) { converged = 1; goto lsqr_end; }
     if (beta_l <= 1e-30) { converged = 1; goto lsqr_end; }
@@ -471,7 +470,7 @@ lmmc_status_t lmmc_lsqr_solve(
     if (st != LMMC_STATUS_OK) goto lsqr_end;
 
     /* alpha = ||v|| */
-    st = vec_norm2_checked_ml(&v, &alpha_l);
+    st = vec_norm2_checked(&v, &alpha_l);
     if (st != LMMC_STATUS_OK) goto lsqr_end;
 
     if (alpha_l <= 1e-30) { converged = 1; goto lsqr_end; }
@@ -505,7 +504,7 @@ lmmc_status_t lmmc_lsqr_solve(
                 u.data[i] = av_tmp.data[i] - alpha_l * u.data[i];
 
             /* beta = ||u|| */
-            st = vec_norm2_checked_ml(&u, &beta_l);
+            st = vec_norm2_checked(&u, &beta_l);
             if (st != LMMC_STATUS_OK) goto lsqr_end;
 
             if (beta_l <= 1e-30) {
@@ -525,7 +524,7 @@ lmmc_status_t lmmc_lsqr_solve(
                 v.data[i] = tmp_vec.data[i] - beta_l * v.data[i];
 
             /* alpha = ||v|| */
-            st = vec_norm2_checked_ml(&v, &alpha_l);
+            st = vec_norm2_checked(&v, &alpha_l);
             if (st != LMMC_STATUS_OK) goto lsqr_end;
 
             if (alpha_l <= 1e-30) {
@@ -556,7 +555,7 @@ lmmc_status_t lmmc_lsqr_solve(
             scale = phi_l / rho_val;
             for (i = 0; i < n_cols; ++i) {
                 x->data[i] += scale * w.data[i];
-                if (!lmmc_is_finite_number_ml(x->data[i])) {
+                if (!is_finite_val(x->data[i])) {
                     st = LMMC_STATUS_NUMERICAL_FAILURE;
                     goto lsqr_end;
                 }
@@ -572,7 +571,7 @@ lmmc_status_t lmmc_lsqr_solve(
             iter_count = iter + 1;
             if (out_result != NULL)
                 out_result->final_residual_norm = norm_r;
-            do_log_ml(&local_cfg, iter_count, norm_r);
+            do_log(&local_cfg, iter_count, norm_r);
 
             if (norm_r <= threshold) { converged = 1; break; }
         }

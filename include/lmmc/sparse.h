@@ -57,35 +57,138 @@ typedef struct {
 typedef struct lmmc_sparse_builder_t lmmc_sparse_builder_t;
 
 /**
- * @brief 创建稀疏矩阵构造器。
+ * @brief 创建稀疏矩阵增量构造器。
  *
- * @param[in]  rows             行数。
- * @param[in]  cols             列数。
- * @param[in]  initial_capacity 初始预分配容量（条目数），可为 0 。
- * @param[out] out_builder      返回的构造器句柄。
+ * 适用于非零元个数未知或乱序插入的场景。构造器内部维护动态数组，
+ * 容量不足时自动翻倍扩容。最终调用 ::lmmc_sparse_builder_build 生成
+ * 压缩格式矩阵。
+ *
+ * @param[in]  rows             矩阵行数，必须 > 0。
+ * @param[in]  cols             矩阵列数，必须 > 0。
+ * @param[in]  initial_capacity 初始预分配条目数；0 时使用内部默认值 16。
+ * @param[out] out_builder      返回的构造器句柄指针。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — rows/cols 为 0 或 out_builder 为 NULL。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存。调用方必须配对调用 ::lmmc_sparse_builder_destroy 释放。
  */
 lmmc_status_t lmmc_sparse_builder_create(size_t rows, size_t cols, size_t initial_capacity, lmmc_sparse_builder_t** out_builder);
 
 /**
- * @brief 向构造器追加一项非零元。重复 (row,col) 会被累加。
+ * @brief 向构造器追加一项非零元。
+ *
+ * 若 (row, col) 已存在，数值会在 build 时被累加合并。
+ * 容量不足时自动翻倍扩容。
+ *
+ * @param[in,out] builder 构造器句柄。
+ * @param[in]     row     行下标，必须 < rows。
+ * @param[in]     col     列下标，必须 < cols。
+ * @param[in]     value   非零元数值。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — builder 为 NULL 或下标越界。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 扩容时内存分配失败。
+ *
+ * @par 副作用
+ * - 修改构造器内部状态（nnz 递增，可能触发 realloc）。
  */
 lmmc_status_t lmmc_sparse_builder_add(lmmc_sparse_builder_t* builder, size_t row, size_t col, lmmc_real_t value);
 
 /**
- * @brief 将构造器转换为指定格式的稀疏矩阵，构造器仍可继续使用或销毁。
+ * @brief 将构造器中的条目转换为指定格式的稀疏矩阵。
+ *
+ * 重复 (row,col) 条目的数值会被累加合并。转换后构造器仍有效，
+ * 可继续追加条目或再次 build。
+ *
+ * @param[in]     builder    构造器句柄。
+ * @param[in]     format     目标格式（CSR 或 CSC）。
+ * @param[out]    out_sparse 输出稀疏矩阵，调用方需配对调用 ::lmmc_sparse_destroy 释放。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 参数为 NULL。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存用于 out_sparse 的数组。构造器本身不被修改。
  */
 lmmc_status_t lmmc_sparse_builder_build(lmmc_sparse_builder_t* builder, lmmc_sparse_format_t format, lmmc_sparse_mat_t* out_sparse);
 
-/** @brief 销毁稀疏矩阵构造器。 */
+/**
+ * @brief 销毁稀疏矩阵构造器并释放其全部内部内存。
+ *
+ * 对 NULL 指针安全。销毁后句柄不可再使用。
+ *
+ * @param[in] builder 构造器句柄，可为 NULL。
+ *
+ * @par 副作用
+ * - 释放构造器内部的动态数组和句柄本身。
+ */
 void lmmc_sparse_builder_destroy(lmmc_sparse_builder_t* builder);
 
-/** @brief 创建 @p nnz 个非零的空 CSR 矩阵（数组内容未初始化）。 */
+/**
+ * @brief 创建指定 nnz 的空 CSR 矩阵（数组已分配但内容未初始化）。
+ *
+ * 调用方需手动填充 row_ptr、col_idx、values 数组后方可使用。
+ * 适用于已知稀疏结构的批量构造场景。
+ *
+ * @param[in]  rows       行数，必须 > 0。
+ * @param[in]  cols       列数，必须 > 0。
+ * @param[in]  nnz        非零元个数，可为 0。
+ * @param[out] out_sparse 输出矩阵，调用方需配对调用 ::lmmc_sparse_destroy 释放。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — rows/cols 为 0 或 out_sparse 为 NULL。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存（owns_data=1）。row_ptr 已清零，col_idx/values 内容未定义。
+ */
 lmmc_status_t lmmc_sparse_create_csr(size_t rows, size_t cols, size_t nnz, lmmc_sparse_mat_t* out_sparse);
-/** @brief 创建 @p nnz 个非零的空 CSC 矩阵（数组内容未初始化）。 */
+/**
+ * @brief 创建指定 nnz 的空 CSC 矩阵（数组已分配但内容未初始化）。
+ *
+ * 语义同 ::lmmc_sparse_create_csr，但 format 为 CSC。
+ * row_ptr 在 CSC 语义下为 col_ptr，col_idx 为 row_idx。
+ *
+ * @param[in]  rows       行数，必须 > 0。
+ * @param[in]  cols       列数，必须 > 0。
+ * @param[in]  nnz        非零元个数，可为 0。
+ * @param[out] out_sparse 输出矩阵。
+ *
+ * @return 同 ::lmmc_sparse_create_csr。
+ *
+ * @par 副作用
+ * - 分配堆内存（owns_data=1）。
+ */
 lmmc_status_t lmmc_sparse_create_csc(size_t rows, size_t cols, size_t nnz, lmmc_sparse_mat_t* out_sparse);
 
 /**
- * @brief 用外部缓冲区包装为 CSR 视图（不拥有内存）。
+ * @brief 用外部缓冲区包装为 CSR 视图（不拥有内存，不分配）。
+ *
+ * 内部会验证 row_ptr 的单调性和 col_idx 的范围合法性。
+ * owns_data 置 0，::lmmc_sparse_destroy 不会释放传入的缓冲区。
+ *
+ * @param[in]  rows       行数。
+ * @param[in]  cols       列数。
+ * @param[in]  nnz        非零元个数。
+ * @param[in]  row_ptr    行指针数组，长度 rows+1，row_ptr[0]==0，row_ptr[rows]==nnz。
+ * @param[in]  col_idx    列索引数组，长度 nnz，每个值 < cols。
+ * @param[in]  values     数值数组，长度 nnz。
+ * @param[out] out_sparse 输出矩阵视图。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 参数非法或结构验证失败。
+ *
+ * @par 副作用
+ * - 无内存分配。对视图的写操作直接修改外部缓冲区。
  */
 lmmc_status_t lmmc_sparse_wrap_csr(
     size_t rows,
@@ -98,7 +201,23 @@ lmmc_status_t lmmc_sparse_wrap_csr(
 );
 
 /**
- * @brief 用外部缓冲区包装为 CSC 视图（不拥有内存）。
+ * @brief 用外部缓冲区包装为 CSC 视图（不拥有内存，不分配）。
+ *
+ * 语义同 ::lmmc_sparse_wrap_csr，但 format 为 CSC。
+ * col_ptr 对应 row_ptr 字段，row_idx 对应 col_idx 字段。
+ *
+ * @param[in]  rows       行数。
+ * @param[in]  cols       列数。
+ * @param[in]  nnz        非零元个数。
+ * @param[in]  col_ptr    列指针数组，长度 cols+1。
+ * @param[in]  row_idx    行索引数组，长度 nnz，每个值 < rows。
+ * @param[in]  values     数值数组，长度 nnz。
+ * @param[out] out_sparse 输出矩阵视图。
+ *
+ * @return 同 ::lmmc_sparse_wrap_csr。
+ *
+ * @par 副作用
+ * - 无内存分配。
  */
 lmmc_status_t lmmc_sparse_wrap_csc(
     size_t rows,
@@ -110,32 +229,162 @@ lmmc_status_t lmmc_sparse_wrap_csc(
     lmmc_sparse_mat_t* out_sparse
 );
 
-/** @brief 销毁稀疏矩阵，必要时释放底层缓冲区。 */
+/**
+ * @brief 销毁稀疏矩阵，释放其拥有的底层缓冲区。
+ *
+ * 若 owns_data 非零则释放 row_ptr、col_idx、values；否则仅清零字段。
+ * 对 NULL 指针安全。
+ *
+ * @param[in,out] sparse 待销毁的稀疏矩阵，可为 NULL。
+ *
+ * @par 副作用
+ * - 若 owns_data：释放堆内存。
+ * - 所有字段清零，销毁后不可再用于运算。
+ */
 void lmmc_sparse_destroy(lmmc_sparse_mat_t* sparse);
 
 /**
- * @brief 由稠密矩阵生成稀疏矩阵（CSR），绝对值不超过 @p eps 的元素被丢弃。
+ * @brief 由稠密矩阵生成 CSR 稀疏矩阵，绝对值 <= eps 的元素被丢弃。
+ *
+ * 两遍扫描：第一遍计数 nnz，第二遍填充数组。
+ *
+ * @param[in]  dense      输入稠密矩阵（不被修改）。
+ * @param[in]  eps        丢弃阈值（非负）。
+ * @param[out] out_sparse 输出 CSR 矩阵，调用方需配对调用 ::lmmc_sparse_destroy 释放。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL 或 eps < 0。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存。dense 不被修改。
  */
 lmmc_status_t lmmc_sparse_from_dense(const lmmc_mat_t* dense, lmmc_real_t eps, lmmc_sparse_mat_t* out_sparse);
 
-/** @brief 将稀疏矩阵展开为稠密矩阵（缺失项视为 0）。 */
+/**
+ * @brief 将稀疏矩阵展开为稠密矩阵（缺失项填 0）。
+ *
+ * out_dense 必须已创建且维度与 sparse 一致。先清零再填入非零元。
+ *
+ * @param[in]  sparse    输入稀疏矩阵（不被修改）。
+ * @param[out] out_dense 输出稠密矩阵，内容被完全覆写。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL 或结构非法。
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH — 维度不匹配。
+ *
+ * @par 副作用
+ * - 覆写 out_dense->data。无内存分配。
+ */
 lmmc_status_t lmmc_sparse_to_dense(const lmmc_sparse_mat_t* sparse, lmmc_mat_t* out_dense);
 
-/** @brief 稀疏矩阵-稠密向量乘法 @c y = A x 。 */
+/**
+ * @brief 稀疏矩阵-稠密向量乘法：y = A * x。
+ *
+ * 支持 CSR 和 CSC 格式。CSR 时使用 4-展开内循环优化。
+ * x->size 须等于 sparse->cols，y->size 须等于 sparse->rows。
+ *
+ * @param[in]  sparse 输入稀疏矩阵（不被修改）。
+ * @param[in]  x      输入向量（不被修改）。
+ * @param[out] y      输出向量，内容被完全覆写。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL 或结构非法。
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH — 向量长度与矩阵维度不匹配。
+ *
+ * @par 副作用
+ * - 覆写 y->data。无内存分配。
+ */
 lmmc_status_t lmmc_sparse_mat_vec_mul(const lmmc_sparse_mat_t* sparse, const lmmc_vec_t* x, lmmc_vec_t* y);
 
-/** @brief 稀疏矩阵转置（保持原格式）。 */
+/**
+ * @brief 计算稀疏矩阵的转置（保持原格式）。
+ *
+ * 输出矩阵的 format 与输入相同。内部分配新的数组。
+ *
+ * @param[in]  sparse         输入稀疏矩阵（不被修改）。
+ * @param[out] out_transposed 输出转置矩阵，调用方需配对调用 ::lmmc_sparse_destroy 释放。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL 或结构非法。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存。sparse 不被修改。
+ */
 lmmc_status_t lmmc_sparse_transpose(const lmmc_sparse_mat_t* sparse, lmmc_sparse_mat_t* out_transposed);
 
-/** @brief 稀疏矩阵 × 稠密矩阵 @c C = A B （结果稠密）。 */
+/**
+ * @brief 稀疏矩阵 × 稠密矩阵：C = A * B（结果为稠密矩阵）。
+ *
+ * sparse 为 m×k，b 为 k×n，c 必须已创建为 m×n。
+ * 内部先清零 c 再累加。支持 CSR 和 CSC 格式，使用 4-展开优化。
+ *
+ * @param[in]  sparse 输入稀疏矩阵（不被修改）。
+ * @param[in]  b      输入稠密矩阵（不被修改）。
+ * @param[out] c      输出稠密矩阵，内容被完全覆写。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL。
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH — 维度不匹配。
+ *
+ * @par 副作用
+ * - 覆写 c->data。无内存分配。
+ */
 lmmc_status_t lmmc_sparse_mat_mat_mul_dense(const lmmc_sparse_mat_t* sparse, const lmmc_mat_t* b, lmmc_mat_t* c);
 
-/** @brief 稀疏矩阵-稀疏矩阵乘法（SpGEMM）：@c C = A B 。 */
+/**
+ * @brief 稀疏矩阵-稀疏矩阵乘法（SpGEMM）：C = A * B。
+ *
+ * 输出为 CSR 格式。内部使用行累加器（marker + accumulator）两遍算法：
+ * 第一遍计算 nnz 结构，第二遍填充数值。
+ * 若输入为 CSC 格式会先内部转换为 CSR。
+ *
+ * @param[in]  a 左稀疏矩阵（不被修改）。
+ * @param[in]  b 右稀疏矩阵（不被修改），a->cols 须等于 b->rows。
+ * @param[out] c 输出稀疏矩阵（CSR），调用方需配对调用 ::lmmc_sparse_destroy 释放。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL。
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH — a->cols != b->rows。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存。若输入为 CSC 则内部临时分配 CSR 副本并在返回前释放。
+ */
 lmmc_status_t lmmc_sparse_mat_mat_mul_sparse(const lmmc_sparse_mat_t* a, const lmmc_sparse_mat_t* b, lmmc_sparse_mat_t* c);
 
-/** @brief 将矩阵格式转换为 CSC 。若 @p src 已是 CSC 则深拷贝。 */
+/**
+ * @brief 将稀疏矩阵转换为 CSC 格式。若 src 已是 CSC 则执行深拷贝。
+ *
+ * @param[in]  src 输入稀疏矩阵（不被修改）。
+ * @param[out] dst 输出 CSC 矩阵，调用方需配对调用 ::lmmc_sparse_destroy 释放。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存。src 不被修改。
+ */
 lmmc_status_t lmmc_sparse_to_csc(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t* dst);
-/** @brief 将矩阵格式转换为 CSR 。若 @p src 已是 CSR 则深拷贝。 */
+/**
+ * @brief 将稀疏矩阵转换为 CSR 格式。若 src 已是 CSR 则执行深拷贝。
+ *
+ * @param[in]  src 输入稀疏矩阵（不被修改）。
+ * @param[out] dst 输出 CSR 矩阵，调用方需配对调用 ::lmmc_sparse_destroy 释放。
+ *
+ * @return 同 ::lmmc_sparse_to_csc。
+ *
+ * @par 副作用
+ * - 分配堆内存。src 不被修改。
+ */
 lmmc_status_t lmmc_sparse_to_csr(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t* dst);
 
 /* ===================== 稀疏 LU 分解 ===================== */
@@ -150,7 +399,23 @@ lmmc_status_t lmmc_sparse_to_csr(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
 typedef struct lmmc_sparse_lu_t lmmc_sparse_lu_t;
 
 /**
- * @brief 进行稀疏 LU 的符号分析，确定填充模式。
+ * @brief 稀疏 LU 符号分析阶段：AMD 重排序 + 消去树构建。
+ *
+ * 分析矩阵的稀疏结构，计算 AMD（近似最小度）列置换以减少填充，
+ * 并预分配 L/U 因子的存储空间。分析结果可复用于多次数值分解
+ * （当矩阵结构不变、仅数值变化时）。
+ *
+ * @param[in]  a      输入方阵（不被修改），rows 须等于 cols。
+ * @param[out] out_lu 返回的 LU 上下文句柄，调用方需配对调用 ::lmmc_sparse_lu_destroy 释放。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL 或矩阵非方阵。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ *
+ * @par 副作用
+ * - 分配堆内存（LU 上下文 + 内部工作数组）。a 不被修改。
+ * - 若 a 为 CSR 格式，内部会临时转换为 CSC 并在返回前释放。
  */
 lmmc_status_t lmmc_sparse_lu_symbolic(
     const lmmc_sparse_mat_t* a,
@@ -158,7 +423,23 @@ lmmc_status_t lmmc_sparse_lu_symbolic(
 );
 
 /**
- * @brief 进行稀疏 LU 的数值分解（需先完成符号分析）。
+ * @brief 稀疏 LU 数值分解阶段（Gilbert-Peierls 算法 + 部分主元）。
+ *
+ * 在已完成符号分析的 lu 上下文中执行数值分解。
+ * 可对同一 lu 多次调用（当矩阵数值变化但结构不变时）。
+ *
+ * @param[in]     a  输入方阵（不被修改），维度须与符号分析时一致。
+ * @param[in,out] lu 已完成符号分析的 LU 上下文，数值因子被覆写。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL 或维度不匹配。
+ * - ::LMMC_STATUS_SINGULAR_MATRIX — 主元为零，矩阵奇异。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 因子数组扩容失败。
+ *
+ * @par 副作用
+ * - 修改 lu 内部的 L/U 数值数组和行置换。
+ * - 分配临时工作内存并在返回前释放。
  */
 lmmc_status_t lmmc_sparse_lu_numeric(
     const lmmc_sparse_mat_t* a,
@@ -166,7 +447,24 @@ lmmc_status_t lmmc_sparse_lu_numeric(
 );
 
 /**
- * @brief 利用已分解的 LU 因子求解 @c A x = b 。
+ * @brief 利用已分解的稀疏 LU 因子求解 A*x = b。
+ *
+ * 求解过程：x = Q * U^{-1} * L^{-1} * P * b，其中 P 为行置换，Q 为 AMD 列置换。
+ * lu 必须已完成 symbolic + numeric 两阶段。
+ *
+ * @param[in]  lu LU 上下文（不被修改）。
+ * @param[in]  b  右端向量，长度须等于 lu->n。
+ * @param[out] x  解向量，长度须等于 lu->n，内容被覆写。
+ *
+ * @return
+ * - ::LMMC_STATUS_OK — 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL。
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH — 向量长度与矩阵阶数不匹配。
+ * - ::LMMC_STATUS_SINGULAR_MATRIX — U 对角线为零。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED — 临时工作内存分配失败。
+ *
+ * @par 副作用
+ * - 覆写 x->data。分配并释放长度为 n 的临时工作数组。
  */
 lmmc_status_t lmmc_sparse_lu_solve(
     const lmmc_sparse_lu_t* lu,

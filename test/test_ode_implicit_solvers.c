@@ -1,9 +1,6 @@
 /**
  * @file test_ode_implicit_solvers.c
- * @brief Unit tests for implicit ODE solvers: SDIRK4, Rosenbrock GRK4T,
- *        implicit Euler A-stability, and trapezoidal 2nd-order accuracy.
- *
- * Validates: Requirements 15.5, 15.6
+ * 隐式 ODE 求解器测试（SDIRK4、Rosenbrock、隐式 Euler）。
  */
 #include <math.h>
 #include <stdio.h>

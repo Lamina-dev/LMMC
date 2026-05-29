@@ -1,8 +1,6 @@
 /**
  * @file test_eigen_gen_prop.c
- * @brief 针对 LMMC 中 eigen gen prop 相关接口的单元测试。
- *
- * @internal
+ * 针对 LMMC 中 eigen gen prop 相关接口的单元测试。
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -421,7 +419,6 @@ int main(void)
     size_t n_failed = 0;
 
     printf("=== Property 9: 一般特征值方程验证 ===\n");
-    printf("Validates: Requirements 6.1, 6.4\n\n");
 
     for (i = 0; i < n_tests; i++) {
         printf("[%zu/%zu] %s ... ", i + 1, n_tests, tests[i].name);
