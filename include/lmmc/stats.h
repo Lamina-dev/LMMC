@@ -116,7 +116,7 @@ lmmc_status_t lmmc_mat_correlation_sample(const lmmc_mat_t* x, lmmc_mat_t* out_c
  *
  * @return ::LMMC_STATUS_OK 成功；
  *         ::LMMC_STATUS_INVALID_ARGUMENT 若 x->size == 0 或指针为 NULL；
- *         ::LMMC_STATUS_ALLOC_FAILED 若临时数组分配失败。
+ *         ::LMMC_STATUS_ALLOCATION_FAILED 若临时数组分配失败。
  *
  * @par 副作用
  * - 内部分配长度为 x->size 的临时数组用于排序，函数返回前释放。

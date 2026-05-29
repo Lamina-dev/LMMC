@@ -213,7 +213,11 @@ lmmc_status_t lmmc_nleq_newton(
         {
             size_t i;
             lmmc_vec_t neg_Fx;
-            lmmc_vec_create(n, &neg_Fx);
+            status = lmmc_vec_create(n, &neg_Fx);
+            if (status != LMMC_STATUS_OK) {
+                out->failure_reason = LMMC_OPT_FAILURE_NUMERICAL_ISSUE;
+                goto cleanup;
+            }
             for (i = 0; i < n; ++i) {
                 neg_Fx.data[i] = -Fx.data[i];
             }
@@ -465,8 +469,8 @@ lmmc_status_t lmmc_minimize_lbfgs(
     lmmc_status_t status;
     lmmc_real_t f_val, f_new;
     lmmc_real_t grad_norm;
-    int history_count = 0;
-    int oldest = 0;
+    size_t history_count = 0;
+    size_t oldest = 0;
 
     if (obj == NULL || grad == NULL || x == NULL || cfg == NULL || out == NULL || x->data == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
@@ -543,7 +547,7 @@ lmmc_status_t lmmc_minimize_lbfgs(
 
         /* First loop (backward) */
         for (k = 0; k < bound; ++k) {
-            size_t idx = (oldest + (int)history_count - 1 - (int)k) % m;
+            size_t idx = (oldest + history_count - 1 - k) % m;
             lmmc_real_t dot = 0.0;
             for (i = 0; i < n; ++i) {
                 dot += s_store[idx * n + i] * q.data[i];
@@ -572,7 +576,7 @@ lmmc_status_t lmmc_minimize_lbfgs(
 
         /* Second loop (forward) */
         for (k = bound; k-- > 0;) {
-            size_t idx = (oldest + (int)history_count - 1 - (int)k) % m;
+            size_t idx = (oldest + history_count - 1 - k) % m;
             lmmc_real_t dot = 0.0;
             for (i = 0; i < n; ++i) {
                 dot += y_store[idx * n + i] * q.data[i];
@@ -635,12 +639,12 @@ lmmc_status_t lmmc_minimize_lbfgs(
                 size_t store_idx;
                 lmmc_real_t sy_val = 0.0;
 
-                if (history_count < (int)m) {
+                if (history_count < m) {
                     store_idx = (oldest + history_count) % m;
                     history_count++;
                 } else {
                     store_idx = oldest;
-                    oldest = (oldest + 1) % (int)m;
+                    oldest = (oldest + 1) % m;
                 }
 
                 for (i = 0; i < n; ++i) {
@@ -844,7 +848,12 @@ lmmc_status_t lmmc_minimize_levenberg_marquardt(
                 /* rhs = -J^T r */
                 {
                     lmmc_vec_t neg_JtR;
-                    lmmc_vec_create(n, &neg_JtR);
+                    status = lmmc_vec_create(n, &neg_JtR);
+                    if (status != LMMC_STATUS_OK) {
+                        lmmc_mat_destroy(&A_aug);
+                        out->failure_reason = LMMC_OPT_FAILURE_NUMERICAL_ISSUE;
+                        goto lm_cleanup;
+                    }
                     for (i = 0; i < n; ++i) {
                         neg_JtR.data[i] = -JtR.data[i];
                     }
