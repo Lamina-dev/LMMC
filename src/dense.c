@@ -10,6 +10,7 @@
 #include "lmmc/config.h"
 #include "lmmc/dense.h"
 #include "lmmc/linear_algebra.h"
+#include "lmmc/eigen.h"
 
 static int lmmc_mul_overflow_size(size_t a, size_t b, size_t* out) {
     if (a == 0 || b == 0) {
@@ -1068,4 +1069,821 @@ lmmc_status_t lmmc_solve_triangular(const lmmc_mat_t* T, int upper, int diag_uni
     LMMC_REAL_CLEAR(&eps);
 
     return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_vec_hadamard(const lmmc_vec_t* a, const lmmc_vec_t* b, lmmc_vec_t* c) {
+    size_t i;
+    lmmc_real_t tmp_mul;
+
+    if (a == NULL || b == NULL || c == NULL ||
+        a->data == NULL || b->data == NULL || c->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->size != b->size || a->size != c->size) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    LMMC_REAL_INIT(&tmp_mul);
+
+    for (i = 0; i < a->size; ++i) {
+        LMMC_REAL_MUL(&tmp_mul, &a->data[i], &b->data[i]);
+        LMMC_REAL_SET(&c->data[i], &tmp_mul);
+    }
+
+    LMMC_REAL_CLEAR(&tmp_mul);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_vec_elementwise_div(const lmmc_vec_t* a, const lmmc_vec_t* b, lmmc_vec_t* c) {
+    size_t i;
+    lmmc_real_t zero;
+    lmmc_real_t tmp_div;
+
+    if (a == NULL || b == NULL || c == NULL ||
+        a->data == NULL || b->data == NULL || c->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->size != b->size || a->size != c->size) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    /* Pre-scan b for zeros before writing any output */
+    LMMC_REAL_INIT(&zero);
+    LMMC_REAL_SET_D(&zero, 0.0);
+    for (i = 0; i < b->size; ++i) {
+        if (LMMC_REAL_CMP(&b->data[i], &zero) == 0) {
+            LMMC_REAL_CLEAR(&zero);
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+    }
+    LMMC_REAL_CLEAR(&zero);
+
+    LMMC_REAL_INIT(&tmp_div);
+
+    for (i = 0; i < a->size; ++i) {
+        LMMC_REAL_DIV(&tmp_div, &a->data[i], &b->data[i]);
+        LMMC_REAL_SET(&c->data[i], &tmp_div);
+    }
+
+    LMMC_REAL_CLEAR(&tmp_div);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_vec_elementwise_pow(const lmmc_vec_t* a, const lmmc_vec_t* b, lmmc_vec_t* c) {
+    size_t i;
+
+    if (a == NULL || b == NULL || c == NULL ||
+        a->data == NULL || b->data == NULL || c->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->size != b->size || a->size != c->size) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    for (i = 0; i < a->size; ++i) {
+        c->data[i] = pow(a->data[i], b->data[i]);
+    }
+
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_mat_hadamard(const lmmc_mat_t* a, const lmmc_mat_t* b, lmmc_mat_t* c) {
+    size_t i, j;
+    lmmc_real_t tmp_mul;
+
+    if (a == NULL || b == NULL || c == NULL ||
+        a->data == NULL || b->data == NULL || c->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->rows != b->rows || a->cols != b->cols ||
+        a->rows != c->rows || a->cols != c->cols) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    LMMC_REAL_INIT(&tmp_mul);
+
+    for (i = 0; i < a->rows; ++i) {
+        for (j = 0; j < a->cols; ++j) {
+            LMMC_REAL_MUL(&tmp_mul,
+                          &a->data[i * a->stride + j],
+                          &b->data[i * b->stride + j]);
+            LMMC_REAL_SET(&c->data[i * c->stride + j], &tmp_mul);
+        }
+    }
+
+    LMMC_REAL_CLEAR(&tmp_mul);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_mat_elementwise_div(const lmmc_mat_t* a, const lmmc_mat_t* b, lmmc_mat_t* c) {
+    size_t i, j;
+    lmmc_real_t zero;
+    lmmc_real_t tmp_div;
+
+    if (a == NULL || b == NULL || c == NULL ||
+        a->data == NULL || b->data == NULL || c->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->rows != b->rows || a->cols != b->cols ||
+        a->rows != c->rows || a->cols != c->cols) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    /* Pre-scan all elements of b for zeros before writing any output */
+    LMMC_REAL_INIT(&zero);
+    LMMC_REAL_SET_D(&zero, 0.0);
+    for (i = 0; i < b->rows; ++i) {
+        for (j = 0; j < b->cols; ++j) {
+            if (LMMC_REAL_CMP(&b->data[i * b->stride + j], &zero) == 0) {
+                LMMC_REAL_CLEAR(&zero);
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
+        }
+    }
+    LMMC_REAL_CLEAR(&zero);
+
+    LMMC_REAL_INIT(&tmp_div);
+
+    for (i = 0; i < a->rows; ++i) {
+        for (j = 0; j < a->cols; ++j) {
+            LMMC_REAL_DIV(&tmp_div,
+                          &a->data[i * a->stride + j],
+                          &b->data[i * b->stride + j]);
+            LMMC_REAL_SET(&c->data[i * c->stride + j], &tmp_div);
+        }
+    }
+
+    LMMC_REAL_CLEAR(&tmp_div);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_mat_elementwise_pow(const lmmc_mat_t* a, const lmmc_mat_t* b, lmmc_mat_t* c) {
+    size_t i, j;
+
+    if (a == NULL || b == NULL || c == NULL ||
+        a->data == NULL || b->data == NULL || c->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->rows != b->rows || a->cols != b->cols ||
+        a->rows != c->rows || a->cols != c->cols) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    for (i = 0; i < a->rows; ++i) {
+        for (j = 0; j < a->cols; ++j) {
+            c->data[i * c->stride + j] = pow(
+                a->data[i * a->stride + j],
+                b->data[i * b->stride + j]);
+        }
+    }
+
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_vec_cmp_gt(const lmmc_vec_t* a, const lmmc_vec_t* b, int* out) {
+    size_t i;
+
+    if (a == NULL || b == NULL || out == NULL ||
+        a->data == NULL || b->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->size != b->size) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    for (i = 0; i < a->size; ++i) {
+        out[i] = (LMMC_REAL_CMP(&a->data[i], &b->data[i]) > 0) ? 1 : 0;
+    }
+
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_vec_cmp_lt(const lmmc_vec_t* a, const lmmc_vec_t* b, int* out) {
+    size_t i;
+
+    if (a == NULL || b == NULL || out == NULL ||
+        a->data == NULL || b->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->size != b->size) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    for (i = 0; i < a->size; ++i) {
+        out[i] = (LMMC_REAL_CMP(&a->data[i], &b->data[i]) < 0) ? 1 : 0;
+    }
+
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_vec_cmp_ge(const lmmc_vec_t* a, const lmmc_vec_t* b, int* out) {
+    size_t i;
+
+    if (a == NULL || b == NULL || out == NULL ||
+        a->data == NULL || b->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->size != b->size) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    for (i = 0; i < a->size; ++i) {
+        out[i] = (LMMC_REAL_CMP(&a->data[i], &b->data[i]) >= 0) ? 1 : 0;
+    }
+
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_vec_cmp_le(const lmmc_vec_t* a, const lmmc_vec_t* b, int* out) {
+    size_t i;
+
+    if (a == NULL || b == NULL || out == NULL ||
+        a->data == NULL || b->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->size != b->size) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    for (i = 0; i < a->size; ++i) {
+        out[i] = (LMMC_REAL_CMP(&a->data[i], &b->data[i]) <= 0) ? 1 : 0;
+    }
+
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_vec_cmp_eq(const lmmc_vec_t* a, const lmmc_vec_t* b, lmmc_real_t tol, int* out) {
+    size_t i;
+    lmmc_real_t diff;
+    lmmc_real_t abs_diff;
+
+    if (a == NULL || b == NULL || out == NULL ||
+        a->data == NULL || b->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->size != b->size) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    LMMC_REAL_INIT(&diff);
+    LMMC_REAL_INIT(&abs_diff);
+
+    for (i = 0; i < a->size; ++i) {
+        LMMC_REAL_SUB(&diff, &a->data[i], &b->data[i]);
+        LMMC_REAL_ABS(&abs_diff, &diff);
+        out[i] = (LMMC_REAL_CMP(&abs_diff, &tol) <= 0) ? 1 : 0;
+    }
+
+    LMMC_REAL_CLEAR(&diff);
+    LMMC_REAL_CLEAR(&abs_diff);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_mat_norm1(const lmmc_mat_t* a, lmmc_real_t* out_norm) {
+    size_t i, j;
+    lmmc_real_t col_sum;
+    lmmc_real_t abs_val;
+    lmmc_real_t tmp_sum;
+    lmmc_real_t max_val;
+
+    if (a == NULL || out_norm == NULL || a->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    LMMC_REAL_INIT(&col_sum);
+    LMMC_REAL_INIT(&abs_val);
+    LMMC_REAL_INIT(&tmp_sum);
+    LMMC_REAL_INIT(&max_val);
+    LMMC_REAL_SET_D(&max_val, 0.0);
+
+    for (j = 0; j < a->cols; ++j) {
+        LMMC_REAL_SET_D(&col_sum, 0.0);
+        for (i = 0; i < a->rows; ++i) {
+            LMMC_REAL_ABS(&abs_val, &a->data[i * a->stride + j]);
+            LMMC_REAL_ADD(&tmp_sum, &col_sum, &abs_val);
+            LMMC_REAL_SET(&col_sum, &tmp_sum);
+        }
+        if (LMMC_REAL_CMP(&col_sum, &max_val) > 0) {
+            LMMC_REAL_SET(&max_val, &col_sum);
+        }
+    }
+
+    LMMC_REAL_SET(out_norm, &max_val);
+
+    LMMC_REAL_CLEAR(&col_sum);
+    LMMC_REAL_CLEAR(&abs_val);
+    LMMC_REAL_CLEAR(&tmp_sum);
+    LMMC_REAL_CLEAR(&max_val);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_mat_norm_inf(const lmmc_mat_t* a, lmmc_real_t* out_norm) {
+    size_t i, j;
+    lmmc_real_t row_sum;
+    lmmc_real_t abs_val;
+    lmmc_real_t tmp_sum;
+    lmmc_real_t max_val;
+
+    if (a == NULL || out_norm == NULL || a->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    LMMC_REAL_INIT(&row_sum);
+    LMMC_REAL_INIT(&abs_val);
+    LMMC_REAL_INIT(&tmp_sum);
+    LMMC_REAL_INIT(&max_val);
+    LMMC_REAL_SET_D(&max_val, 0.0);
+
+    for (i = 0; i < a->rows; ++i) {
+        LMMC_REAL_SET_D(&row_sum, 0.0);
+        for (j = 0; j < a->cols; ++j) {
+            LMMC_REAL_ABS(&abs_val, &a->data[i * a->stride + j]);
+            LMMC_REAL_ADD(&tmp_sum, &row_sum, &abs_val);
+            LMMC_REAL_SET(&row_sum, &tmp_sum);
+        }
+        if (LMMC_REAL_CMP(&row_sum, &max_val) > 0) {
+            LMMC_REAL_SET(&max_val, &row_sum);
+        }
+    }
+
+    LMMC_REAL_SET(out_norm, &max_val);
+
+    LMMC_REAL_CLEAR(&row_sum);
+    LMMC_REAL_CLEAR(&abs_val);
+    LMMC_REAL_CLEAR(&tmp_sum);
+    LMMC_REAL_CLEAR(&max_val);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_vec_cross(const lmmc_vec_t* a, const lmmc_vec_t* b, lmmc_vec_t* c)
+{
+    lmmc_real_t t0, t1, t2;
+    lmmc_real_t mul1, mul2;
+
+    if (a == NULL || b == NULL || c == NULL ||
+        a->data == NULL || b->data == NULL || c->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->size != 3 || b->size != 3 || c->size != 3) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    LMMC_REAL_INIT(&t0);
+    LMMC_REAL_INIT(&t1);
+    LMMC_REAL_INIT(&t2);
+    LMMC_REAL_INIT(&mul1);
+    LMMC_REAL_INIT(&mul2);
+
+    /* c[0] = a[1]*b[2] - a[2]*b[1] */
+    LMMC_REAL_MUL(&mul1, &a->data[1], &b->data[2]);
+    LMMC_REAL_MUL(&mul2, &a->data[2], &b->data[1]);
+    LMMC_REAL_SUB(&t0, &mul1, &mul2);
+
+    /* c[1] = a[2]*b[0] - a[0]*b[2] */
+    LMMC_REAL_MUL(&mul1, &a->data[2], &b->data[0]);
+    LMMC_REAL_MUL(&mul2, &a->data[0], &b->data[2]);
+    LMMC_REAL_SUB(&t1, &mul1, &mul2);
+
+    /* c[2] = a[0]*b[1] - a[1]*b[0] */
+    LMMC_REAL_MUL(&mul1, &a->data[0], &b->data[1]);
+    LMMC_REAL_MUL(&mul2, &a->data[1], &b->data[0]);
+    LMMC_REAL_SUB(&t2, &mul1, &mul2);
+
+    /* Write results (safe for aliasing since we used temporaries) */
+    LMMC_REAL_SET(&c->data[0], &t0);
+    LMMC_REAL_SET(&c->data[1], &t1);
+    LMMC_REAL_SET(&c->data[2], &t2);
+
+    LMMC_REAL_CLEAR(&t0);
+    LMMC_REAL_CLEAR(&t1);
+    LMMC_REAL_CLEAR(&t2);
+    LMMC_REAL_CLEAR(&mul1);
+    LMMC_REAL_CLEAR(&mul2);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_mat_rank(const lmmc_mat_t* a, lmmc_real_t tol, size_t* out_rank)
+{
+    lmmc_svd_result_t svd;
+    lmmc_status_t status;
+    size_t i, count;
+    size_t max_dim;
+    lmmc_real_t effective_tol;
+    lmmc_real_t eps_val;
+    lmmc_real_t dim_val;
+    lmmc_real_t tmp;
+
+    if (a == NULL || out_rank == NULL || a->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    /* Compute SVD */
+    status = lmmc_svd(a, &svd);
+    if (status != LMMC_STATUS_OK) {
+        return status;
+    }
+
+    /* Determine effective tolerance */
+    LMMC_REAL_INIT(&effective_tol);
+    if (tol <= 0.0) {
+        /* Default: max(rows, cols) * LMMC_REAL_EPSILON * sigma[0] */
+        max_dim = (a->rows > a->cols) ? a->rows : a->cols;
+
+        LMMC_REAL_INIT(&eps_val);
+        LMMC_REAL_SET_D(&eps_val, LMMC_REAL_EPSILON);
+
+        LMMC_REAL_INIT(&dim_val);
+        LMMC_REAL_SET_D(&dim_val, (double)max_dim);
+
+        LMMC_REAL_INIT(&tmp);
+        LMMC_REAL_MUL(&tmp, &dim_val, &eps_val);
+        LMMC_REAL_MUL(&effective_tol, &tmp, &svd.sigma.data[0]);
+
+        LMMC_REAL_CLEAR(&eps_val);
+        LMMC_REAL_CLEAR(&dim_val);
+        LMMC_REAL_CLEAR(&tmp);
+    } else {
+        LMMC_REAL_SET_D(&effective_tol, tol);
+    }
+
+    /* Count singular values > tol */
+    count = 0;
+    for (i = 0; i < svd.sigma.size; ++i) {
+        if (LMMC_REAL_CMP(&svd.sigma.data[i], &effective_tol) > 0) {
+            count++;
+        }
+    }
+
+    *out_rank = count;
+
+    LMMC_REAL_CLEAR(&effective_tol);
+    lmmc_svd_result_destroy(&svd);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_mat_pow(const lmmc_mat_t* a, int n, lmmc_mat_t* out)
+{
+    lmmc_mat_t base;
+    lmmc_mat_t temp;
+    lmmc_mat_t inv_mat;
+    lmmc_status_t status;
+    size_t dim;
+    size_t total;
+    unsigned int exp;
+
+    if (a == NULL || out == NULL || a->data == NULL || out->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->rows != a->cols) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    dim = a->rows;
+    if (out->rows != dim || out->cols != dim) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    /* n == 0 → identity */
+    if (n == 0) {
+        lmmc_real_t zero_val;
+        lmmc_real_t one_val;
+        size_t i, j;
+        LMMC_REAL_SET_D(&zero_val, 0.0);
+        LMMC_REAL_SET_D(&one_val, 1.0);
+        for (i = 0; i < dim; ++i) {
+            for (j = 0; j < dim; ++j) {
+                if (i == j) {
+                    LMMC_REAL_SET(&out->data[i * out->stride + j], &one_val);
+                } else {
+                    LMMC_REAL_SET(&out->data[i * out->stride + j], &zero_val);
+                }
+            }
+        }
+        return LMMC_STATUS_OK;
+    }
+
+    /* n == 1 → copy */
+    if (n == 1) {
+        return lmmc_mat_copy(a, out);
+    }
+
+    /* Check size overflow for temporaries */
+    if (!lmmc_safe_mul_size(dim, dim, &total)) {
+        return LMMC_STATUS_ALLOCATION_FAILED;
+    }
+
+    /* n < 0 → compute inverse first, then raise to |n| */
+    if (n < 0) {
+        status = lmmc_mat_create(dim, dim, &inv_mat);
+        if (status != LMMC_STATUS_OK) {
+            return status;
+        }
+        status = lmmc_mat_inv(a, &inv_mat);
+        if (status != LMMC_STATUS_OK) {
+            lmmc_mat_destroy(&inv_mat);
+            return status;
+        }
+        /* Use unsigned to handle INT_MIN safely */
+        exp = (n == -1) ? 1u : (unsigned int)(-(n + 1)) + 1u;
+    } else {
+        exp = (unsigned int)n;
+    }
+
+    /* Allocate two temporary matrices: base and temp */
+    base.data = NULL;
+    temp.data = NULL;
+
+    status = lmmc_mat_create(dim, dim, &base);
+    if (status != LMMC_STATUS_OK) {
+        if (n < 0) { lmmc_mat_destroy(&inv_mat); }
+        return status;
+    }
+    status = lmmc_mat_create(dim, dim, &temp);
+    if (status != LMMC_STATUS_OK) {
+        lmmc_mat_destroy(&base);
+        if (n < 0) { lmmc_mat_destroy(&inv_mat); }
+        return status;
+    }
+
+    /* Initialize base = A (or A^{-1} if n < 0) */
+    if (n < 0) {
+        status = lmmc_mat_copy(&inv_mat, &base);
+        lmmc_mat_destroy(&inv_mat);
+    } else {
+        status = lmmc_mat_copy(a, &base);
+    }
+    if (status != LMMC_STATUS_OK) {
+        lmmc_mat_destroy(&temp);
+        lmmc_mat_destroy(&base);
+        return status;
+    }
+
+    /* Initialize result (out) = identity */
+    {
+        lmmc_real_t zero_val;
+        lmmc_real_t one_val;
+        size_t i, j;
+        LMMC_REAL_SET_D(&zero_val, 0.0);
+        LMMC_REAL_SET_D(&one_val, 1.0);
+        for (i = 0; i < dim; ++i) {
+            for (j = 0; j < dim; ++j) {
+                if (i == j) {
+                    LMMC_REAL_SET(&out->data[i * out->stride + j], &one_val);
+                } else {
+                    LMMC_REAL_SET(&out->data[i * out->stride + j], &zero_val);
+                }
+            }
+        }
+    }
+
+    /* Binary exponentiation */
+    while (exp > 0) {
+        if (exp & 1u) {
+            /* temp = out * base */
+            status = lmmc_mat_mul(out, &base, &temp);
+            if (status != LMMC_STATUS_OK) {
+                lmmc_mat_destroy(&temp);
+                lmmc_mat_destroy(&base);
+                return status;
+            }
+            /* out = temp */
+            status = lmmc_mat_copy(&temp, out);
+            if (status != LMMC_STATUS_OK) {
+                lmmc_mat_destroy(&temp);
+                lmmc_mat_destroy(&base);
+                return status;
+            }
+        }
+        exp >>= 1u;
+        if (exp > 0) {
+            /* temp = base * base */
+            status = lmmc_mat_mul(&base, &base, &temp);
+            if (status != LMMC_STATUS_OK) {
+                lmmc_mat_destroy(&temp);
+                lmmc_mat_destroy(&base);
+                return status;
+            }
+            /* base = temp */
+            status = lmmc_mat_copy(&temp, &base);
+            if (status != LMMC_STATUS_OK) {
+                lmmc_mat_destroy(&temp);
+                lmmc_mat_destroy(&base);
+                return status;
+            }
+        }
+    }
+
+    lmmc_mat_destroy(&temp);
+    lmmc_mat_destroy(&base);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_mat_rdiv(const lmmc_mat_t* B, const lmmc_mat_t* A, lmmc_mat_t* X)
+{
+    lmmc_mat_t at_mat;
+    size_t* pivots = NULL;
+    lmmc_vec_t rhs_vec;
+    lmmc_vec_t sol_vec;
+    lmmc_status_t status;
+    size_t nn, m, i, j;
+    size_t pivot_bytes;
+
+    if (B == NULL || A == NULL || X == NULL ||
+        B->data == NULL || A->data == NULL || X->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    /* A must be square */
+    if (A->rows != A->cols) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    nn = A->rows;
+    m = B->rows;
+
+    /* B must have nn columns */
+    if (B->cols != nn) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    /* X must be m × nn */
+    if (X->rows != m || X->cols != nn) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    /* Compute A^T into at_mat */
+    status = lmmc_mat_create(nn, nn, &at_mat);
+    if (status != LMMC_STATUS_OK) {
+        return status;
+    }
+    status = lmmc_mat_transpose_to(A, &at_mat);
+    if (status != LMMC_STATUS_OK) {
+        lmmc_mat_destroy(&at_mat);
+        return status;
+    }
+
+    /* Allocate pivot array */
+    if (!lmmc_safe_mul_size(nn, sizeof(size_t), &pivot_bytes)) {
+        lmmc_mat_destroy(&at_mat);
+        return LMMC_STATUS_ALLOCATION_FAILED;
+    }
+    pivots = (size_t*)lmmc_alloc(pivot_bytes);
+    if (pivots == NULL) {
+        lmmc_mat_destroy(&at_mat);
+        return LMMC_STATUS_ALLOCATION_FAILED;
+    }
+
+    /* LU decompose A^T in-place */
+    status = lmmc_lu_decompose_inplace(&at_mat, pivots, NULL);
+    if (status != LMMC_STATUS_OK) {
+        lmmc_free(pivots);
+        lmmc_mat_destroy(&at_mat);
+        return status;
+    }
+
+    /* Create temporary vectors for solving */
+    rhs_vec.data = NULL;
+    sol_vec.data = NULL;
+
+    status = lmmc_vec_create(nn, &rhs_vec);
+    if (status != LMMC_STATUS_OK) {
+        lmmc_free(pivots);
+        lmmc_mat_destroy(&at_mat);
+        return status;
+    }
+    status = lmmc_vec_create(nn, &sol_vec);
+    if (status != LMMC_STATUS_OK) {
+        lmmc_vec_destroy(&rhs_vec);
+        lmmc_free(pivots);
+        lmmc_mat_destroy(&at_mat);
+        return status;
+    }
+
+    /*
+     * Solve A^T * x_col = b_col for each row i of B.
+     * Row i of B is column i of B^T, which becomes the RHS.
+     * The solution x_col becomes row i of X.
+     */
+    for (i = 0; i < m; ++i) {
+        /* Extract row i of B as the RHS vector */
+        for (j = 0; j < nn; ++j) {
+            LMMC_REAL_SET(&rhs_vec.data[j], &B->data[i * B->stride + j]);
+        }
+
+        /* Solve A^T * sol = rhs */
+        status = lmmc_lu_solve(&at_mat, pivots, &rhs_vec, &sol_vec);
+        if (status != LMMC_STATUS_OK) {
+            lmmc_vec_destroy(&sol_vec);
+            lmmc_vec_destroy(&rhs_vec);
+            lmmc_free(pivots);
+            lmmc_mat_destroy(&at_mat);
+            return status;
+        }
+
+        /* Write solution as row i of X */
+        for (j = 0; j < nn; ++j) {
+            LMMC_REAL_SET(&X->data[i * X->stride + j], &sol_vec.data[j]);
+        }
+    }
+
+    lmmc_vec_destroy(&sol_vec);
+    lmmc_vec_destroy(&rhs_vec);
+    lmmc_free(pivots);
+    lmmc_mat_destroy(&at_mat);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_vec_apply(const lmmc_vec_t* in, lmmc_real_t (*func)(lmmc_real_t), lmmc_vec_t* out)
+{
+    size_t i;
+
+    if (in == NULL || out == NULL || in->data == NULL || out->data == NULL || func == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (in->size != out->size) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    for (i = 0; i < in->size; ++i) {
+        out->data[i] = func(in->data[i]);
+    }
+
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_mat_apply(const lmmc_mat_t* in, lmmc_real_t (*func)(lmmc_real_t), lmmc_mat_t* out)
+{
+    size_t i;
+    size_t j;
+
+    if (in == NULL || out == NULL || in->data == NULL || out->data == NULL || func == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (in->rows != out->rows || in->cols != out->cols) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    for (i = 0; i < in->rows; ++i) {
+        for (j = 0; j < in->cols; ++j) {
+            out->data[i * out->stride + j] = func(in->data[i * in->stride + j]);
+        }
+    }
+
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_vec_apply_sin(const lmmc_vec_t* in, lmmc_vec_t* out)
+{
+    return lmmc_vec_apply(in, sin, out);
+}
+
+lmmc_status_t lmmc_vec_apply_cos(const lmmc_vec_t* in, lmmc_vec_t* out)
+{
+    return lmmc_vec_apply(in, cos, out);
+}
+
+lmmc_status_t lmmc_vec_apply_exp(const lmmc_vec_t* in, lmmc_vec_t* out)
+{
+    return lmmc_vec_apply(in, exp, out);
+}
+
+lmmc_status_t lmmc_vec_apply_log(const lmmc_vec_t* in, lmmc_vec_t* out)
+{
+    return lmmc_vec_apply(in, log, out);
+}
+
+lmmc_status_t lmmc_vec_apply_sqrt(const lmmc_vec_t* in, lmmc_vec_t* out)
+{
+    return lmmc_vec_apply(in, sqrt, out);
+}
+
+lmmc_status_t lmmc_vec_apply_abs(const lmmc_vec_t* in, lmmc_vec_t* out)
+{
+    return lmmc_vec_apply(in, fabs, out);
+}
+
+lmmc_status_t lmmc_mat_apply_sin(const lmmc_mat_t* in, lmmc_mat_t* out)
+{
+    return lmmc_mat_apply(in, sin, out);
+}
+
+lmmc_status_t lmmc_mat_apply_cos(const lmmc_mat_t* in, lmmc_mat_t* out)
+{
+    return lmmc_mat_apply(in, cos, out);
+}
+
+lmmc_status_t lmmc_mat_apply_exp(const lmmc_mat_t* in, lmmc_mat_t* out)
+{
+    return lmmc_mat_apply(in, exp, out);
+}
+
+lmmc_status_t lmmc_mat_apply_log(const lmmc_mat_t* in, lmmc_mat_t* out)
+{
+    return lmmc_mat_apply(in, log, out);
+}
+
+lmmc_status_t lmmc_mat_apply_sqrt(const lmmc_mat_t* in, lmmc_mat_t* out)
+{
+    return lmmc_mat_apply(in, sqrt, out);
+}
+
+lmmc_status_t lmmc_mat_apply_abs(const lmmc_mat_t* in, lmmc_mat_t* out)
+{
+    return lmmc_mat_apply(in, fabs, out);
 }

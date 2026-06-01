@@ -57,7 +57,7 @@ void lmmc_deinit(void) {
 #endif /* LMMC_DEBUG_LEAKS */
 
         /* 释放栈分配器 */
-        lmmp_stack_reset(0);
+        lmmp_stack_deinit();
 
         /* 释放全局堆资源 */
         lmmp_global_deinit();
@@ -65,5 +65,8 @@ void lmmc_deinit(void) {
 }
 
 void lmmc_stack_reset(size_t size) {
-    lmmp_stack_reset(size);
+    lmmp_stack_deinit();
+    if (size > 0) {
+        lmmp_stack_init(size);
+    }
 }

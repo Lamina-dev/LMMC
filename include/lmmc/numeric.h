@@ -280,6 +280,168 @@ lmmc_status_t lmmc_beta(lmmc_real_t a, lmmc_real_t b, lmmc_real_t* out);
  */
 lmmc_status_t lmmc_digamma(lmmc_real_t x, lmmc_real_t* out);
 
+/**
+ * @brief 计算反正弦 @f$\arcsin(x)@f$ 。
+ *
+ * @param[in]  x   输入值，必须满足 @f$|x| \le 1@f$ 。
+ * @param[out] out 输出 @f$\arcsin(x)@f$ ，结果在 @f$[-\pi/2, \pi/2]@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL；
+ *         ::LMMC_STATUS_OUT_OF_RANGE 若 @f$|x| > 1@f$ 。
+ */
+lmmc_status_t lmmc_asin(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算反余弦 @f$\arccos(x)@f$ 。
+ *
+ * @param[in]  x   输入值，必须满足 @f$|x| \le 1@f$ 。
+ * @param[out] out 输出 @f$\arccos(x)@f$ ，结果在 @f$[0, \pi]@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL；
+ *         ::LMMC_STATUS_OUT_OF_RANGE 若 @f$|x| > 1@f$ 。
+ */
+lmmc_status_t lmmc_acos(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算反正切 @f$\arctan(x)@f$ 。
+ *
+ * @param[in]  x   输入值，无定义域限制。
+ * @param[out] out 输出 @f$\arctan(x)@f$ ，结果在 @f$(-\pi/2, \pi/2)@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_atan(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算双曲正弦 @f$\sinh(x)@f$ 。
+ *
+ * @param[in]  x   输入值，无定义域限制。
+ * @param[out] out 输出 @f$\sinh(x)@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_sinh(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算双曲余弦 @f$\cosh(x)@f$ 。
+ *
+ * @param[in]  x   输入值，无定义域限制。
+ * @param[out] out 输出 @f$\cosh(x)@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_cosh(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算双曲正切 @f$\tanh(x)@f$ 。
+ *
+ * @param[in]  x   输入值，无定义域限制。
+ * @param[out] out 输出 @f$\tanh(x)@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_tanh(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算反双曲正弦 @f$\mathrm{asinh}(x)@f$ 。
+ *
+ * @param[in]  x   输入值，无定义域限制。
+ * @param[out] out 输出 @f$\mathrm{asinh}(x)@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_asinh(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算反双曲余弦 @f$\mathrm{acosh}(x)@f$ ，要求 @f$x \ge 1@f$ 。
+ *
+ * @param[in]  x   输入值，必须满足 @f$x \ge 1@f$ 。
+ * @param[out] out 输出 @f$\mathrm{acosh}(x)@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL；
+ *         ::LMMC_STATUS_OUT_OF_RANGE 若 @f$x < 1@f$ 。
+ */
+lmmc_status_t lmmc_acosh(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算反双曲正切 @f$\mathrm{atanh}(x)@f$ ，要求 @f$|x| < 1@f$ 。
+ *
+ * @param[in]  x   输入值，必须满足 @f$|x| < 1@f$ 。
+ * @param[out] out 输出 @f$\mathrm{atanh}(x)@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL；
+ *         ::LMMC_STATUS_OUT_OF_RANGE 若 @f$|x| \ge 1@f$ 。
+ */
+lmmc_status_t lmmc_atanh(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算幂 @f$x^y@f$ 。
+ *
+ * 当 @f$x < 0@f$ 且 @f$y@f$ 非整数（@f$\lfloor y \rfloor \ne y@f$）时返回域错误。
+ *
+ * @param[in]  x   底数。
+ * @param[in]  y   指数。
+ * @param[out] out 输出 @f$x^y@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL；
+ *         ::LMMC_STATUS_OUT_OF_RANGE 若 x < 0 且 y 非整数。
+ */
+lmmc_status_t lmmc_pow(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out);
+
+/**
+ * @brief 计算向上取整 @f$\lceil x \rceil@f$ 。
+ *
+ * @param[in]  x   输入值。
+ * @param[out] out 输出 @f$\lceil x \rceil@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_ceil(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算向下取整 @f$\lfloor x \rfloor@f$ 。
+ *
+ * @param[in]  x   输入值。
+ * @param[out] out 输出 @f$\lfloor x \rfloor@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_floor(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算四舍五入 @f$\mathrm{round}(x)@f$ 。
+ *
+ * @param[in]  x   输入值。
+ * @param[out] out 输出四舍五入结果。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_round(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算截断取整 @f$\mathrm{trunc}(x)@f$ （向零方向取整）。
+ *
+ * @param[in]  x   输入值。
+ * @param[out] out 输出截断取整结果。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_trunc(lmmc_real_t x, lmmc_real_t* out);
+
 /* ===================== Lambert W 函数 ===================== */
 
 /**

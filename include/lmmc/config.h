@@ -59,6 +59,13 @@ typedef double lmmc_real_t;
 /** @brief 计算正切，@c *res = tan(*a) 。 */
 #define LMMC_REAL_TAN(res, a)       (*(res) = tan(*(a)))
 
+/** @brief 计算双曲余弦，@c *res = cosh(*a) 。 */
+#define LMMC_REAL_COSH(res, a)      (*(res) = cosh(*(a)))
+/** @brief 计算双曲正弦，@c *res = sinh(*a) 。 */
+#define LMMC_REAL_SINH(res, a)      (*(res) = sinh(*(a)))
+/** @brief 计算反正切2，@c *res = atan2(*y, *x) 。 */
+#define LMMC_REAL_ATAN2(res, y, x)  (*(res) = atan2(*(y), *(x)))
+
 /** @brief 比较 @c *a 与 @c *b ，返回 -1/0/1 。 */
 #define LMMC_REAL_CMP(a, b)         ((*(a) > *(b)) ? 1 : ((*(a) < *(b)) ? -1 : 0))
 /** @brief 判断 @c *x 是否为有限数。 */

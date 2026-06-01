@@ -73,6 +73,7 @@ endif()
 
 set(LMMC_SOURCES
     src/blas_backend.c
+    src/complex.c
     src/dense.c
     src/eigen.c
     src/fft.c
@@ -113,6 +114,14 @@ foreach(_lmmc_target IN LISTS LMMC_LIB_TARGETS)
             ${CMAKE_CURRENT_SOURCE_DIR}/include
             ${LAMMP_INCLUDE_DIR}
     )
+    # LAMMP header requires LAMMP_WINDOWS on MSVC to select __declspec(dllimport)
+    # instead of __attribute__((visibility)) which MSVC does not support.
+    # LAMMP_CORE_EXPORTS must NOT be defined here: it is only for building
+    # the LammpCore DLL itself (switches LAMMP_API to dllexport).
+    # For MinGW/GCC on Windows, the visibility attribute is fine.
+    if(MSVC)
+        target_compile_definitions(${_lmmc_target} PRIVATE LAMMP_WINDOWS)
+    endif()
 endforeach()
 
 # Optional BLAS/LAPACK acceleration (Requirement 18)

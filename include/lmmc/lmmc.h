@@ -13,6 +13,7 @@
 
 #include "lmmc/init.h"
 #include "lmmc/status.h"
+#include "lmmc/complex.h"
 #include "lmmc/dense.h"
 #include "lmmc/precond.h"
 #include "lmmc/itersolve.h"
