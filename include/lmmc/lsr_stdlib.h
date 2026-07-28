@@ -11,6 +11,7 @@
 
 #include "lmmc/complex.h"
 #include "lmmc/config.h"
+#include "lmmc/dense.h"
 #include "lmmc/random.h"
 #include "lmmc/status.h"
 
@@ -86,6 +87,28 @@ lmmc_status_t lmmc_lsr_random_choice(lmmc_rng_t* rng,
                                      const lmmc_real_t* values,
                                      size_t count,
                                      lmmc_real_t* out);
+
+lmmc_status_t lmmc_lsr_linalg_shape(const lmmc_mat_t* a,
+                                    size_t* out_rows,
+                                    size_t* out_cols);
+lmmc_status_t lmmc_lsr_linalg_transpose(const lmmc_mat_t* a,
+                                        lmmc_mat_t* out);
+lmmc_status_t lmmc_lsr_linalg_adjoint(const lmmc_mat_t* a,
+                                      lmmc_mat_t* out);
+lmmc_status_t lmmc_lsr_linalg_det(const lmmc_mat_t* a,
+                                  lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_linalg_inv(const lmmc_mat_t* a,
+                                  lmmc_mat_t* out);
+lmmc_status_t lmmc_lsr_linalg_rank(const lmmc_mat_t* a,
+                                   size_t* out_rank);
+lmmc_status_t lmmc_lsr_linalg_trace(const lmmc_mat_t* a,
+                                    lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_linalg_solve_left(const lmmc_mat_t* a,
+                                         const lmmc_mat_t* b,
+                                         lmmc_mat_t* out);
+lmmc_status_t lmmc_lsr_linalg_solve_right(const lmmc_mat_t* b,
+                                          const lmmc_mat_t* a,
+                                          lmmc_mat_t* out);
 
 #ifdef __cplusplus
 }

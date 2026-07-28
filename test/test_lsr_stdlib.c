@@ -8,14 +8,40 @@ static int close_real(lmmc_real_t a, lmmc_real_t b)
     return fabs((double)(a - b)) <= 1e-12;
 }
 
+static void set_mat_values(lmmc_mat_t* mat, const lmmc_real_t* values)
+{
+    size_t k = 0;
+    for (size_t i = 0; i < mat->rows; ++i) {
+        for (size_t j = 0; j < mat->cols; ++j) {
+            mat->data[i * mat->stride + j] = values[k++];
+        }
+    }
+}
+
+static int mat_close_at(const lmmc_mat_t* mat, size_t row, size_t col,
+                        lmmc_real_t expected)
+{
+    return close_real(mat->data[row * mat->stride + col], expected);
+}
+
 int main(void)
 {
     lmmc_real_t out = 0;
     lmmc_real_t out2 = 0;
     lmmc_real_t values[] = {1, 2, 3, 4};
+    lmmc_real_t matrix_values[] = {1, 2, 3, 4};
+    lmmc_real_t rhs_values[] = {5, 6, 7, 8};
+    lmmc_real_t rectangular_values[] = {1, 2, 2, 4, 0, 0};
     lmmc_complex_t z;
     lmmc_complex_t w;
     lmmc_rng_t* rng = NULL;
+    lmmc_mat_t mat = {0};
+    lmmc_mat_t rhs = {0};
+    lmmc_mat_t rectangular = {0};
+    lmmc_mat_t result = {0};
+    size_t rows = 0;
+    size_t cols = 0;
+    size_t rank = 0;
     int64_t randint_out = 0;
 
     if (lmmc_lsr_math_pi(&out) != LMMC_STATUS_OK ||
@@ -142,6 +168,97 @@ int main(void)
     }
 
     lmmc_rng_destroy(rng);
+
+    if (lmmc_mat_create(2, 2, &mat) != LMMC_STATUS_OK ||
+        lmmc_mat_create(2, 2, &rhs) != LMMC_STATUS_OK ||
+        lmmc_mat_create(3, 2, &rectangular) != LMMC_STATUS_OK) {
+        fprintf(stderr, "matrix allocation failed\n");
+        return 1;
+    }
+    set_mat_values(&mat, matrix_values);
+    set_mat_values(&rhs, rhs_values);
+    set_mat_values(&rectangular, rectangular_values);
+
+    if (lmmc_lsr_linalg_shape(&mat, &rows, &cols) != LMMC_STATUS_OK ||
+        rows != 2 || cols != 2) {
+        fprintf(stderr, "std.linalg.shape mismatch\n");
+        return 1;
+    }
+
+    if (lmmc_lsr_linalg_transpose(&mat, &result) != LMMC_STATUS_OK ||
+        result.rows != 2 || result.cols != 2 ||
+        !mat_close_at(&result, 0, 1, 3) ||
+        !mat_close_at(&result, 1, 0, 2)) {
+        fprintf(stderr, "std.linalg.transpose mismatch\n");
+        return 1;
+    }
+    lmmc_mat_destroy(&result);
+
+    if (lmmc_lsr_linalg_adjoint(&mat, &result) != LMMC_STATUS_OK ||
+        !mat_close_at(&result, 0, 1, 3) ||
+        !mat_close_at(&result, 1, 0, 2)) {
+        fprintf(stderr, "std.linalg.adjoint real mismatch\n");
+        return 1;
+    }
+    lmmc_mat_destroy(&result);
+
+    if (lmmc_lsr_linalg_det(&mat, &out) != LMMC_STATUS_OK ||
+        !close_real(out, -2)) {
+        fprintf(stderr, "std.linalg.det mismatch\n");
+        return 1;
+    }
+
+    if (lmmc_lsr_linalg_trace(&mat, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 5)) {
+        fprintf(stderr, "std.linalg.trace mismatch\n");
+        return 1;
+    }
+
+    if (lmmc_lsr_linalg_inv(&mat, &result) != LMMC_STATUS_OK ||
+        !mat_close_at(&result, 0, 0, -2) ||
+        !mat_close_at(&result, 0, 1, 1) ||
+        !mat_close_at(&result, 1, 0, 1.5) ||
+        !mat_close_at(&result, 1, 1, -0.5)) {
+        fprintf(stderr, "std.linalg.inv mismatch\n");
+        return 1;
+    }
+    lmmc_mat_destroy(&result);
+
+    if (lmmc_lsr_linalg_rank(&rectangular, &rank) != LMMC_STATUS_OK ||
+        rank != 1) {
+        fprintf(stderr, "std.linalg.rank mismatch\n");
+        return 1;
+    }
+
+    if (lmmc_lsr_linalg_solve_left(&mat, &rhs, &result) != LMMC_STATUS_OK ||
+        !mat_close_at(&result, 0, 0, -3) ||
+        !mat_close_at(&result, 0, 1, -4) ||
+        !mat_close_at(&result, 1, 0, 4) ||
+        !mat_close_at(&result, 1, 1, 5)) {
+        fprintf(stderr, "std.linalg.solve_left mismatch\n");
+        return 1;
+    }
+    lmmc_mat_destroy(&result);
+
+    if (lmmc_lsr_linalg_solve_right(&rhs, &mat, &result) != LMMC_STATUS_OK ||
+        !mat_close_at(&result, 0, 0, -1) ||
+        !mat_close_at(&result, 0, 1, 2) ||
+        !mat_close_at(&result, 1, 0, -2) ||
+        !mat_close_at(&result, 1, 1, 3)) {
+        fprintf(stderr, "std.linalg.solve_right mismatch\n");
+        return 1;
+    }
+    lmmc_mat_destroy(&result);
+
+    if (lmmc_lsr_linalg_det(&rectangular, &out) !=
+        LMMC_STATUS_INVALID_ARGUMENT) {
+        fprintf(stderr, "std.linalg.det rectangular error mismatch\n");
+        return 1;
+    }
+
+    lmmc_mat_destroy(&rectangular);
+    lmmc_mat_destroy(&rhs);
+    lmmc_mat_destroy(&mat);
 
     return 0;
 }
