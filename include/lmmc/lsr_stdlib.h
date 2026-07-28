@@ -1,0 +1,94 @@
+/**
+ * @file lsr_stdlib.h
+ * @brief LSR-facing numeric standard library adapters.
+ *
+ * These functions provide a stable C ABI shape for Lamina std.math bindings.
+ * They wrap existing LMMC numeric and complex primitives without adding
+ * symbolic semantics; Expr handling belongs to LMCAS.
+ */
+#ifndef LMMC_LSR_STDLIB_H
+#define LMMC_LSR_STDLIB_H
+
+#include "lmmc/complex.h"
+#include "lmmc/config.h"
+#include "lmmc/random.h"
+#include "lmmc/status.h"
+
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/** @brief Return the LSR std.math constant pi. */
+lmmc_status_t lmmc_lsr_math_pi(lmmc_real_t* out);
+/** @brief Return the LSR std.math constant e. */
+lmmc_status_t lmmc_lsr_math_e(lmmc_real_t* out);
+/** @brief Return the LSR std.math constant phi. */
+lmmc_status_t lmmc_lsr_math_phi(lmmc_real_t* out);
+
+/** @brief Return std.math.i, the imaginary unit. */
+lmmc_status_t lmmc_lsr_math_i(lmmc_complex_t* out);
+/** @brief Return std.math.I, an alias of std.math.i. */
+lmmc_status_t lmmc_lsr_math_I(lmmc_complex_t* out);
+
+/** @brief Construct an LSR complex value from real and imaginary parts. */
+lmmc_status_t lmmc_lsr_math_complex(lmmc_real_t real,
+                                    lmmc_real_t imag,
+                                    lmmc_complex_t* out);
+/** @brief Extract the real part of an LSR complex value. */
+lmmc_status_t lmmc_lsr_math_real(const lmmc_complex_t* z, lmmc_real_t* out);
+/** @brief Extract the imaginary part of an LSR complex value. */
+lmmc_status_t lmmc_lsr_math_imag(const lmmc_complex_t* z, lmmc_real_t* out);
+/** @brief Compute the complex conjugate for std.math.conj. */
+lmmc_status_t lmmc_lsr_math_conj(const lmmc_complex_t* z, lmmc_complex_t* out);
+/** @brief Compute the complex absolute value for std.math.abs. */
+lmmc_status_t lmmc_lsr_math_complex_abs(const lmmc_complex_t* z,
+                                        lmmc_real_t* out);
+
+lmmc_status_t lmmc_lsr_math_sin(lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_cos(lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_tan(lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_asin(lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_acos(lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_atan(lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_sqrt(lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_exp(lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_ln(lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_log(lmmc_real_t x, lmmc_real_t base,
+                                lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_abs(lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_floor(lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_ceil(lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_round(lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_clamp(lmmc_real_t x, lmmc_real_t lo,
+                                  lmmc_real_t hi, lmmc_real_t* out);
+
+lmmc_status_t lmmc_lsr_stats_mean(const lmmc_real_t* values, size_t count,
+                                  lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_median(const lmmc_real_t* values, size_t count,
+                                    lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_var(const lmmc_real_t* values, size_t count,
+                                 lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_std(const lmmc_real_t* values, size_t count,
+                                 lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_quantile(const lmmc_real_t* values, size_t count,
+                                      lmmc_real_t q, lmmc_real_t* out);
+
+lmmc_status_t lmmc_lsr_random_seed(lmmc_rng_t* rng, uint64_t seed);
+lmmc_status_t lmmc_lsr_random_rand(lmmc_rng_t* rng, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_random_randint(lmmc_rng_t* rng, int64_t lo,
+                                      int64_t hi, int64_t* out);
+lmmc_status_t lmmc_lsr_random_normal(lmmc_rng_t* rng, lmmc_real_t mean,
+                                     lmmc_real_t stddev, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_random_choice(lmmc_rng_t* rng,
+                                     const lmmc_real_t* values,
+                                     size_t count,
+                                     lmmc_real_t* out);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

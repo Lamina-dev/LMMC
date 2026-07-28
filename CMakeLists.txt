@@ -73,12 +73,14 @@ endif()
 
 set(LMMC_SOURCES
     src/blas_backend.c
+    src/complex.c
     src/dense.c
     src/eigen.c
     src/fft.c
     src/init.c
     src/interp.c
     src/itersolve.c
+    src/lsr_stdlib.c
     src/itersolve_minres_lsqr.c
     src/linear_algebra.c
     src/nonlinear.c

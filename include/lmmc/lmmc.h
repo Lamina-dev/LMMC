@@ -13,6 +13,7 @@
 
 #include "lmmc/init.h"
 #include "lmmc/status.h"
+#include "lmmc/complex.h"
 #include "lmmc/dense.h"
 #include "lmmc/precond.h"
 #include "lmmc/itersolve.h"
@@ -27,6 +28,7 @@
 #include "lmmc/interp.h"
 #include "lmmc/quadrature.h"
 #include "lmmc/random.h"
+#include "lmmc/lsr_stdlib.h"
 
 /** @brief LMMC 主版本号。 */
 #define LMMC_VERSION_MAJOR 0
