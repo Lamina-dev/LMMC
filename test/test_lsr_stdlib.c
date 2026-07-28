@@ -32,13 +32,16 @@ int main(void)
     lmmc_real_t values[] = {1, 2, 3, 4};
     lmmc_real_t scaled_values[] = {2, 4, 6, 8};
     lmmc_real_t matrix_values[] = {1, 2, 3, 4};
+    lmmc_real_t singular_values[] = {1, 2, 2, 4};
     lmmc_real_t rhs_values[] = {5, 6, 7, 8};
     lmmc_real_t rectangular_values[] = {1, 2, 2, 4, 0, 0};
     lmmc_complex_t z;
     lmmc_complex_t w;
     lmmc_rng_t* rng = NULL;
     lmmc_mat_t mat = {0};
+    lmmc_mat_t singular = {0};
     lmmc_mat_t rhs = {0};
+    lmmc_mat_t mismatched_rhs = {0};
     lmmc_mat_t rectangular = {0};
     lmmc_mat_t result = {0};
     lmmc_eigen_gen_full_result_t eig_result = {0};
@@ -322,13 +325,17 @@ int main(void)
     lmmc_rng_destroy(rng);
 
     if (lmmc_mat_create(2, 2, &mat) != LMMC_STATUS_OK ||
+        lmmc_mat_create(2, 2, &singular) != LMMC_STATUS_OK ||
         lmmc_mat_create(2, 2, &rhs) != LMMC_STATUS_OK ||
+        lmmc_mat_create(1, 1, &mismatched_rhs) != LMMC_STATUS_OK ||
         lmmc_mat_create(3, 2, &rectangular) != LMMC_STATUS_OK) {
         fprintf(stderr, "matrix allocation failed\n");
         return 1;
     }
     set_mat_values(&mat, matrix_values);
+    set_mat_values(&singular, singular_values);
     set_mat_values(&rhs, rhs_values);
+    mismatched_rhs.data[0] = 1;
     set_mat_values(&rectangular, rectangular_values);
 
     if (lmmc_lsr_linalg_shape(&mat, &rows, &cols) != LMMC_STATUS_OK ||
@@ -408,6 +415,24 @@ int main(void)
         return 1;
     }
 
+    if (lmmc_lsr_linalg_solve_left(&mat, &mismatched_rhs, &result) !=
+            LMMC_STATUS_DIMENSION_MISMATCH ||
+        lmmc_lsr_linalg_solve_right(&mismatched_rhs, &mat, &result) !=
+            LMMC_STATUS_DIMENSION_MISMATCH) {
+        fprintf(stderr, "std.linalg dimension mismatch diagnostic mismatch\n");
+        return 1;
+    }
+
+    if (lmmc_lsr_linalg_inv(&singular, &result) !=
+            LMMC_STATUS_SINGULAR_MATRIX ||
+        lmmc_lsr_linalg_solve_left(&singular, &rhs, &result) !=
+            LMMC_STATUS_SINGULAR_MATRIX ||
+        lmmc_lsr_linalg_solve_right(&rhs, &singular, &result) !=
+            LMMC_STATUS_SINGULAR_MATRIX) {
+        fprintf(stderr, "std.linalg singular matrix diagnostic mismatch\n");
+        return 1;
+    }
+
     if (lmmc_lsr_linalg_eig(&mat, &eig_result) != LMMC_STATUS_OK ||
         eig_result.real_parts.size != 2 ||
         eig_result.imag_parts.size != 2 ||
@@ -472,7 +497,9 @@ int main(void)
     }
 
     lmmc_mat_destroy(&rectangular);
+    lmmc_mat_destroy(&mismatched_rhs);
     lmmc_mat_destroy(&rhs);
+    lmmc_mat_destroy(&singular);
     lmmc_mat_destroy(&mat);
 
     return 0;
