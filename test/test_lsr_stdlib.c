@@ -287,6 +287,19 @@ int main(void)
         return 1;
     }
 
+    if (lmmc_lsr_random_seed(rng, 314) != LMMC_STATUS_OK ||
+        lmmc_lsr_random_normal(rng, 10, 2, &out) != LMMC_STATUS_OK ||
+        !isfinite((double)out) ||
+        lmmc_lsr_random_seed(rng, 314) != LMMC_STATUS_OK ||
+        lmmc_lsr_random_normal(rng, 10, 2, &out2) != LMMC_STATUS_OK ||
+        !close_real(out, out2) ||
+        lmmc_lsr_random_normal(rng, 0, 0, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT) {
+        fprintf(stderr, "std.random.normal mismatch\n");
+        lmmc_rng_destroy(rng);
+        return 1;
+    }
+
     if (lmmc_lsr_random_choice(rng, values, 4, &out) != LMMC_STATUS_OK ||
         out < 1 || out > 4) {
         fprintf(stderr, "std.random.choice mismatch\n");
