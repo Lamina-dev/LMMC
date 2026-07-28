@@ -48,6 +48,15 @@ lmmc_status_t lmmc_lsr_math_e(lmmc_real_t* out);
 /** @brief Return the LSR std.math constant phi. */
 lmmc_status_t lmmc_lsr_math_phi(lmmc_real_t* out);
 
+/** @brief Return the number of LSR std.constants entries. */
+size_t lmmc_lsr_constants_count(void);
+/** @brief Return the name of an LSR std.constants entry by index, or NULL. */
+const char* lmmc_lsr_constants_name(size_t index);
+/** @brief Return an LSR std.constants numeric value by name. */
+lmmc_status_t lmmc_lsr_constants_get(const char* name, lmmc_real_t* out);
+/** @brief Return an LSR std.constants unit string by name, or NULL. */
+const char* lmmc_lsr_constants_unit(const char* name);
+
 /** @brief Return std.math.i, the imaginary unit. */
 lmmc_status_t lmmc_lsr_math_i(lmmc_complex_t* out);
 /** @brief Return std.math.I, an alias of std.math.i. */

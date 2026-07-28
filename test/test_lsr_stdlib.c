@@ -63,6 +63,41 @@ int main(void)
         return 1;
     }
 
+    if (lmmc_lsr_constants_count() < 20 ||
+        lmmc_lsr_constants_name(0) == NULL ||
+        lmmc_lsr_constants_name(lmmc_lsr_constants_count()) != NULL) {
+        fprintf(stderr, "std.constants enumeration mismatch\n");
+        return 1;
+    }
+
+    if (lmmc_lsr_constants_get("EARTH_GRAVITY", &out) != LMMC_STATUS_OK ||
+        !close_real(out, 9.80665) ||
+        strcmp(lmmc_lsr_constants_unit("EARTH_GRAVITY"), "m*s^-2") != 0) {
+        fprintf(stderr, "std.constants.EARTH_GRAVITY mismatch\n");
+        return 1;
+    }
+
+    if (lmmc_lsr_constants_get("C", &out) != LMMC_STATUS_OK ||
+        !close_real(out, 2.99792458e8) ||
+        strcmp(lmmc_lsr_constants_unit("C"), "m*s^-1") != 0) {
+        fprintf(stderr, "std.constants.C mismatch\n");
+        return 1;
+    }
+
+    if (lmmc_lsr_constants_get("AVOGADRO", &out) != LMMC_STATUS_OK ||
+        !close_real(out, 6.02214076e23) ||
+        strcmp(lmmc_lsr_constants_unit("AVOGADRO"), "mol^-1") != 0) {
+        fprintf(stderr, "std.constants.AVOGADRO mismatch\n");
+        return 1;
+    }
+
+    if (lmmc_lsr_constants_get("NO_SUCH_CONSTANT", &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_constants_unit("NO_SUCH_CONSTANT") != NULL) {
+        fprintf(stderr, "std.constants unknown name mismatch\n");
+        return 1;
+    }
+
     if (lmmc_lsr_math_I(&w) != LMMC_STATUS_OK ||
         !close_real(w.real, z.real) || !close_real(w.imag, z.imag)) {
         fprintf(stderr, "std.math.I alias mismatch\n");
