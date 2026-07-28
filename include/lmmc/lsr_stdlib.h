@@ -78,6 +78,7 @@ lmmc_status_t lmmc_lsr_math_exp(lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_ln(lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_log(lmmc_real_t x, lmmc_real_t base,
                                 lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_log10(lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_abs(lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_floor(lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_ceil(lmmc_real_t x, lmmc_real_t* out);
@@ -95,6 +96,14 @@ lmmc_status_t lmmc_lsr_stats_std(const lmmc_real_t* values, size_t count,
                                  lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_stats_quantile(const lmmc_real_t* values, size_t count,
                                       lmmc_real_t q, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_cov(const lmmc_real_t* x,
+                                 const lmmc_real_t* y,
+                                 size_t count,
+                                 lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_corr(const lmmc_real_t* x,
+                                  const lmmc_real_t* y,
+                                  size_t count,
+                                  lmmc_real_t* out);
 
 lmmc_status_t lmmc_lsr_random_seed(lmmc_rng_t* rng, uint64_t seed);
 lmmc_status_t lmmc_lsr_random_rand(lmmc_rng_t* rng, lmmc_real_t* out);

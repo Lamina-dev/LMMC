@@ -30,6 +30,7 @@ int main(void)
     lmmc_real_t out = 0;
     lmmc_real_t out2 = 0;
     lmmc_real_t values[] = {1, 2, 3, 4};
+    lmmc_real_t scaled_values[] = {2, 4, 6, 8};
     lmmc_real_t matrix_values[] = {1, 2, 3, 4};
     lmmc_real_t rhs_values[] = {5, 6, 7, 8};
     lmmc_real_t rectangular_values[] = {1, 2, 2, 4, 0, 0};
@@ -120,6 +121,12 @@ int main(void)
         return 1;
     }
 
+    if (lmmc_lsr_math_log10(1000, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 3)) {
+        fprintf(stderr, "std.math.log10 mismatch\n");
+        return 1;
+    }
+
     if (lmmc_lsr_math_clamp(5, 1, 3, &out) != LMMC_STATUS_OK ||
         !close_real(out, 3)) {
         fprintf(stderr, "std.math.clamp mismatch\n");
@@ -153,6 +160,20 @@ int main(void)
     if (lmmc_lsr_stats_quantile(values, 4, 0.5, &out) != LMMC_STATUS_OK ||
         !close_real(out, 2.5)) {
         fprintf(stderr, "std.stats.quantile mismatch\n");
+        return 1;
+    }
+
+    if (lmmc_lsr_stats_cov(values, scaled_values, 4, &out) !=
+            LMMC_STATUS_OK ||
+        !close_real(out, 10.0 / 3.0)) {
+        fprintf(stderr, "std.stats.cov mismatch\n");
+        return 1;
+    }
+
+    if (lmmc_lsr_stats_corr(values, scaled_values, 4, &out) !=
+            LMMC_STATUS_OK ||
+        !close_real(out, 1.0)) {
+        fprintf(stderr, "std.stats.corr mismatch\n");
         return 1;
     }
 

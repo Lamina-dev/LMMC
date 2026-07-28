@@ -170,6 +170,14 @@ lmmc_status_t lmmc_lsr_math_log(lmmc_real_t x, lmmc_real_t base,
     return LMMC_STATUS_OK;
 }
 
+lmmc_status_t lmmc_lsr_math_log10(lmmc_real_t x, lmmc_real_t* out)
+{
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (x <= (lmmc_real_t)0) return LMMC_STATUS_OUT_OF_RANGE;
+    *out = (lmmc_real_t)log10((double)x);
+    return LMMC_STATUS_OK;
+}
+
 lmmc_status_t lmmc_lsr_math_abs(lmmc_real_t x, lmmc_real_t* out)
 {
     return lmmc_lsr_store_real((lmmc_real_t)fabs((double)x), out);
@@ -255,6 +263,34 @@ lmmc_status_t lmmc_lsr_stats_quantile(const lmmc_real_t* values, size_t count,
     lmmc_status_t status = lmmc_lsr_wrap_const_vec(values, count, &view);
     if (status != LMMC_STATUS_OK) return status;
     return lmmc_vec_quantile(&view, q, out);
+}
+
+lmmc_status_t lmmc_lsr_stats_cov(const lmmc_real_t* x,
+                                 const lmmc_real_t* y,
+                                 size_t count,
+                                 lmmc_real_t* out)
+{
+    lmmc_vec_t x_view;
+    lmmc_vec_t y_view;
+    lmmc_status_t status = lmmc_lsr_wrap_const_vec(x, count, &x_view);
+    if (status != LMMC_STATUS_OK) return status;
+    status = lmmc_lsr_wrap_const_vec(y, count, &y_view);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_vec_covariance_sample(&x_view, &y_view, out);
+}
+
+lmmc_status_t lmmc_lsr_stats_corr(const lmmc_real_t* x,
+                                  const lmmc_real_t* y,
+                                  size_t count,
+                                  lmmc_real_t* out)
+{
+    lmmc_vec_t x_view;
+    lmmc_vec_t y_view;
+    lmmc_status_t status = lmmc_lsr_wrap_const_vec(x, count, &x_view);
+    if (status != LMMC_STATUS_OK) return status;
+    status = lmmc_lsr_wrap_const_vec(y, count, &y_view);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_vec_correlation_sample(&x_view, &y_view, out);
 }
 
 lmmc_status_t lmmc_lsr_random_seed(lmmc_rng_t* rng, uint64_t seed)
