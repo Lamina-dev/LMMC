@@ -79,6 +79,8 @@ lmmc_status_t lmmc_lsr_math_complex_abs(const lmmc_complex_t* z,
 lmmc_status_t lmmc_lsr_math_sin(lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_cos(lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_tan(lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_pow(lmmc_real_t x, lmmc_real_t y,
+                                lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_asin(lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_acos(lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_atan(lmmc_real_t x, lmmc_real_t* out);
@@ -94,6 +96,13 @@ lmmc_status_t lmmc_lsr_math_ceil(lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_round(lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_clamp(lmmc_real_t x, lmmc_real_t lo,
                                   lmmc_real_t hi, lmmc_real_t* out);
+
+lmmc_status_t lmmc_lsr_units_convert(lmmc_real_t x,
+                                      const char* from_unit,
+                                      const char* to_unit,
+                                      lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_units_strip(lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_units_is_dimensionless(const char* unit, int* out);
 
 lmmc_status_t lmmc_lsr_stats_mean(const lmmc_real_t* values, size_t count,
                                   lmmc_real_t* out);
