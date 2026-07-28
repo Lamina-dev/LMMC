@@ -80,6 +80,7 @@ set(LMMC_SOURCES
     src/init.c
     src/interp.c
     src/itersolve.c
+    src/lsr_stdlib.c
     src/itersolve_minres_lsqr.c
     src/linear_algebra.c
     src/nonlinear.c

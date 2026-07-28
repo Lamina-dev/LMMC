@@ -162,3 +162,5 @@ add_lmmc_test(lmmc_test_vectorized test_vectorized.c)
 add_lmmc_test(lmmc_test_scalar_math test_scalar_math.c)
 
 add_lmmc_test(lmmc_test_complex_transcendental test_complex_transcendental.c)
+
+add_lmmc_test(lmmc_test_lsr_stdlib test_lsr_stdlib.c)
