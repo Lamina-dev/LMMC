@@ -26,6 +26,21 @@ extern "C" {
 /** @brief Map an LMMC status code to a stable LSR diagnostic name. */
 const char* lmmc_lsr_error_name(lmmc_status_t status);
 
+/** @brief LSR table<text, matrix> view for std.linalg.eig. */
+typedef struct {
+    lmmc_mat_t values_real;
+    lmmc_mat_t values_imag;
+    lmmc_mat_t vectors_real;
+    lmmc_mat_t vectors_imag;
+} lmmc_lsr_eig_table_t;
+
+/** @brief LSR table<text, matrix> view for std.linalg.svd. */
+typedef struct {
+    lmmc_mat_t U;
+    lmmc_mat_t S;
+    lmmc_mat_t Vt;
+} lmmc_lsr_svd_table_t;
+
 /** @brief Return the LSR std.math constant pi. */
 lmmc_status_t lmmc_lsr_math_pi(lmmc_real_t* out);
 /** @brief Return the LSR std.math constant e. */
@@ -117,6 +132,18 @@ lmmc_status_t lmmc_lsr_linalg_eig(const lmmc_mat_t* a,
                                   lmmc_eigen_gen_full_result_t* out);
 lmmc_status_t lmmc_lsr_linalg_svd(const lmmc_mat_t* a,
                                   lmmc_svd_result_t* out);
+
+lmmc_status_t lmmc_lsr_linalg_eig_table(const lmmc_mat_t* a,
+                                        lmmc_lsr_eig_table_t* out);
+const lmmc_mat_t* lmmc_lsr_eig_table_get(const lmmc_lsr_eig_table_t* table,
+                                         const char* key);
+void lmmc_lsr_eig_table_destroy(lmmc_lsr_eig_table_t* table);
+
+lmmc_status_t lmmc_lsr_linalg_svd_table(const lmmc_mat_t* a,
+                                        lmmc_lsr_svd_table_t* out);
+const lmmc_mat_t* lmmc_lsr_svd_table_get(const lmmc_lsr_svd_table_t* table,
+                                         const char* key);
+void lmmc_lsr_svd_table_destroy(lmmc_lsr_svd_table_t* table);
 
 #ifdef __cplusplus
 }
