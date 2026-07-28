@@ -219,6 +219,8 @@ const char* lmmc_lsr_error_name(lmmc_status_t status)
         return "InvalidArgument";
     case LMMC_STATUS_WARNING_MAX_DEPTH:
         return "ResourceLimit";
+    case LMMC_STATUS_EMPTY_INPUT:
+        return "EmptyInput";
     }
     return "InternalInvariant";
 }
@@ -457,7 +459,8 @@ static lmmc_status_t lmmc_lsr_wrap_const_vec(const lmmc_real_t* values,
                                              size_t count,
                                              lmmc_vec_t* out)
 {
-    if (!values || !out || count == 0) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!values || !out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (count == 0) return LMMC_STATUS_EMPTY_INPUT;
     out->size = count;
     out->data = (lmmc_real_t*)values;
     out->owns_data = 0;

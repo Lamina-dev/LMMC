@@ -146,9 +146,17 @@ int main(void)
                "ResourceLimit") != 0 ||
         strcmp(lmmc_lsr_error_name(LMMC_STATUS_SINGULAR_MATRIX),
                "SingularMatrix") != 0 ||
+        strcmp(lmmc_lsr_error_name(LMMC_STATUS_EMPTY_INPUT),
+               "EmptyInput") != 0 ||
         strcmp(lmmc_lsr_error_name(LMMC_STATUS_NUMERICAL_FAILURE),
                "NumericFailure") != 0) {
         fprintf(stderr, "LSR diagnostic status mapping mismatch\n");
+        return 1;
+    }
+
+    if (lmmc_lsr_stats_mean(values, 0, &out) != LMMC_STATUS_EMPTY_INPUT ||
+        strcmp(lmmc_status_string(LMMC_STATUS_EMPTY_INPUT), "empty input") != 0) {
+        fprintf(stderr, "std.stats empty input diagnostic mismatch\n");
         return 1;
     }
 

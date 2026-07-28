@@ -31,7 +31,8 @@ typedef enum {
     LMMC_STATUS_CONVERGENCE_FAILED = 8,    /**< 迭代算法未在限定步数内收敛。 */
     LMMC_STATUS_OUT_OF_RANGE = 9,          /**< 数值超出允许范围。 */
     LMMC_STATUS_INDEX_OUT_OF_BOUNDS = 10,  /**< 数组 / 矩阵下标越界。 */
-    LMMC_STATUS_WARNING_MAX_DEPTH = 11     /**< 自适应算法达到最大递归深度（结果可能仍可用）。 */
+    LMMC_STATUS_WARNING_MAX_DEPTH = 11,    /**< 自适应算法达到最大递归深度（结果可能仍可用）。 */
+    LMMC_STATUS_EMPTY_INPUT = 12           /**< 输入集合为空。 */
 } lmmc_status_t;
 
 /**

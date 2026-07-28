@@ -31,6 +31,8 @@ const char* lmmc_status_string(lmmc_status_t status) {
             return "index out of bounds";
         case LMMC_STATUS_WARNING_MAX_DEPTH:
             return "warning: max depth reached";
+        case LMMC_STATUS_EMPTY_INPUT:
+            return "empty input";
         default:
             return "unknown";
     }
