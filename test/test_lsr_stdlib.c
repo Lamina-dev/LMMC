@@ -162,9 +162,34 @@ int main(void)
         return 1;
     }
 
+    if (lmmc_lsr_math_pow(2, 3, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 8)) {
+        fprintf(stderr, "std.math.pow mismatch\n");
+        return 1;
+    }
+
     if (lmmc_lsr_math_clamp(5, 1, 3, &out) != LMMC_STATUS_OK ||
         !close_real(out, 3)) {
         fprintf(stderr, "std.math.clamp mismatch\n");
+        return 1;
+    }
+
+    int dimensionless = 0;
+    if (lmmc_lsr_units_convert(36, "km/h", "m/s", &out) != LMMC_STATUS_OK ||
+        !close_real(out, 10) ||
+        lmmc_lsr_units_convert(10, "m", "s", &out) !=
+            LMMC_STATUS_DIMENSION_MISMATCH ||
+        lmmc_lsr_units_strip(12.5, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 12.5) ||
+        lmmc_lsr_units_is_dimensionless("m/m", &dimensionless) !=
+            LMMC_STATUS_OK ||
+        !dimensionless ||
+        lmmc_lsr_units_is_dimensionless("m*s^-1", &dimensionless) !=
+            LMMC_STATUS_OK ||
+        dimensionless ||
+        lmmc_lsr_units_convert(1, "unknown", "m", &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT) {
+        fprintf(stderr, "std.units adapter mismatch\n");
         return 1;
     }
 

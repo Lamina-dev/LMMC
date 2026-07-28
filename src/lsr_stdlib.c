@@ -10,6 +10,7 @@
 #include "lmmc/random.h"
 #include "lmmc/stats.h"
 
+#include <ctype.h>
 #include <string.h>
 
 static lmmc_status_t lmmc_lsr_store_real(lmmc_real_t value, lmmc_real_t* out)
@@ -63,6 +64,132 @@ lmmc_lsr_find_constant(const char* name)
         }
     }
     return NULL;
+}
+
+typedef struct {
+    double scale;
+    int dims[7];
+} lmmc_lsr_unit_sig_t;
+
+typedef struct {
+    const char* name;
+    double scale;
+    int dims[7];
+} lmmc_lsr_unit_entry_t;
+
+static const lmmc_lsr_unit_entry_t lmmc_lsr_units[] = {
+    {"1", 1.0, {0, 0, 0, 0, 0, 0, 0}},
+    {"m", 1.0, {1, 0, 0, 0, 0, 0, 0}},
+    {"km", 1000.0, {1, 0, 0, 0, 0, 0, 0}},
+    {"s", 1.0, {0, 0, 1, 0, 0, 0, 0}},
+    {"h", 3600.0, {0, 0, 1, 0, 0, 0, 0}},
+    {"kg", 1.0, {0, 1, 0, 0, 0, 0, 0}},
+    {"g", 0.001, {0, 1, 0, 0, 0, 0, 0}},
+    {"A", 1.0, {0, 0, 0, 1, 0, 0, 0}},
+    {"K", 1.0, {0, 0, 0, 0, 1, 0, 0}},
+    {"mol", 1.0, {0, 0, 0, 0, 0, 1, 0}},
+    {"cd", 1.0, {0, 0, 0, 0, 0, 0, 1}},
+    {"N", 1.0, {1, 1, -2, 0, 0, 0, 0}},
+    {"Pa", 1.0, {-1, 1, -2, 0, 0, 0, 0}},
+    {"J", 1.0, {2, 1, -2, 0, 0, 0, 0}},
+    {"C", 1.0, {0, 0, 1, 1, 0, 0, 0}},
+    {"F", 1.0, {-2, -1, 4, 2, 0, 0, 0}},
+    {"H", 1.0, {2, 1, -2, -2, 0, 0, 0}},
+};
+
+static const lmmc_lsr_unit_entry_t* lmmc_lsr_find_unit(const char* name,
+                                                       size_t length)
+{
+    for (size_t i = 0; i < sizeof(lmmc_lsr_units) / sizeof(lmmc_lsr_units[0]);
+         ++i) {
+        if (strlen(lmmc_lsr_units[i].name) == length &&
+            strncmp(lmmc_lsr_units[i].name, name, length) == 0) {
+            return &lmmc_lsr_units[i];
+        }
+    }
+    return NULL;
+}
+
+static void lmmc_lsr_unit_identity(lmmc_lsr_unit_sig_t* sig)
+{
+    sig->scale = 1.0;
+    for (size_t i = 0; i < 7; ++i) sig->dims[i] = 0;
+}
+
+static int lmmc_lsr_parse_int(const char** cursor, int* out)
+{
+    int sign = 1;
+    int value = 0;
+    int have_digit = 0;
+    if (**cursor == '+') {
+        ++(*cursor);
+    } else if (**cursor == '-') {
+        sign = -1;
+        ++(*cursor);
+    }
+    while (isdigit((unsigned char)**cursor)) {
+        have_digit = 1;
+        value = value * 10 + (**cursor - '0');
+        ++(*cursor);
+    }
+    if (!have_digit) return 0;
+    *out = sign * value;
+    return 1;
+}
+
+static int lmmc_lsr_parse_unit_expr(const char* text,
+                                    lmmc_lsr_unit_sig_t* out)
+{
+    const char* cursor = text;
+    int op_sign = 1;
+    lmmc_lsr_unit_identity(out);
+    if (!text || !*text) return 0;
+    if (strcmp(text, "1") == 0) return 1;
+    while (*cursor) {
+        const char* name_begin = cursor;
+        int exponent = 1;
+        while (isalpha((unsigned char)*cursor) || *cursor == '_') ++cursor;
+        if (cursor == name_begin) return 0;
+        const lmmc_lsr_unit_entry_t* unit =
+            lmmc_lsr_find_unit(name_begin, (size_t)(cursor - name_begin));
+        if (!unit) return 0;
+        if (*cursor == '^') {
+            ++cursor;
+            if (!lmmc_lsr_parse_int(&cursor, &exponent)) return 0;
+        }
+        exponent *= op_sign;
+        out->scale *= pow(unit->scale, (double)exponent);
+        for (size_t i = 0; i < 7; ++i) {
+            out->dims[i] += unit->dims[i] * exponent;
+        }
+        if (*cursor == '\0') break;
+        if (*cursor == '*') {
+            op_sign = 1;
+        } else if (*cursor == '/') {
+            op_sign = -1;
+        } else {
+            return 0;
+        }
+        ++cursor;
+    }
+    return 1;
+}
+
+static int lmmc_lsr_same_dimension(const lmmc_lsr_unit_sig_t* lhs,
+                                   const lmmc_lsr_unit_sig_t* rhs)
+{
+    for (size_t i = 0; i < 7; ++i) {
+        if (lhs->dims[i] != rhs->dims[i]) return 0;
+    }
+    return 1;
+}
+
+static int lmmc_lsr_dimensionless_sig(const lmmc_lsr_unit_sig_t* sig)
+{
+    for (size_t i = 0; i < 7; ++i) {
+        if (sig->dims[i] != 0) return 0;
+    }
+    return 1;
 }
 
 const char* lmmc_lsr_error_name(lmmc_status_t status)
@@ -193,6 +320,17 @@ lmmc_status_t lmmc_lsr_math_tan(lmmc_real_t x, lmmc_real_t* out)
     return lmmc_lsr_store_real((lmmc_real_t)tan((double)x), out);
 }
 
+lmmc_status_t lmmc_lsr_math_pow(lmmc_real_t x, lmmc_real_t y,
+                                lmmc_real_t* out)
+{
+    double value;
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    value = pow((double)x, (double)y);
+    if (!isfinite(value)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    *out = (lmmc_real_t)value;
+    return LMMC_STATUS_OK;
+}
+
 lmmc_status_t lmmc_lsr_math_asin(lmmc_real_t x, lmmc_real_t* out)
 {
     return lmmc_asin(x, out);
@@ -277,6 +415,41 @@ lmmc_status_t lmmc_lsr_math_clamp(lmmc_real_t x, lmmc_real_t lo,
     if (x < lo) *out = lo;
     else if (x > hi) *out = hi;
     else *out = x;
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_lsr_units_convert(lmmc_real_t x,
+                                      const char* from_unit,
+                                      const char* to_unit,
+                                      lmmc_real_t* out)
+{
+    lmmc_lsr_unit_sig_t from_sig;
+    lmmc_lsr_unit_sig_t to_sig;
+    if (!out || !from_unit || !to_unit) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_parse_unit_expr(from_unit, &from_sig) ||
+        !lmmc_lsr_parse_unit_expr(to_unit, &to_sig)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (!lmmc_lsr_same_dimension(&from_sig, &to_sig)) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+    *out = (lmmc_real_t)((double)x * from_sig.scale / to_sig.scale);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_lsr_units_strip(lmmc_real_t x, lmmc_real_t* out)
+{
+    return lmmc_lsr_store_real(x, out);
+}
+
+lmmc_status_t lmmc_lsr_units_is_dimensionless(const char* unit, int* out)
+{
+    lmmc_lsr_unit_sig_t sig;
+    if (!unit || !out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_parse_unit_expr(unit, &sig)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    *out = lmmc_lsr_dimensionless_sig(&sig);
     return LMMC_STATUS_OK;
 }
 
