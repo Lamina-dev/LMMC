@@ -172,9 +172,15 @@ int main(void)
         return 1;
     }
 
-    if (lmmc_lsr_math_log(8, 2, &out) != LMMC_STATUS_OK ||
+    if (lmmc_lsr_math_log(exp(1.0), &out) != LMMC_STATUS_OK ||
+        !close_real(out, 1)) {
+        fprintf(stderr, "std.math.log natural mismatch\n");
+        return 1;
+    }
+
+    if (lmmc_lsr_math_log_base(8, 2, &out) != LMMC_STATUS_OK ||
         !close_real(out, 3)) {
-        fprintf(stderr, "std.math.log mismatch\n");
+        fprintf(stderr, "std.math.log_base mismatch\n");
         return 1;
     }
 

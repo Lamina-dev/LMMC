@@ -87,8 +87,9 @@ lmmc_status_t lmmc_lsr_math_atan(lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_sqrt(lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_exp(lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_ln(lmmc_real_t x, lmmc_real_t* out);
-lmmc_status_t lmmc_lsr_math_log(lmmc_real_t x, lmmc_real_t base,
-                                lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_log(lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_math_log_base(lmmc_real_t x, lmmc_real_t base,
+                                     lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_log10(lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_abs(lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t lmmc_lsr_math_floor(lmmc_real_t x, lmmc_real_t* out);

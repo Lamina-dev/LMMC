@@ -369,8 +369,13 @@ lmmc_status_t lmmc_lsr_math_ln(lmmc_real_t x, lmmc_real_t* out)
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_lsr_math_log(lmmc_real_t x, lmmc_real_t base,
-                                lmmc_real_t* out)
+lmmc_status_t lmmc_lsr_math_log(lmmc_real_t x, lmmc_real_t* out)
+{
+    return lmmc_lsr_math_ln(x, out);
+}
+
+lmmc_status_t lmmc_lsr_math_log_base(lmmc_real_t x, lmmc_real_t base,
+                                     lmmc_real_t* out)
 {
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
     if (x <= (lmmc_real_t)0 || base <= (lmmc_real_t)0 ||
