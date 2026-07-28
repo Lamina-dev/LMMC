@@ -171,6 +171,18 @@ int main(void)
         fprintf(stderr, "std.stats empty input diagnostic mismatch\n");
         return 1;
     }
+    if (lmmc_lsr_stats_median(values, 0, &out) != LMMC_STATUS_EMPTY_INPUT ||
+        lmmc_lsr_stats_var(values, 0, &out) != LMMC_STATUS_EMPTY_INPUT ||
+        lmmc_lsr_stats_std(values, 0, &out) != LMMC_STATUS_EMPTY_INPUT ||
+        lmmc_lsr_stats_quantile(values, 0, 0.5, &out) !=
+            LMMC_STATUS_EMPTY_INPUT ||
+        lmmc_lsr_stats_cov(values, scaled_values, 0, &out) !=
+            LMMC_STATUS_EMPTY_INPUT ||
+        lmmc_lsr_stats_corr(values, scaled_values, 0, &out) !=
+            LMMC_STATUS_EMPTY_INPUT) {
+        fprintf(stderr, "std.stats empty input coverage mismatch\n");
+        return 1;
+    }
 
     if (lmmc_lsr_math_log(exp(1.0), &out) != LMMC_STATUS_OK ||
         !close_real(out, 1)) {
