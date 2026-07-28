@@ -42,6 +42,9 @@ int main(void)
     lmmc_mat_t result = {0};
     lmmc_eigen_gen_full_result_t eig_result = {0};
     lmmc_svd_result_t svd_result = {0};
+    lmmc_lsr_eig_table_t eig_table = {0};
+    lmmc_lsr_svd_table_t svd_table = {0};
+    const lmmc_mat_t* named = NULL;
     size_t rows = 0;
     size_t cols = 0;
     size_t rank = 0;
@@ -281,6 +284,24 @@ int main(void)
     }
     lmmc_eigen_gen_full_result_destroy(&eig_result);
 
+    if (lmmc_lsr_linalg_eig_table(&mat, &eig_table) != LMMC_STATUS_OK) {
+        fprintf(stderr, "std.linalg.eig table failed\n");
+        return 1;
+    }
+    named = lmmc_lsr_eig_table_get(&eig_table, "values_real");
+    if (!named || named->rows != 2 || named->cols != 1 ||
+        !close_real(named->data[0], -0.3722813232690143) ||
+        lmmc_lsr_eig_table_get(&eig_table, "missing") != NULL) {
+        fprintf(stderr, "std.linalg.eig table mapping mismatch\n");
+        return 1;
+    }
+    named = lmmc_lsr_eig_table_get(&eig_table, "vectors_real");
+    if (!named || named->rows != 2 || named->cols != 2) {
+        fprintf(stderr, "std.linalg.eig table vectors mismatch\n");
+        return 1;
+    }
+    lmmc_lsr_eig_table_destroy(&eig_table);
+
     if (lmmc_lsr_linalg_svd(&mat, &svd_result) != LMMC_STATUS_OK ||
         svd_result.sigma.size != 2 ||
         svd_result.U.rows != 2 ||
@@ -290,6 +311,24 @@ int main(void)
         return 1;
     }
     lmmc_svd_result_destroy(&svd_result);
+
+    if (lmmc_lsr_linalg_svd_table(&mat, &svd_table) != LMMC_STATUS_OK) {
+        fprintf(stderr, "std.linalg.svd table failed\n");
+        return 1;
+    }
+    named = lmmc_lsr_svd_table_get(&svd_table, "S");
+    if (!named || named->rows != 2 || named->cols != 2 ||
+        named->data[0] < named->data[named->stride + 1] ||
+        lmmc_lsr_svd_table_get(&svd_table, "sigma") != NULL) {
+        fprintf(stderr, "std.linalg.svd table mapping mismatch\n");
+        return 1;
+    }
+    named = lmmc_lsr_svd_table_get(&svd_table, "U");
+    if (!named || named->rows != 2 || named->cols != 2) {
+        fprintf(stderr, "std.linalg.svd table U mismatch\n");
+        return 1;
+    }
+    lmmc_lsr_svd_table_destroy(&svd_table);
 
     if (lmmc_lsr_linalg_eig(&rectangular, &eig_result) !=
         LMMC_STATUS_INVALID_ARGUMENT) {
