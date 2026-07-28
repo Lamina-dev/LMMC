@@ -204,7 +204,7 @@ const char* lmmc_lsr_error_name(lmmc_status_t status)
     case LMMC_STATUS_ALLOCATION_FAILED:
         return "ResourceLimit";
     case LMMC_STATUS_SINGULAR_MATRIX:
-        return "DomainError";
+        return "SingularMatrix";
     case LMMC_STATUS_NOT_IMPLEMENTED:
         return "UnsupportedExpression";
     case LMMC_STATUS_NUMERICAL_FAILURE:

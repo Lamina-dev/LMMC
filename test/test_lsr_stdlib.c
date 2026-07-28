@@ -144,6 +144,8 @@ int main(void)
                "DimensionMismatch") != 0 ||
         strcmp(lmmc_lsr_error_name(LMMC_STATUS_ALLOCATION_FAILED),
                "ResourceLimit") != 0 ||
+        strcmp(lmmc_lsr_error_name(LMMC_STATUS_SINGULAR_MATRIX),
+               "SingularMatrix") != 0 ||
         strcmp(lmmc_lsr_error_name(LMMC_STATUS_NUMERICAL_FAILURE),
                "NumericFailure") != 0) {
         fprintf(stderr, "LSR diagnostic status mapping mismatch\n");
