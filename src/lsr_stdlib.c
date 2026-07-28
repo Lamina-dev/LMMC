@@ -17,6 +17,37 @@ static lmmc_status_t lmmc_lsr_store_real(lmmc_real_t value, lmmc_real_t* out)
     return LMMC_STATUS_OK;
 }
 
+const char* lmmc_lsr_error_name(lmmc_status_t status)
+{
+    switch (status) {
+    case LMMC_STATUS_OK:
+        return "Ok";
+    case LMMC_STATUS_INVALID_ARGUMENT:
+        return "InvalidArgument";
+    case LMMC_STATUS_DIMENSION_MISMATCH:
+        return "DimensionMismatch";
+    case LMMC_STATUS_ALLOCATION_FAILED:
+        return "ResourceLimit";
+    case LMMC_STATUS_SINGULAR_MATRIX:
+        return "DomainError";
+    case LMMC_STATUS_NOT_IMPLEMENTED:
+        return "UnsupportedExpression";
+    case LMMC_STATUS_NUMERICAL_FAILURE:
+        return "NumericFailure";
+    case LMMC_STATUS_NOT_POSITIVE_DEFINITE:
+        return "DomainError";
+    case LMMC_STATUS_CONVERGENCE_FAILED:
+        return "NumericFailure";
+    case LMMC_STATUS_OUT_OF_RANGE:
+        return "DomainError";
+    case LMMC_STATUS_INDEX_OUT_OF_BOUNDS:
+        return "InvalidArgument";
+    case LMMC_STATUS_WARNING_MAX_DEPTH:
+        return "ResourceLimit";
+    }
+    return "InternalInvariant";
+}
+
 lmmc_status_t lmmc_lsr_math_pi(lmmc_real_t* out)
 {
     return lmmc_lsr_store_real(LMMC_CONST_PI, out);

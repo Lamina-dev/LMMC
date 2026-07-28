@@ -23,6 +23,9 @@
 extern "C" {
 #endif
 
+/** @brief Map an LMMC status code to a stable LSR diagnostic name. */
+const char* lmmc_lsr_error_name(lmmc_status_t status);
+
 /** @brief Return the LSR std.math constant pi. */
 lmmc_status_t lmmc_lsr_math_pi(lmmc_real_t* out);
 /** @brief Return the LSR std.math constant e. */

@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 static int close_real(lmmc_real_t a, lmmc_real_t b)
 {
@@ -95,6 +96,18 @@ int main(void)
 
     if (lmmc_lsr_math_sqrt(-1, &out) != LMMC_STATUS_OUT_OF_RANGE) {
         fprintf(stderr, "std.math.sqrt domain error not reported\n");
+        return 1;
+    }
+    if (lmmc_lsr_error_name(LMMC_STATUS_OUT_OF_RANGE) == NULL ||
+        strcmp(lmmc_lsr_error_name(LMMC_STATUS_OUT_OF_RANGE),
+               "DomainError") != 0 ||
+        strcmp(lmmc_lsr_error_name(LMMC_STATUS_DIMENSION_MISMATCH),
+               "DimensionMismatch") != 0 ||
+        strcmp(lmmc_lsr_error_name(LMMC_STATUS_ALLOCATION_FAILED),
+               "ResourceLimit") != 0 ||
+        strcmp(lmmc_lsr_error_name(LMMC_STATUS_NUMERICAL_FAILURE),
+               "NumericFailure") != 0) {
+        fprintf(stderr, "LSR diagnostic status mapping mismatch\n");
         return 1;
     }
 
