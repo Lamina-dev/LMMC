@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include "lmmc/dense.h"
+#include "lmmc/eigen.h"
 #include "lmmc/linear_algebra.h"
 #include "lmmc/numeric.h"
 #include "lmmc/random.h"
@@ -498,4 +499,19 @@ cleanup:
     lmmc_mat_destroy(&bt);
     lmmc_mat_destroy(&at);
     return status;
+}
+
+lmmc_status_t lmmc_lsr_linalg_eig(const lmmc_mat_t* a,
+                                  lmmc_eigen_gen_full_result_t* out)
+{
+    if (!lmmc_lsr_mat_valid(a) || !out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (a->rows != a->cols) return LMMC_STATUS_INVALID_ARGUMENT;
+    return lmmc_eigen_general_full(a, out);
+}
+
+lmmc_status_t lmmc_lsr_linalg_svd(const lmmc_mat_t* a,
+                                  lmmc_svd_result_t* out)
+{
+    if (!lmmc_lsr_mat_valid(a) || !out) return LMMC_STATUS_INVALID_ARGUMENT;
+    return lmmc_svd(a, out);
 }

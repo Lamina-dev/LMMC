@@ -39,6 +39,8 @@ int main(void)
     lmmc_mat_t rhs = {0};
     lmmc_mat_t rectangular = {0};
     lmmc_mat_t result = {0};
+    lmmc_eigen_gen_full_result_t eig_result = {0};
+    lmmc_svd_result_t svd_result = {0};
     size_t rows = 0;
     size_t cols = 0;
     size_t rank = 0;
@@ -253,6 +255,32 @@ int main(void)
     if (lmmc_lsr_linalg_det(&rectangular, &out) !=
         LMMC_STATUS_INVALID_ARGUMENT) {
         fprintf(stderr, "std.linalg.det rectangular error mismatch\n");
+        return 1;
+    }
+
+    if (lmmc_lsr_linalg_eig(&mat, &eig_result) != LMMC_STATUS_OK ||
+        eig_result.real_parts.size != 2 ||
+        eig_result.imag_parts.size != 2 ||
+        !close_real(eig_result.imag_parts.data[0], 0) ||
+        !close_real(eig_result.imag_parts.data[1], 0)) {
+        fprintf(stderr, "std.linalg.eig mismatch\n");
+        return 1;
+    }
+    lmmc_eigen_gen_full_result_destroy(&eig_result);
+
+    if (lmmc_lsr_linalg_svd(&mat, &svd_result) != LMMC_STATUS_OK ||
+        svd_result.sigma.size != 2 ||
+        svd_result.U.rows != 2 ||
+        svd_result.Vt.cols != 2 ||
+        svd_result.sigma.data[0] < svd_result.sigma.data[1]) {
+        fprintf(stderr, "std.linalg.svd mismatch\n");
+        return 1;
+    }
+    lmmc_svd_result_destroy(&svd_result);
+
+    if (lmmc_lsr_linalg_eig(&rectangular, &eig_result) !=
+        LMMC_STATUS_INVALID_ARGUMENT) {
+        fprintf(stderr, "std.linalg.eig rectangular error mismatch\n");
         return 1;
     }
 
