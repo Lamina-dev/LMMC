@@ -98,6 +98,18 @@ int main(void)
         return 1;
     }
 
+    for (size_t i = 0; i < lmmc_lsr_constants_count(); ++i) {
+        const char* name = lmmc_lsr_constants_name(i);
+        const char* unit = name ? lmmc_lsr_constants_unit(name) : NULL;
+        if (!name || !unit ||
+            lmmc_lsr_constants_get(name, &out) != LMMC_STATUS_OK ||
+            lmmc_lsr_units_convert(1, unit, unit, &out2) != LMMC_STATUS_OK ||
+            !close_real(out2, 1)) {
+            fprintf(stderr, "std.constants unit grammar mismatch\n");
+            return 1;
+        }
+    }
+
     if (lmmc_lsr_math_I(&w) != LMMC_STATUS_OK ||
         !close_real(w.real, z.real) || !close_real(w.imag, z.imag)) {
         fprintf(stderr, "std.math.I alias mismatch\n");
