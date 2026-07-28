@@ -153,17 +153,8 @@ lmmc_status_t lmmc_atan2(lmmc_real_t y, lmmc_real_t x, lmmc_real_t* out_res) {
 
 lmmc_status_t lmmc_sincos(lmmc_real_t x, lmmc_real_t* out_sin, lmmc_real_t* out_cos) {
     if (out_sin == NULL || out_cos == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
-#if (defined(_GNU_SOURCE) || defined(__GNUC__) || defined(__clang__)) && !defined(_MSC_VER)
-    {
-        double s, c;
-        sincos(x, &s, &c);
-        LMMC_REAL_SET_D(out_sin, s);
-        LMMC_REAL_SET_D(out_cos, c);
-    }
-#else
     LMMC_REAL_SET_D(out_sin, sin(x));
     LMMC_REAL_SET_D(out_cos, cos(x));
-#endif
     return LMMC_STATUS_OK;
 }
 
