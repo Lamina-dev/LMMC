@@ -19,6 +19,52 @@ static lmmc_status_t lmmc_lsr_store_real(lmmc_real_t value, lmmc_real_t* out)
     return LMMC_STATUS_OK;
 }
 
+typedef struct {
+    const char* name;
+    lmmc_real_t value;
+    const char* unit;
+} lmmc_lsr_constant_entry_t;
+
+static const lmmc_lsr_constant_entry_t lmmc_lsr_constants[] = {
+    {"EARTH_GRAVITY", (lmmc_real_t)9.80665, "m*s^-2"},
+    {"MOON_GRAVITY", (lmmc_real_t)1.625, "m*s^-2"},
+    {"MARS_GRAVITY", (lmmc_real_t)3.72076, "m*s^-2"},
+    {"WATER_DENSITY", (lmmc_real_t)1000.0, "kg*m^-3"},
+    {"STANDARD_PRESSURE", (lmmc_real_t)101325.0, "Pa"},
+    {"STANDARD_TEMPERATURE", (lmmc_real_t)273.15, "K"},
+    {"AIR_DENSITY", (lmmc_real_t)1.225, "kg*m^-3"},
+    {"C", (lmmc_real_t)2.99792458e8, "m*s^-1"},
+    {"G", (lmmc_real_t)6.67430e-11, "m^3*kg^-1*s^-2"},
+    {"H", (lmmc_real_t)6.62607015e-34, "J*s"},
+    {"KB", (lmmc_real_t)1.380649e-23, "J*K^-1"},
+    {"EPSILON_0", (lmmc_real_t)8.8541878128e-12, "F*m^-1"},
+    {"MU_0", (lmmc_real_t)1.25663706212e-6, "H*m^-1"},
+    {"AVOGADRO", (lmmc_real_t)6.02214076e23, "mol^-1"},
+    {"R", (lmmc_real_t)8.314462618, "J*mol^-1*K^-1"},
+    {"FARADAY", (lmmc_real_t)9.648533212e4, "C*mol^-1"},
+    {"AMU", (lmmc_real_t)1.66053906660e-27, "kg"},
+    {"MOLAR_VOLUME_IDEAL", (lmmc_real_t)0.024465, "m^3*mol^-1"},
+    {"ROOM_PRESSURE", (lmmc_real_t)1.0e5, "Pa"},
+    {"ROOM_TEMPERATURE", (lmmc_real_t)297.15, "K"},
+};
+
+static size_t lmmc_lsr_constants_length(void)
+{
+    return sizeof(lmmc_lsr_constants) / sizeof(lmmc_lsr_constants[0]);
+}
+
+static const lmmc_lsr_constant_entry_t*
+lmmc_lsr_find_constant(const char* name)
+{
+    if (!name) return NULL;
+    for (size_t i = 0; i < lmmc_lsr_constants_length(); ++i) {
+        if (strcmp(lmmc_lsr_constants[i].name, name) == 0) {
+            return &lmmc_lsr_constants[i];
+        }
+    }
+    return NULL;
+}
+
 const char* lmmc_lsr_error_name(lmmc_status_t status)
 {
     switch (status) {
@@ -63,6 +109,31 @@ lmmc_status_t lmmc_lsr_math_e(lmmc_real_t* out)
 lmmc_status_t lmmc_lsr_math_phi(lmmc_real_t* out)
 {
     return lmmc_lsr_store_real((lmmc_real_t)1.61803398874989484820, out);
+}
+
+size_t lmmc_lsr_constants_count(void)
+{
+    return lmmc_lsr_constants_length();
+}
+
+const char* lmmc_lsr_constants_name(size_t index)
+{
+    if (index >= lmmc_lsr_constants_length()) return NULL;
+    return lmmc_lsr_constants[index].name;
+}
+
+lmmc_status_t lmmc_lsr_constants_get(const char* name, lmmc_real_t* out)
+{
+    const lmmc_lsr_constant_entry_t* entry = lmmc_lsr_find_constant(name);
+    if (!entry || !out) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out = entry->value;
+    return LMMC_STATUS_OK;
+}
+
+const char* lmmc_lsr_constants_unit(const char* name)
+{
+    const lmmc_lsr_constant_entry_t* entry = lmmc_lsr_find_constant(name);
+    return entry ? entry->unit : NULL;
 }
 
 lmmc_status_t lmmc_lsr_math_i(lmmc_complex_t* out)
