@@ -12,6 +12,7 @@
 #include "lmmc/complex.h"
 #include "lmmc/config.h"
 #include "lmmc/dense.h"
+#include "lmmc/eigen.h"
 #include "lmmc/random.h"
 #include "lmmc/status.h"
 
@@ -109,6 +110,10 @@ lmmc_status_t lmmc_lsr_linalg_solve_left(const lmmc_mat_t* a,
 lmmc_status_t lmmc_lsr_linalg_solve_right(const lmmc_mat_t* b,
                                           const lmmc_mat_t* a,
                                           lmmc_mat_t* out);
+lmmc_status_t lmmc_lsr_linalg_eig(const lmmc_mat_t* a,
+                                  lmmc_eigen_gen_full_result_t* out);
+lmmc_status_t lmmc_lsr_linalg_svd(const lmmc_mat_t* a,
+                                  lmmc_svd_result_t* out);
 
 #ifdef __cplusplus
 }
