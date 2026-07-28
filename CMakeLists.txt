@@ -112,8 +112,9 @@ endif()
 foreach(_lmmc_target IN LISTS LMMC_LIB_TARGETS)
     target_include_directories(${_lmmc_target}
         PUBLIC
-            ${CMAKE_CURRENT_SOURCE_DIR}/include
-            ${LAMMP_INCLUDE_DIR}
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<BUILD_INTERFACE:${LAMMP_INCLUDE_DIR}>
+            $<INSTALL_INTERFACE:include>
     )
 endforeach()
 
