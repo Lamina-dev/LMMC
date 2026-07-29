@@ -188,6 +188,10 @@ int main(void)
         lmmc_lsr_stats_std(values, 0, &out) != LMMC_STATUS_EMPTY_INPUT ||
         lmmc_lsr_stats_quantile(values, 0, 0.5, &out) !=
             LMMC_STATUS_EMPTY_INPUT ||
+        lmmc_lsr_stats_quantile(values, 4, -0.1, &out) !=
+            LMMC_STATUS_OUT_OF_RANGE ||
+        lmmc_lsr_stats_quantile(values, 4, 1.1, &out) !=
+            LMMC_STATUS_OUT_OF_RANGE ||
         lmmc_lsr_stats_cov(values, scaled_values, 0, &out) !=
             LMMC_STATUS_EMPTY_INPUT ||
         lmmc_lsr_stats_corr(values, scaled_values, 0, &out) !=

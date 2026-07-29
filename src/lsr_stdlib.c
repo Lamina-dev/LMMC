@@ -528,6 +528,9 @@ lmmc_status_t lmmc_lsr_stats_quantile(const lmmc_real_t* values, size_t count,
                                       lmmc_real_t q, lmmc_real_t* out)
 {
     lmmc_vec_t view;
+    if (q < (lmmc_real_t)0 || q > (lmmc_real_t)1) {
+        return LMMC_STATUS_OUT_OF_RANGE;
+    }
     lmmc_status_t status = lmmc_lsr_wrap_const_vec(values, count, &view);
     if (status != LMMC_STATUS_OK) return status;
     return lmmc_vec_quantile(&view, q, out);
