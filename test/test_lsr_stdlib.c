@@ -248,6 +248,12 @@ int main(void)
         lmmc_lsr_units_is_dimensionless("m*s^-1", &dimensionless) !=
             LMMC_STATUS_OK ||
         dimensionless ||
+        lmmc_lsr_units_convert(1, "m^32", "m^32", &out) !=
+            LMMC_STATUS_OK ||
+        lmmc_lsr_units_convert(1, "m^33", "m^33", &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_units_convert(1, "m^999999999999", "m", &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
         lmmc_lsr_units_convert(1, "m/", "m", &out) !=
             LMMC_STATUS_INVALID_ARGUMENT ||
         lmmc_lsr_units_convert(1, "m*", "m", &out) !=

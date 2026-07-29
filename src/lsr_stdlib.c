@@ -80,6 +80,8 @@ typedef struct {
     int dims[7];
 } lmmc_lsr_unit_sig_t;
 
+enum { LMMC_LSR_MAX_UNIT_EXPONENT = 32 };
+
 typedef struct {
     const char* name;
     double scale;
@@ -137,12 +139,20 @@ static int lmmc_lsr_parse_int(const char** cursor, int* out)
         ++(*cursor);
     }
     while (isdigit((unsigned char)**cursor)) {
+        int digit = **cursor - '0';
         have_digit = 1;
-        value = value * 10 + (**cursor - '0');
+        if (value > (LMMC_LSR_MAX_UNIT_EXPONENT - digit) / 10) {
+            return 0;
+        }
+        value = value * 10 + digit;
         ++(*cursor);
     }
     if (!have_digit) return 0;
     *out = sign * value;
+    if (*out < -LMMC_LSR_MAX_UNIT_EXPONENT ||
+        *out > LMMC_LSR_MAX_UNIT_EXPONENT) {
+        return 0;
+    }
     return 1;
 }
 
@@ -168,6 +178,7 @@ static int lmmc_lsr_parse_unit_expr(const char* text,
         }
         exponent *= op_sign;
         out->scale *= pow(unit->scale, (double)exponent);
+        if (!isfinite(out->scale)) return 0;
         for (size_t i = 0; i < 7; ++i) {
             out->dims[i] += unit->dims[i] * exponent;
         }
