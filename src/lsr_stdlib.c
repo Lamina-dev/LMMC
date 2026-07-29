@@ -29,6 +29,20 @@ static lmmc_status_t lmmc_lsr_store_finite_real(lmmc_real_t value,
     return LMMC_STATUS_OK;
 }
 
+static int lmmc_lsr_real_is_finite(lmmc_real_t value)
+{
+    return isfinite((double)value);
+}
+
+static int lmmc_lsr_real_array_is_finite(const lmmc_real_t* values,
+                                         size_t count)
+{
+    for (size_t i = 0; i < count; ++i) {
+        if (!lmmc_lsr_real_is_finite(values[i])) return 0;
+    }
+    return 1;
+}
+
 typedef struct {
     const char* name;
     lmmc_real_t value;
@@ -460,7 +474,9 @@ lmmc_status_t lmmc_lsr_units_convert(lmmc_real_t x,
 {
     lmmc_lsr_unit_sig_t from_sig;
     lmmc_lsr_unit_sig_t to_sig;
+    double converted;
     if (!out || !from_unit || !to_unit) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
     if (!lmmc_lsr_parse_unit_expr(from_unit, &from_sig) ||
         !lmmc_lsr_parse_unit_expr(to_unit, &to_sig)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
@@ -468,13 +484,13 @@ lmmc_status_t lmmc_lsr_units_convert(lmmc_real_t x,
     if (!lmmc_lsr_same_dimension(&from_sig, &to_sig)) {
         return LMMC_STATUS_DIMENSION_MISMATCH;
     }
-    *out = (lmmc_real_t)((double)x * from_sig.scale / to_sig.scale);
-    return LMMC_STATUS_OK;
+    converted = (double)x * from_sig.scale / to_sig.scale;
+    return lmmc_lsr_store_finite_real((lmmc_real_t)converted, out);
 }
 
 lmmc_status_t lmmc_lsr_units_strip(lmmc_real_t x, lmmc_real_t* out)
 {
-    return lmmc_lsr_store_real(x, out);
+    return lmmc_lsr_store_finite_real(x, out);
 }
 
 lmmc_status_t lmmc_lsr_units_is_dimensionless(const char* unit, int* out)
@@ -494,6 +510,9 @@ static lmmc_status_t lmmc_lsr_wrap_const_vec(const lmmc_real_t* values,
 {
     if (!values || !out) return LMMC_STATUS_INVALID_ARGUMENT;
     if (count == 0) return LMMC_STATUS_EMPTY_INPUT;
+    if (!lmmc_lsr_real_array_is_finite(values, count)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
     out->size = count;
     out->data = (lmmc_real_t*)values;
     out->owns_data = 0;
@@ -504,48 +523,65 @@ lmmc_status_t lmmc_lsr_stats_mean(const lmmc_real_t* values, size_t count,
                                   lmmc_real_t* out)
 {
     lmmc_vec_t view;
+    lmmc_real_t value;
     lmmc_status_t status = lmmc_lsr_wrap_const_vec(values, count, &view);
     if (status != LMMC_STATUS_OK) return status;
-    return lmmc_vec_mean(&view, out);
+    status = lmmc_vec_mean(&view, &value);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_store_finite_real(value, out);
 }
 
 lmmc_status_t lmmc_lsr_stats_median(const lmmc_real_t* values, size_t count,
                                     lmmc_real_t* out)
 {
     lmmc_vec_t view;
+    lmmc_real_t value;
     lmmc_status_t status = lmmc_lsr_wrap_const_vec(values, count, &view);
     if (status != LMMC_STATUS_OK) return status;
-    return lmmc_vec_median(&view, out);
+    status = lmmc_vec_median(&view, &value);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_store_finite_real(value, out);
 }
 
 lmmc_status_t lmmc_lsr_stats_var(const lmmc_real_t* values, size_t count,
                                  lmmc_real_t* out)
 {
     lmmc_vec_t view;
+    lmmc_real_t value;
     lmmc_status_t status = lmmc_lsr_wrap_const_vec(values, count, &view);
     if (status != LMMC_STATUS_OK) return status;
-    return lmmc_vec_variance_sample(&view, out);
+    status = lmmc_vec_variance_sample(&view, &value);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_store_finite_real(value, out);
 }
 
 lmmc_status_t lmmc_lsr_stats_std(const lmmc_real_t* values, size_t count,
                                  lmmc_real_t* out)
 {
     lmmc_vec_t view;
+    lmmc_real_t value;
     lmmc_status_t status = lmmc_lsr_wrap_const_vec(values, count, &view);
     if (status != LMMC_STATUS_OK) return status;
-    return lmmc_vec_stddev_sample(&view, out);
+    status = lmmc_vec_stddev_sample(&view, &value);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_store_finite_real(value, out);
 }
 
 lmmc_status_t lmmc_lsr_stats_quantile(const lmmc_real_t* values, size_t count,
                                       lmmc_real_t q, lmmc_real_t* out)
 {
     lmmc_vec_t view;
+    lmmc_real_t value;
+    lmmc_status_t status;
+    if (!lmmc_lsr_real_is_finite(q)) return LMMC_STATUS_NUMERICAL_FAILURE;
     if (q < (lmmc_real_t)0 || q > (lmmc_real_t)1) {
         return LMMC_STATUS_OUT_OF_RANGE;
     }
-    lmmc_status_t status = lmmc_lsr_wrap_const_vec(values, count, &view);
+    status = lmmc_lsr_wrap_const_vec(values, count, &view);
     if (status != LMMC_STATUS_OK) return status;
-    return lmmc_vec_quantile(&view, q, out);
+    status = lmmc_vec_quantile(&view, q, &value);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_store_finite_real(value, out);
 }
 
 lmmc_status_t lmmc_lsr_stats_cov(const lmmc_real_t* x,
@@ -555,11 +591,14 @@ lmmc_status_t lmmc_lsr_stats_cov(const lmmc_real_t* x,
 {
     lmmc_vec_t x_view;
     lmmc_vec_t y_view;
+    lmmc_real_t value;
     lmmc_status_t status = lmmc_lsr_wrap_const_vec(x, count, &x_view);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_lsr_wrap_const_vec(y, count, &y_view);
     if (status != LMMC_STATUS_OK) return status;
-    return lmmc_vec_covariance_sample(&x_view, &y_view, out);
+    status = lmmc_vec_covariance_sample(&x_view, &y_view, &value);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_store_finite_real(value, out);
 }
 
 lmmc_status_t lmmc_lsr_stats_corr(const lmmc_real_t* x,
@@ -569,11 +608,14 @@ lmmc_status_t lmmc_lsr_stats_corr(const lmmc_real_t* x,
 {
     lmmc_vec_t x_view;
     lmmc_vec_t y_view;
+    lmmc_real_t value;
     lmmc_status_t status = lmmc_lsr_wrap_const_vec(x, count, &x_view);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_lsr_wrap_const_vec(y, count, &y_view);
     if (status != LMMC_STATUS_OK) return status;
-    return lmmc_vec_correlation_sample(&x_view, &y_view, out);
+    status = lmmc_vec_correlation_sample(&x_view, &y_view, &value);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_store_finite_real(value, out);
 }
 
 lmmc_status_t lmmc_lsr_random_seed(lmmc_rng_t* rng, uint64_t seed)
@@ -607,10 +649,12 @@ lmmc_status_t lmmc_lsr_random_choice(lmmc_rng_t* rng,
     lmmc_status_t status;
     if (!values || !out || count == 0) return LMMC_STATUS_INVALID_ARGUMENT;
     if (count > (size_t)INT64_MAX + 1u) return LMMC_STATUS_OUT_OF_RANGE;
+    if (!lmmc_lsr_real_array_is_finite(values, count)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
     status = lmmc_rng_int_uniform(rng, 0, (int64_t)count - 1, &index);
     if (status != LMMC_STATUS_OK) return status;
-    *out = values[index];
-    return LMMC_STATUS_OK;
+    return lmmc_lsr_store_finite_real(values[index], out);
 }
 
 static int lmmc_lsr_mat_valid(const lmmc_mat_t* a)

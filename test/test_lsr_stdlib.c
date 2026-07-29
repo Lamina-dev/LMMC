@@ -31,6 +31,7 @@ int main(void)
     lmmc_real_t out2 = 0;
     lmmc_real_t values[] = {1, 2, 3, 4};
     lmmc_real_t scaled_values[] = {2, 4, 6, 8};
+    lmmc_real_t nonfinite_values[] = {1, NAN, 3};
     lmmc_real_t matrix_values[] = {1, 2, 3, 4};
     lmmc_real_t singular_values[] = {1, 2, 2, 4};
     lmmc_real_t rhs_values[] = {5, 6, 7, 8};
@@ -263,6 +264,13 @@ int main(void)
         fprintf(stderr, "std.units adapter mismatch\n");
         return 1;
     }
+    if (lmmc_lsr_units_convert(INFINITY, "m", "m", &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_units_strip(INFINITY, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE) {
+        fprintf(stderr, "std.units non-finite input not rejected\n");
+        return 1;
+    }
 
     if (lmmc_lsr_stats_mean(values, 4, &out) != LMMC_STATUS_OK ||
         !close_real(out, 2.5)) {
@@ -307,6 +315,23 @@ int main(void)
         fprintf(stderr, "std.stats.corr mismatch\n");
         return 1;
     }
+    if (lmmc_lsr_stats_mean(nonfinite_values, 3, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_stats_median(nonfinite_values, 3, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_stats_var(nonfinite_values, 3, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_stats_std(nonfinite_values, 3, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_stats_quantile(values, 4, NAN, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_stats_cov(values, nonfinite_values, 3, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_stats_corr(values, nonfinite_values, 3, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE) {
+        fprintf(stderr, "std.stats non-finite input not rejected\n");
+        return 1;
+    }
 
     if (lmmc_rng_create(&rng) != LMMC_STATUS_OK) {
         fprintf(stderr, "rng create failed\n");
@@ -346,6 +371,12 @@ int main(void)
     if (lmmc_lsr_random_choice(rng, values, 4, &out) != LMMC_STATUS_OK ||
         out < 1 || out > 4) {
         fprintf(stderr, "std.random.choice mismatch\n");
+        lmmc_rng_destroy(rng);
+        return 1;
+    }
+    if (lmmc_lsr_random_choice(rng, nonfinite_values, 3, &out) !=
+        LMMC_STATUS_NUMERICAL_FAILURE) {
+        fprintf(stderr, "std.random.choice non-finite input not rejected\n");
         lmmc_rng_destroy(rng);
         return 1;
     }
