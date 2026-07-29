@@ -20,6 +20,15 @@ static lmmc_status_t lmmc_lsr_store_real(lmmc_real_t value, lmmc_real_t* out)
     return LMMC_STATUS_OK;
 }
 
+static lmmc_status_t lmmc_lsr_store_finite_real(lmmc_real_t value,
+                                                lmmc_real_t* out)
+{
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!isfinite((double)value)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    *out = value;
+    return LMMC_STATUS_OK;
+}
+
 typedef struct {
     const char* name;
     lmmc_real_t value;
@@ -304,22 +313,25 @@ lmmc_status_t lmmc_lsr_math_conj(const lmmc_complex_t* z, lmmc_complex_t* out)
 lmmc_status_t lmmc_lsr_math_complex_abs(const lmmc_complex_t* z,
                                         lmmc_real_t* out)
 {
-    return lmmc_complex_modulus(z, out);
+    lmmc_real_t value;
+    lmmc_status_t status = lmmc_complex_modulus(z, &value);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_store_finite_real(value, out);
 }
 
 lmmc_status_t lmmc_lsr_math_sin(lmmc_real_t x, lmmc_real_t* out)
 {
-    return lmmc_lsr_store_real((lmmc_real_t)sin((double)x), out);
+    return lmmc_lsr_store_finite_real((lmmc_real_t)sin((double)x), out);
 }
 
 lmmc_status_t lmmc_lsr_math_cos(lmmc_real_t x, lmmc_real_t* out)
 {
-    return lmmc_lsr_store_real((lmmc_real_t)cos((double)x), out);
+    return lmmc_lsr_store_finite_real((lmmc_real_t)cos((double)x), out);
 }
 
 lmmc_status_t lmmc_lsr_math_tan(lmmc_real_t x, lmmc_real_t* out)
 {
-    return lmmc_lsr_store_real((lmmc_real_t)tan((double)x), out);
+    return lmmc_lsr_store_finite_real((lmmc_real_t)tan((double)x), out);
 }
 
 lmmc_status_t lmmc_lsr_math_pow(lmmc_real_t x, lmmc_real_t y,
@@ -362,7 +374,7 @@ lmmc_status_t lmmc_lsr_math_sqrt(lmmc_real_t x, lmmc_real_t* out)
 
 lmmc_status_t lmmc_lsr_math_exp(lmmc_real_t x, lmmc_real_t* out)
 {
-    return lmmc_lsr_store_real((lmmc_real_t)exp((double)x), out);
+    return lmmc_lsr_store_finite_real((lmmc_real_t)exp((double)x), out);
 }
 
 lmmc_status_t lmmc_lsr_math_ln(lmmc_real_t x, lmmc_real_t* out)
@@ -400,7 +412,7 @@ lmmc_status_t lmmc_lsr_math_log10(lmmc_real_t x, lmmc_real_t* out)
 
 lmmc_status_t lmmc_lsr_math_abs(lmmc_real_t x, lmmc_real_t* out)
 {
-    return lmmc_lsr_store_real((lmmc_real_t)fabs((double)x), out);
+    return lmmc_lsr_store_finite_real((lmmc_real_t)fabs((double)x), out);
 }
 
 lmmc_status_t lmmc_lsr_math_floor(lmmc_real_t x, lmmc_real_t* out)

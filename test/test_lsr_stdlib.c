@@ -220,6 +220,11 @@ int main(void)
         return 1;
     }
 
+    if (lmmc_lsr_math_exp(1000, &out) != LMMC_STATUS_NUMERICAL_FAILURE) {
+        fprintf(stderr, "std.math.exp overflow did not report numeric failure\n");
+        return 1;
+    }
+
     if (lmmc_lsr_math_clamp(5, 1, 3, &out) != LMMC_STATUS_OK ||
         !close_real(out, 3)) {
         fprintf(stderr, "std.math.clamp mismatch\n");
