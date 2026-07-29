@@ -88,10 +88,25 @@ int main(void)
         fprintf(stderr, "std.math.pi mismatch\n");
         return 1;
     }
+    if (lmmc_lsr_math_e(&out) != LMMC_STATUS_OK ||
+        !close_real(out, (lmmc_real_t)2.71828182845904523536) ||
+        lmmc_lsr_math_phi(&out2) != LMMC_STATUS_OK ||
+        !close_real(out2, (lmmc_real_t)1.61803398874989484820)) {
+        fprintf(stderr, "std.math e/phi constants mismatch\n");
+        return 1;
+    }
 
     if (lmmc_lsr_math_i(&z) != LMMC_STATUS_OK ||
         !close_real(z.real, 0) || !close_real(z.imag, 1)) {
         fprintf(stderr, "std.math.i mismatch\n");
+        return 1;
+    }
+    if (lmmc_lsr_math_pi(NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_e(NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_phi(NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_i(NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_I(NULL) != LMMC_STATUS_INVALID_ARGUMENT) {
+        fprintf(stderr, "std.math constant null outputs not rejected\n");
         return 1;
     }
 
