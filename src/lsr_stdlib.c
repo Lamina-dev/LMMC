@@ -709,7 +709,12 @@ lmmc_status_t lmmc_lsr_random_seed(lmmc_rng_t* rng, uint64_t seed)
 
 lmmc_status_t lmmc_lsr_random_rand(lmmc_rng_t* rng, lmmc_real_t* out)
 {
-    return lmmc_rng_uniform(rng, (lmmc_real_t)0, (lmmc_real_t)1, out);
+    lmmc_real_t value;
+    lmmc_status_t status;
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    status = lmmc_rng_uniform(rng, (lmmc_real_t)0, (lmmc_real_t)1, &value);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_store_finite_real(value, out);
 }
 
 lmmc_status_t lmmc_lsr_random_randint(lmmc_rng_t* rng, int64_t lo,

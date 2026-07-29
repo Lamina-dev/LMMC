@@ -445,10 +445,23 @@ int main(void)
 
     if (lmmc_lsr_random_seed(rng, 42) != LMMC_STATUS_OK ||
         lmmc_lsr_random_rand(rng, &out) != LMMC_STATUS_OK ||
+        !isfinite((double)out) ||
         lmmc_lsr_random_seed(rng, 42) != LMMC_STATUS_OK ||
         lmmc_lsr_random_rand(rng, &out2) != LMMC_STATUS_OK ||
-        !close_real(out, out2)) {
+        !isfinite((double)out2) || !close_real(out, out2)) {
         fprintf(stderr, "std.random fixed seed is not reproducible\n");
+        lmmc_rng_destroy(rng);
+        return 1;
+    }
+
+    if (lmmc_lsr_random_seed(NULL, 42) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_random_rand(NULL, &out) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_random_rand(rng, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_random_randint(NULL, 1, 3, &randint_out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_random_randint(rng, 1, 3, NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT) {
+        fprintf(stderr, "std.random invalid arguments not rejected\n");
         lmmc_rng_destroy(rng);
         return 1;
     }
