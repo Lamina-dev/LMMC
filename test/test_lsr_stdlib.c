@@ -25,6 +25,12 @@ static int mat_close_at(const lmmc_mat_t* mat, size_t row, size_t col,
     return close_real(mat->data[row * mat->stride + col], expected);
 }
 
+typedef struct {
+    const char* name;
+    lmmc_real_t value;
+    const char* unit;
+} required_constant_t;
+
 int main(void)
 {
     lmmc_real_t out = 0;
@@ -54,6 +60,28 @@ int main(void)
     size_t cols = 0;
     size_t rank = 0;
     int64_t randint_out = 0;
+    const required_constant_t required_constants[] = {
+        {"EARTH_GRAVITY", (lmmc_real_t)9.80665, "m*s^-2"},
+        {"MOON_GRAVITY", (lmmc_real_t)1.625, "m*s^-2"},
+        {"MARS_GRAVITY", (lmmc_real_t)3.72076, "m*s^-2"},
+        {"WATER_DENSITY", (lmmc_real_t)1000.0, "kg*m^-3"},
+        {"STANDARD_PRESSURE", (lmmc_real_t)101325.0, "Pa"},
+        {"STANDARD_TEMPERATURE", (lmmc_real_t)273.15, "K"},
+        {"AIR_DENSITY", (lmmc_real_t)1.225, "kg*m^-3"},
+        {"C", (lmmc_real_t)2.99792458e8, "m*s^-1"},
+        {"G", (lmmc_real_t)6.67430e-11, "m^3*kg^-1*s^-2"},
+        {"H", (lmmc_real_t)6.62607015e-34, "J*s"},
+        {"KB", (lmmc_real_t)1.380649e-23, "J*K^-1"},
+        {"EPSILON_0", (lmmc_real_t)8.8541878128e-12, "F*m^-1"},
+        {"MU_0", (lmmc_real_t)1.25663706212e-6, "H*m^-1"},
+        {"AVOGADRO", (lmmc_real_t)6.02214076e23, "mol^-1"},
+        {"R", (lmmc_real_t)8.314462618, "J*mol^-1*K^-1"},
+        {"FARADAY", (lmmc_real_t)9.648533212e4, "C*mol^-1"},
+        {"AMU", (lmmc_real_t)1.66053906660e-27, "kg"},
+        {"MOLAR_VOLUME_IDEAL", (lmmc_real_t)0.024465, "m^3*mol^-1"},
+        {"ROOM_PRESSURE", (lmmc_real_t)1.0e5, "Pa"},
+        {"ROOM_TEMPERATURE", (lmmc_real_t)297.15, "K"},
+    };
 
     if (lmmc_lsr_math_pi(&out) != LMMC_STATUS_OK ||
         !close_real(out, LMMC_CONST_PI)) {
@@ -110,6 +138,20 @@ int main(void)
             lmmc_lsr_units_convert(1, unit, unit, &out2) != LMMC_STATUS_OK ||
             !close_real(out2, 1)) {
             fprintf(stderr, "std.constants unit grammar mismatch\n");
+            return 1;
+        }
+    }
+
+    for (size_t i = 0; i < sizeof(required_constants) /
+                                sizeof(required_constants[0]); ++i) {
+        const char* unit =
+            lmmc_lsr_constants_unit(required_constants[i].name);
+        if (lmmc_lsr_constants_get(required_constants[i].name, &out) !=
+                LMMC_STATUS_OK ||
+            !close_real(out, required_constants[i].value) ||
+            !unit || strcmp(unit, required_constants[i].unit) != 0) {
+            fprintf(stderr, "LSR-002 required constant mismatch: %s\n",
+                    required_constants[i].name);
             return 1;
         }
     }
