@@ -156,7 +156,8 @@ int main(void)
         lmmc_lsr_math_log10(0, &out) != LMMC_STATUS_OUT_OF_RANGE ||
         lmmc_lsr_math_log_base(8, 1, &out) != LMMC_STATUS_OUT_OF_RANGE ||
         lmmc_lsr_math_asin(2, &out) != LMMC_STATUS_OUT_OF_RANGE ||
-        lmmc_lsr_math_acos(-2, &out) != LMMC_STATUS_OUT_OF_RANGE) {
+        lmmc_lsr_math_acos(-2, &out) != LMMC_STATUS_OUT_OF_RANGE ||
+        lmmc_lsr_math_pow(-1, 0.5, &out) != LMMC_STATUS_OUT_OF_RANGE) {
         fprintf(stderr, "std.math domain errors not reported\n");
         return 1;
     }

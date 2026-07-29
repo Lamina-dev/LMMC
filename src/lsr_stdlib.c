@@ -326,7 +326,11 @@ lmmc_status_t lmmc_lsr_math_pow(lmmc_real_t x, lmmc_real_t y,
                                 lmmc_real_t* out)
 {
     double value;
+    double integral_part;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if ((double)x < 0.0 && modf((double)y, &integral_part) != 0.0) {
+        return LMMC_STATUS_OUT_OF_RANGE;
+    }
     value = pow((double)x, (double)y);
     if (!isfinite(value)) return LMMC_STATUS_NUMERICAL_FAILURE;
     *out = (lmmc_real_t)value;
