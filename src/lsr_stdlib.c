@@ -43,6 +43,12 @@ static int lmmc_lsr_real_array_is_finite(const lmmc_real_t* values,
     return 1;
 }
 
+static int lmmc_lsr_complex_is_finite(const lmmc_complex_t* z)
+{
+    return z && lmmc_lsr_real_is_finite(z->real) &&
+           lmmc_lsr_real_is_finite(z->imag);
+}
+
 typedef struct {
     const char* name;
     lmmc_real_t value;
@@ -314,26 +320,36 @@ lmmc_status_t lmmc_lsr_math_complex(lmmc_real_t real,
                                     lmmc_real_t imag,
                                     lmmc_complex_t* out)
 {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(real) || !lmmc_lsr_real_is_finite(imag)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
     return lmmc_complex_create(real, imag, out);
 }
 
 lmmc_status_t lmmc_lsr_math_real(const lmmc_complex_t* z, lmmc_real_t* out)
 {
     if (!z || !out) return LMMC_STATUS_INVALID_ARGUMENT;
-    *out = z->real;
-    return LMMC_STATUS_OK;
+    if (!lmmc_lsr_complex_is_finite(z)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    return lmmc_lsr_store_finite_real(z->real, out);
 }
 
 lmmc_status_t lmmc_lsr_math_imag(const lmmc_complex_t* z, lmmc_real_t* out)
 {
     if (!z || !out) return LMMC_STATUS_INVALID_ARGUMENT;
-    *out = z->imag;
-    return LMMC_STATUS_OK;
+    if (!lmmc_lsr_complex_is_finite(z)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    return lmmc_lsr_store_finite_real(z->imag, out);
 }
 
 lmmc_status_t lmmc_lsr_math_conj(const lmmc_complex_t* z, lmmc_complex_t* out)
 {
-    return lmmc_complex_conj(z, out);
+    lmmc_status_t status;
+    if (!z || !out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_complex_is_finite(z)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    status = lmmc_complex_conj(z, out);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_complex_is_finite(out) ? LMMC_STATUS_OK
+                                           : LMMC_STATUS_NUMERICAL_FAILURE;
 }
 
 lmmc_status_t lmmc_lsr_math_complex_abs(const lmmc_complex_t* z,
@@ -342,6 +358,7 @@ lmmc_status_t lmmc_lsr_math_complex_abs(const lmmc_complex_t* z,
     lmmc_real_t value;
     lmmc_status_t status = lmmc_complex_modulus(z, &value);
     if (status != LMMC_STATUS_OK) return status;
+    if (!lmmc_lsr_complex_is_finite(z)) return LMMC_STATUS_NUMERICAL_FAILURE;
     return lmmc_lsr_store_finite_real(value, out);
 }
 
@@ -366,6 +383,9 @@ lmmc_status_t lmmc_lsr_math_pow(lmmc_real_t x, lmmc_real_t y,
     double value;
     double integral_part;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x) || !lmmc_lsr_real_is_finite(y)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
     if ((double)x < 0.0 && modf((double)y, &integral_part) != 0.0) {
         return LMMC_STATUS_OUT_OF_RANGE;
     }
@@ -377,25 +397,49 @@ lmmc_status_t lmmc_lsr_math_pow(lmmc_real_t x, lmmc_real_t y,
 
 lmmc_status_t lmmc_lsr_math_asin(lmmc_real_t x, lmmc_real_t* out)
 {
-    return lmmc_asin(x, out);
+    lmmc_real_t value;
+    lmmc_status_t status;
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    if (x < (lmmc_real_t)-1 || x > (lmmc_real_t)1) {
+        return LMMC_STATUS_OUT_OF_RANGE;
+    }
+    status = lmmc_asin(x, &value);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_store_finite_real(value, out);
 }
 
 lmmc_status_t lmmc_lsr_math_acos(lmmc_real_t x, lmmc_real_t* out)
 {
-    return lmmc_acos(x, out);
+    lmmc_real_t value;
+    lmmc_status_t status;
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    if (x < (lmmc_real_t)-1 || x > (lmmc_real_t)1) {
+        return LMMC_STATUS_OUT_OF_RANGE;
+    }
+    status = lmmc_acos(x, &value);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_store_finite_real(value, out);
 }
 
 lmmc_status_t lmmc_lsr_math_atan(lmmc_real_t x, lmmc_real_t* out)
 {
-    return lmmc_atan(x, out);
+    lmmc_real_t value;
+    lmmc_status_t status;
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    status = lmmc_atan(x, &value);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_store_finite_real(value, out);
 }
 
 lmmc_status_t lmmc_lsr_math_sqrt(lmmc_real_t x, lmmc_real_t* out)
 {
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
     if (x < (lmmc_real_t)0) return LMMC_STATUS_OUT_OF_RANGE;
-    *out = (lmmc_real_t)sqrt((double)x);
-    return LMMC_STATUS_OK;
+    return lmmc_lsr_store_finite_real((lmmc_real_t)sqrt((double)x), out);
 }
 
 lmmc_status_t lmmc_lsr_math_exp(lmmc_real_t x, lmmc_real_t* out)
@@ -406,9 +450,9 @@ lmmc_status_t lmmc_lsr_math_exp(lmmc_real_t x, lmmc_real_t* out)
 lmmc_status_t lmmc_lsr_math_ln(lmmc_real_t x, lmmc_real_t* out)
 {
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
     if (x <= (lmmc_real_t)0) return LMMC_STATUS_OUT_OF_RANGE;
-    *out = (lmmc_real_t)log((double)x);
-    return LMMC_STATUS_OK;
+    return lmmc_lsr_store_finite_real((lmmc_real_t)log((double)x), out);
 }
 
 lmmc_status_t lmmc_lsr_math_log(lmmc_real_t x, lmmc_real_t* out)
@@ -420,20 +464,23 @@ lmmc_status_t lmmc_lsr_math_log_base(lmmc_real_t x, lmmc_real_t base,
                                      lmmc_real_t* out)
 {
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x) || !lmmc_lsr_real_is_finite(base)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
     if (x <= (lmmc_real_t)0 || base <= (lmmc_real_t)0 ||
         base == (lmmc_real_t)1) {
         return LMMC_STATUS_OUT_OF_RANGE;
     }
-    *out = (lmmc_real_t)(log((double)x) / log((double)base));
-    return LMMC_STATUS_OK;
+    return lmmc_lsr_store_finite_real(
+        (lmmc_real_t)(log((double)x) / log((double)base)), out);
 }
 
 lmmc_status_t lmmc_lsr_math_log10(lmmc_real_t x, lmmc_real_t* out)
 {
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
     if (x <= (lmmc_real_t)0) return LMMC_STATUS_OUT_OF_RANGE;
-    *out = (lmmc_real_t)log10((double)x);
-    return LMMC_STATUS_OK;
+    return lmmc_lsr_store_finite_real((lmmc_real_t)log10((double)x), out);
 }
 
 lmmc_status_t lmmc_lsr_math_abs(lmmc_real_t x, lmmc_real_t* out)
@@ -443,28 +490,50 @@ lmmc_status_t lmmc_lsr_math_abs(lmmc_real_t x, lmmc_real_t* out)
 
 lmmc_status_t lmmc_lsr_math_floor(lmmc_real_t x, lmmc_real_t* out)
 {
-    return lmmc_floor(x, out);
+    lmmc_real_t value;
+    lmmc_status_t status;
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    status = lmmc_floor(x, &value);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_store_finite_real(value, out);
 }
 
 lmmc_status_t lmmc_lsr_math_ceil(lmmc_real_t x, lmmc_real_t* out)
 {
-    return lmmc_ceil(x, out);
+    lmmc_real_t value;
+    lmmc_status_t status;
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    status = lmmc_ceil(x, &value);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_store_finite_real(value, out);
 }
 
 lmmc_status_t lmmc_lsr_math_round(lmmc_real_t x, lmmc_real_t* out)
 {
-    return lmmc_round(x, out);
+    lmmc_real_t value;
+    lmmc_status_t status;
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    status = lmmc_round(x, &value);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_store_finite_real(value, out);
 }
 
 lmmc_status_t lmmc_lsr_math_clamp(lmmc_real_t x, lmmc_real_t lo,
                                   lmmc_real_t hi, lmmc_real_t* out)
 {
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x) || !lmmc_lsr_real_is_finite(lo) ||
+        !lmmc_lsr_real_is_finite(hi)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
     if (lo > hi) return LMMC_STATUS_INVALID_ARGUMENT;
     if (x < lo) *out = lo;
     else if (x > hi) *out = hi;
     else *out = x;
-    return LMMC_STATUS_OK;
+    return lmmc_lsr_store_finite_real(*out, out);
 }
 
 lmmc_status_t lmmc_lsr_units_convert(lmmc_real_t x,

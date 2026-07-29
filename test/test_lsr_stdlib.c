@@ -148,6 +148,18 @@ int main(void)
         fprintf(stderr, "std.math.abs complex mismatch\n");
         return 1;
     }
+    z.real = NAN;
+    z.imag = 1;
+    if (lmmc_lsr_math_complex(NAN, 1, &w) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_real(&z, &out) != LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_imag(&z, &out) != LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_conj(&z, &w) != LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_complex_abs(&z, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE) {
+        fprintf(stderr, "std.math complex non-finite input not rejected\n");
+        return 1;
+    }
 
     if (lmmc_lsr_math_sqrt(-1, &out) != LMMC_STATUS_OUT_OF_RANGE) {
         fprintf(stderr, "std.math.sqrt domain error not reported\n");
@@ -233,6 +245,36 @@ int main(void)
     if (lmmc_lsr_math_clamp(5, 1, 3, &out) != LMMC_STATUS_OK ||
         !close_real(out, 3)) {
         fprintf(stderr, "std.math.clamp mismatch\n");
+        return 1;
+    }
+    if (lmmc_lsr_math_asin(NAN, &out) != LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_acos(NAN, &out) != LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_atan(INFINITY, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_pow(INFINITY, 0, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_sqrt(NAN, &out) != LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_ln(INFINITY, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_log10(INFINITY, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_log_base(INFINITY, 2, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_log_base(8, NAN, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_floor(INFINITY, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_ceil(INFINITY, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_round(INFINITY, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_clamp(NAN, 1, 3, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_clamp(2, NAN, 3, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_clamp(2, 1, INFINITY, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE) {
+        fprintf(stderr, "std.math non-finite scalar input not rejected\n");
         return 1;
     }
 
