@@ -555,6 +555,35 @@ int main(void)
         return 1;
     }
 
+    mat.data[0] = NAN;
+    if (lmmc_lsr_linalg_transpose(&mat, &result) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_linalg_adjoint(&mat, &result) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_linalg_det(&mat, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_linalg_trace(&mat, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_linalg_rank(&mat, &rank) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_linalg_inv(&mat, &result) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_linalg_solve_left(&mat, &rhs, &result) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_linalg_solve_right(&rhs, &mat, &result) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_linalg_eig(&mat, &eig_result) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_linalg_svd(&mat, &svd_result) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_linalg_eig_table(&mat, &eig_table) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_linalg_svd_table(&mat, &svd_table) !=
+            LMMC_STATUS_NUMERICAL_FAILURE) {
+        fprintf(stderr, "std.linalg non-finite matrix input not rejected\n");
+        return 1;
+    }
+
     lmmc_mat_destroy(&rectangular);
     lmmc_mat_destroy(&mismatched_rhs);
     lmmc_mat_destroy(&rhs);
