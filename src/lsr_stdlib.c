@@ -760,6 +760,45 @@ static lmmc_status_t lmmc_lsr_require_finite_mat(const lmmc_mat_t* a)
                                      : LMMC_STATUS_NUMERICAL_FAILURE;
 }
 
+static int lmmc_lsr_vec_is_finite(const lmmc_vec_t* v)
+{
+    return v && v->data && v->size > 0 &&
+           lmmc_lsr_real_array_is_finite(v->data, v->size);
+}
+
+static lmmc_status_t lmmc_lsr_require_finite_vec(const lmmc_vec_t* v)
+{
+    if (!v || !v->data || v->size == 0) return LMMC_STATUS_INVALID_ARGUMENT;
+    return lmmc_lsr_vec_is_finite(v) ? LMMC_STATUS_OK
+                                     : LMMC_STATUS_NUMERICAL_FAILURE;
+}
+
+static lmmc_status_t lmmc_lsr_require_finite_eig_result(
+    const lmmc_eigen_gen_full_result_t* result)
+{
+    lmmc_status_t status;
+    if (!result) return LMMC_STATUS_INVALID_ARGUMENT;
+    status = lmmc_lsr_require_finite_vec(&result->real_parts);
+    if (status != LMMC_STATUS_OK) return status;
+    status = lmmc_lsr_require_finite_vec(&result->imag_parts);
+    if (status != LMMC_STATUS_OK) return status;
+    status = lmmc_lsr_require_finite_mat(&result->vectors_real);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_require_finite_mat(&result->vectors_imag);
+}
+
+static lmmc_status_t lmmc_lsr_require_finite_svd_result(
+    const lmmc_svd_result_t* result)
+{
+    lmmc_status_t status;
+    if (!result) return LMMC_STATUS_INVALID_ARGUMENT;
+    status = lmmc_lsr_require_finite_mat(&result->U);
+    if (status != LMMC_STATUS_OK) return status;
+    status = lmmc_lsr_require_finite_vec(&result->sigma);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_require_finite_mat(&result->Vt);
+}
+
 static lmmc_status_t lmmc_lsr_copy_mat(const lmmc_mat_t* src, lmmc_mat_t* out)
 {
     lmmc_status_t status;
@@ -1073,7 +1112,14 @@ lmmc_status_t lmmc_lsr_linalg_eig(const lmmc_mat_t* a,
     status = lmmc_lsr_require_finite_mat(a);
     if (status != LMMC_STATUS_OK) return status;
     if (a->rows != a->cols) return LMMC_STATUS_INVALID_ARGUMENT;
-    return lmmc_eigen_general_full(a, out);
+    status = lmmc_eigen_general_full(a, out);
+    if (status != LMMC_STATUS_OK) return status;
+    status = lmmc_lsr_require_finite_eig_result(out);
+    if (status != LMMC_STATUS_OK) {
+        lmmc_eigen_gen_full_result_destroy(out);
+        return status;
+    }
+    return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_lsr_linalg_svd(const lmmc_mat_t* a,
@@ -1083,7 +1129,14 @@ lmmc_status_t lmmc_lsr_linalg_svd(const lmmc_mat_t* a,
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
     status = lmmc_lsr_require_finite_mat(a);
     if (status != LMMC_STATUS_OK) return status;
-    return lmmc_svd(a, out);
+    status = lmmc_svd(a, out);
+    if (status != LMMC_STATUS_OK) return status;
+    status = lmmc_lsr_require_finite_svd_result(out);
+    if (status != LMMC_STATUS_OK) {
+        lmmc_svd_result_destroy(out);
+        return status;
+    }
+    return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_lsr_linalg_eig_table(const lmmc_mat_t* a,
