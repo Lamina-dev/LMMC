@@ -180,6 +180,7 @@ static int lmmc_lsr_parse_unit_expr(const char* text,
             return 0;
         }
         ++cursor;
+        if (*cursor == '\0') return 0;
     }
     return 1;
 }

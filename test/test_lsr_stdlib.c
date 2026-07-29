@@ -248,6 +248,10 @@ int main(void)
         lmmc_lsr_units_is_dimensionless("m*s^-1", &dimensionless) !=
             LMMC_STATUS_OK ||
         dimensionless ||
+        lmmc_lsr_units_convert(1, "m/", "m", &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_units_convert(1, "m*", "m", &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
         lmmc_lsr_units_convert(1, "unknown", "m", &out) !=
             LMMC_STATUS_INVALID_ARGUMENT) {
         fprintf(stderr, "std.units adapter mismatch\n");
