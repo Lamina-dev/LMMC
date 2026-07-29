@@ -327,6 +327,17 @@ int main(void)
             LMMC_STATUS_DIMENSION_MISMATCH ||
         lmmc_lsr_units_strip(12.5, &out) != LMMC_STATUS_OK ||
         !close_real(out, 12.5) ||
+        lmmc_lsr_units_convert(10, "score", "score", &out) !=
+            LMMC_STATUS_OK ||
+        !close_real(out, 10) ||
+        lmmc_lsr_units_convert(10, "score", "token", &out) !=
+            LMMC_STATUS_DIMENSION_MISMATCH ||
+        lmmc_lsr_units_is_dimensionless("score", &dimensionless) !=
+            LMMC_STATUS_OK ||
+        dimensionless ||
+        lmmc_lsr_units_is_dimensionless("score/score", &dimensionless) !=
+            LMMC_STATUS_OK ||
+        !dimensionless ||
         lmmc_lsr_units_is_dimensionless("m/m", &dimensionless) !=
             LMMC_STATUS_OK ||
         !dimensionless ||

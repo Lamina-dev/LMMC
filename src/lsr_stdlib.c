@@ -97,15 +97,18 @@ lmmc_lsr_find_constant(const char* name)
 
 typedef struct {
     double scale;
-    int dims[7];
+    int dims[9];
 } lmmc_lsr_unit_sig_t;
 
-enum { LMMC_LSR_MAX_UNIT_EXPONENT = 32 };
+enum {
+    LMMC_LSR_MAX_UNIT_EXPONENT = 32,
+    LMMC_LSR_UNIT_DIM_COUNT = 9
+};
 
 typedef struct {
     const char* name;
     double scale;
-    int dims[7];
+    int dims[9];
 } lmmc_lsr_unit_entry_t;
 
 static const lmmc_lsr_unit_entry_t lmmc_lsr_units[] = {
@@ -126,6 +129,8 @@ static const lmmc_lsr_unit_entry_t lmmc_lsr_units[] = {
     {"C", 1.0, {0, 0, 1, 1, 0, 0, 0}},
     {"F", 1.0, {-2, -1, 4, 2, 0, 0, 0}},
     {"H", 1.0, {2, 1, -2, -2, 0, 0, 0}},
+    {"score", 1.0, {0, 0, 0, 0, 0, 0, 0, 1, 0}},
+    {"token", 1.0, {0, 0, 0, 0, 0, 0, 0, 0, 1}},
 };
 
 static const lmmc_lsr_unit_entry_t* lmmc_lsr_find_unit(const char* name,
@@ -144,7 +149,7 @@ static const lmmc_lsr_unit_entry_t* lmmc_lsr_find_unit(const char* name,
 static void lmmc_lsr_unit_identity(lmmc_lsr_unit_sig_t* sig)
 {
     sig->scale = 1.0;
-    for (size_t i = 0; i < 7; ++i) sig->dims[i] = 0;
+    for (size_t i = 0; i < LMMC_LSR_UNIT_DIM_COUNT; ++i) sig->dims[i] = 0;
 }
 
 static int lmmc_lsr_parse_int(const char** cursor, int* out)
@@ -199,7 +204,7 @@ static int lmmc_lsr_parse_unit_expr(const char* text,
         exponent *= op_sign;
         out->scale *= pow(unit->scale, (double)exponent);
         if (!isfinite(out->scale)) return 0;
-        for (size_t i = 0; i < 7; ++i) {
+        for (size_t i = 0; i < LMMC_LSR_UNIT_DIM_COUNT; ++i) {
             out->dims[i] += unit->dims[i] * exponent;
         }
         if (*cursor == '\0') break;
@@ -219,7 +224,7 @@ static int lmmc_lsr_parse_unit_expr(const char* text,
 static int lmmc_lsr_same_dimension(const lmmc_lsr_unit_sig_t* lhs,
                                    const lmmc_lsr_unit_sig_t* rhs)
 {
-    for (size_t i = 0; i < 7; ++i) {
+    for (size_t i = 0; i < LMMC_LSR_UNIT_DIM_COUNT; ++i) {
         if (lhs->dims[i] != rhs->dims[i]) return 0;
     }
     return 1;
@@ -227,7 +232,7 @@ static int lmmc_lsr_same_dimension(const lmmc_lsr_unit_sig_t* lhs,
 
 static int lmmc_lsr_dimensionless_sig(const lmmc_lsr_unit_sig_t* sig)
 {
-    for (size_t i = 0; i < 7; ++i) {
+    for (size_t i = 0; i < LMMC_LSR_UNIT_DIM_COUNT; ++i) {
         if (sig->dims[i] != 0) return 0;
     }
     return 1;
