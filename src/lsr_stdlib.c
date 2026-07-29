@@ -706,7 +706,16 @@ lmmc_status_t lmmc_lsr_random_randint(lmmc_rng_t* rng, int64_t lo,
 lmmc_status_t lmmc_lsr_random_normal(lmmc_rng_t* rng, lmmc_real_t mean,
                                      lmmc_real_t stddev, lmmc_real_t* out)
 {
-    return lmmc_rng_normal(rng, mean, stddev, out);
+    lmmc_real_t value;
+    lmmc_status_t status;
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(mean) ||
+        !lmmc_lsr_real_is_finite(stddev)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    status = lmmc_rng_normal(rng, mean, stddev, &value);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_lsr_store_finite_real(value, out);
 }
 
 lmmc_status_t lmmc_lsr_random_choice(lmmc_rng_t* rng,

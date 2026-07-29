@@ -404,7 +404,11 @@ int main(void)
         lmmc_lsr_random_normal(rng, 10, 2, &out2) != LMMC_STATUS_OK ||
         !close_real(out, out2) ||
         lmmc_lsr_random_normal(rng, 0, 0, &out) !=
-            LMMC_STATUS_INVALID_ARGUMENT) {
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_random_normal(rng, INFINITY, 1, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_random_normal(rng, 0, NAN, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE) {
         fprintf(stderr, "std.random.normal mismatch\n");
         lmmc_rng_destroy(rng);
         return 1;
