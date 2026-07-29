@@ -293,9 +293,19 @@ int main(void)
         lmmc_lsr_math_acos(NAN, &out) != LMMC_STATUS_NUMERICAL_FAILURE ||
         lmmc_lsr_math_atan(INFINITY, &out) !=
             LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_sin(INFINITY, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_cos(INFINITY, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_tan(INFINITY, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
         lmmc_lsr_math_pow(INFINITY, 0, &out) !=
             LMMC_STATUS_NUMERICAL_FAILURE ||
         lmmc_lsr_math_sqrt(NAN, &out) != LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_exp(INFINITY, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_math_abs(INFINITY, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
         lmmc_lsr_math_ln(INFINITY, &out) !=
             LMMC_STATUS_NUMERICAL_FAILURE ||
         lmmc_lsr_math_log10(INFINITY, &out) !=

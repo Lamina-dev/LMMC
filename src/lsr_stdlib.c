@@ -369,16 +369,22 @@ lmmc_status_t lmmc_lsr_math_complex_abs(const lmmc_complex_t* z,
 
 lmmc_status_t lmmc_lsr_math_sin(lmmc_real_t x, lmmc_real_t* out)
 {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
     return lmmc_lsr_store_finite_real((lmmc_real_t)sin((double)x), out);
 }
 
 lmmc_status_t lmmc_lsr_math_cos(lmmc_real_t x, lmmc_real_t* out)
 {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
     return lmmc_lsr_store_finite_real((lmmc_real_t)cos((double)x), out);
 }
 
 lmmc_status_t lmmc_lsr_math_tan(lmmc_real_t x, lmmc_real_t* out)
 {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
     return lmmc_lsr_store_finite_real((lmmc_real_t)tan((double)x), out);
 }
 
@@ -449,6 +455,8 @@ lmmc_status_t lmmc_lsr_math_sqrt(lmmc_real_t x, lmmc_real_t* out)
 
 lmmc_status_t lmmc_lsr_math_exp(lmmc_real_t x, lmmc_real_t* out)
 {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
     return lmmc_lsr_store_finite_real((lmmc_real_t)exp((double)x), out);
 }
 
@@ -490,6 +498,8 @@ lmmc_status_t lmmc_lsr_math_log10(lmmc_real_t x, lmmc_real_t* out)
 
 lmmc_status_t lmmc_lsr_math_abs(lmmc_real_t x, lmmc_real_t* out)
 {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_lsr_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
     return lmmc_lsr_store_finite_real((lmmc_real_t)fabs((double)x), out);
 }
 
