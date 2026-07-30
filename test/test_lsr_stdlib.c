@@ -554,6 +554,16 @@ int main(void)
         lmmc_lsr_random_randint(NULL, 1, 3, &randint_out) !=
             LMMC_STATUS_INVALID_ARGUMENT ||
         lmmc_lsr_random_randint(rng, 1, 3, NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_random_normal(NULL, 0, 1, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_random_normal(rng, 0, 1, NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_random_choice(NULL, values, 4, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_random_choice(rng, NULL, 4, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_random_choice(rng, values, 4, NULL) !=
             LMMC_STATUS_INVALID_ARGUMENT) {
         fprintf(stderr, "std.random invalid arguments not rejected\n");
         lmmc_rng_destroy(rng);

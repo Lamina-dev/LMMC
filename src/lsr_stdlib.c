@@ -719,6 +719,7 @@ lmmc_status_t lmmc_lsr_stats_corr(const lmmc_real_t* x,
 
 lmmc_status_t lmmc_lsr_random_seed(lmmc_rng_t* rng, uint64_t seed)
 {
+    if (!rng) return LMMC_STATUS_INVALID_ARGUMENT;
     return lmmc_rng_seed(rng, seed);
 }
 
@@ -726,7 +727,7 @@ lmmc_status_t lmmc_lsr_random_rand(lmmc_rng_t* rng, lmmc_real_t* out)
 {
     lmmc_real_t value;
     lmmc_status_t status;
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!rng || !out) return LMMC_STATUS_INVALID_ARGUMENT;
     status = lmmc_rng_uniform(rng, (lmmc_real_t)0, (lmmc_real_t)1, &value);
     if (status != LMMC_STATUS_OK) return status;
     return lmmc_lsr_store_finite_real(value, out);
@@ -735,6 +736,7 @@ lmmc_status_t lmmc_lsr_random_rand(lmmc_rng_t* rng, lmmc_real_t* out)
 lmmc_status_t lmmc_lsr_random_randint(lmmc_rng_t* rng, int64_t lo,
                                       int64_t hi, int64_t* out)
 {
+    if (!rng || !out) return LMMC_STATUS_INVALID_ARGUMENT;
     return lmmc_rng_int_uniform(rng, lo, hi, out);
 }
 
@@ -743,7 +745,7 @@ lmmc_status_t lmmc_lsr_random_normal(lmmc_rng_t* rng, lmmc_real_t mean,
 {
     lmmc_real_t value;
     lmmc_status_t status;
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!rng || !out) return LMMC_STATUS_INVALID_ARGUMENT;
     if (!lmmc_lsr_real_is_finite(mean) ||
         !lmmc_lsr_real_is_finite(stddev)) {
         return LMMC_STATUS_NUMERICAL_FAILURE;
@@ -760,7 +762,9 @@ lmmc_status_t lmmc_lsr_random_choice(lmmc_rng_t* rng,
 {
     int64_t index = 0;
     lmmc_status_t status;
-    if (!values || !out || count == 0) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!rng || !values || !out || count == 0) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
     if (count > (size_t)INT64_MAX + 1u) return LMMC_STATUS_OUT_OF_RANGE;
     if (!lmmc_lsr_real_array_is_finite(values, count)) {
         return LMMC_STATUS_NUMERICAL_FAILURE;
