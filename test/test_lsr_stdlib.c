@@ -643,11 +643,14 @@ int main(void)
         fprintf(stderr, "std.linalg.eig table failed\n");
         return 1;
     }
+    lmmc_lsr_eig_table_destroy(NULL);
     named = lmmc_lsr_eig_table_get(&eig_table, "values_real");
     if (!named || named->rows != 2 || named->cols != 1 ||
         !isfinite((double)named->data[0]) ||
         !isfinite((double)named->data[named->stride]) ||
-        lmmc_lsr_eig_table_get(&eig_table, "missing") != NULL) {
+        lmmc_lsr_eig_table_get(&eig_table, "missing") != NULL ||
+        lmmc_lsr_eig_table_get(&eig_table, NULL) != NULL ||
+        lmmc_lsr_eig_table_get(NULL, "values_real") != NULL) {
         fprintf(stderr, "std.linalg.eig table mapping mismatch\n");
         return 1;
     }
@@ -672,10 +675,13 @@ int main(void)
         fprintf(stderr, "std.linalg.svd table failed\n");
         return 1;
     }
+    lmmc_lsr_svd_table_destroy(NULL);
     named = lmmc_lsr_svd_table_get(&svd_table, "S");
     if (!named || named->rows != 2 || named->cols != 2 ||
         named->data[0] < named->data[named->stride + 1] ||
-        lmmc_lsr_svd_table_get(&svd_table, "sigma") != NULL) {
+        lmmc_lsr_svd_table_get(&svd_table, "sigma") != NULL ||
+        lmmc_lsr_svd_table_get(&svd_table, NULL) != NULL ||
+        lmmc_lsr_svd_table_get(NULL, "S") != NULL) {
         fprintf(stderr, "std.linalg.svd table mapping mismatch\n");
         return 1;
     }
