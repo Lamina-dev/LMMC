@@ -144,6 +144,14 @@ int main(void)
         fprintf(stderr, "std.constants unknown name mismatch\n");
         return 1;
     }
+    if (lmmc_lsr_constants_get(NULL, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_constants_get("C", NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_constants_unit(NULL) != NULL) {
+        fprintf(stderr, "std.constants invalid arguments not rejected\n");
+        return 1;
+    }
 
     for (size_t i = 0; i < lmmc_lsr_constants_count(); ++i) {
         const char* name = lmmc_lsr_constants_name(i);
