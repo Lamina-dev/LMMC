@@ -205,6 +205,21 @@ int main(void)
         fprintf(stderr, "std.math.abs complex mismatch\n");
         return 1;
     }
+    if (lmmc_lsr_math_complex(3, 4, NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_real(NULL, &out) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_real(&z, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_imag(NULL, &out) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_imag(&z, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_conj(NULL, &w) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_conj(&z, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_complex_abs(NULL, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_complex_abs(&z, NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT) {
+        fprintf(stderr, "std.math complex invalid arguments not rejected\n");
+        return 1;
+    }
     z.real = NAN;
     z.imag = 1;
     if (lmmc_lsr_math_complex(NAN, 1, &w) !=

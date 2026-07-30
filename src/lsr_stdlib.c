@@ -361,9 +361,11 @@ lmmc_status_t lmmc_lsr_math_complex_abs(const lmmc_complex_t* z,
                                         lmmc_real_t* out)
 {
     lmmc_real_t value;
-    lmmc_status_t status = lmmc_complex_modulus(z, &value);
-    if (status != LMMC_STATUS_OK) return status;
+    lmmc_status_t status;
+    if (!z || !out) return LMMC_STATUS_INVALID_ARGUMENT;
     if (!lmmc_lsr_complex_is_finite(z)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    status = lmmc_complex_modulus(z, &value);
+    if (status != LMMC_STATUS_OK) return status;
     return lmmc_lsr_store_finite_real(value, out);
 }
 
