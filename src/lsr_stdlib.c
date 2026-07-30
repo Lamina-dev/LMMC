@@ -1184,9 +1184,9 @@ lmmc_status_t lmmc_lsr_linalg_eig_table(const lmmc_mat_t* a,
     lmmc_status_t status;
     lmmc_eigen_gen_full_result_t raw = {0};
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    memset(out, 0, sizeof(*out));
     status = lmmc_lsr_require_finite_mat(a);
     if (status != LMMC_STATUS_OK) return status;
-    memset(out, 0, sizeof(*out));
     status = lmmc_lsr_linalg_eig(a, &raw);
     if (status != LMMC_STATUS_OK) return status;
 
@@ -1231,9 +1231,9 @@ lmmc_status_t lmmc_lsr_linalg_svd_table(const lmmc_mat_t* a,
     lmmc_status_t status;
     lmmc_svd_result_t raw = {0};
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    memset(out, 0, sizeof(*out));
     status = lmmc_lsr_require_finite_mat(a);
     if (status != LMMC_STATUS_OK) return status;
-    memset(out, 0, sizeof(*out));
     status = lmmc_lsr_linalg_svd(a, &raw);
     if (status != LMMC_STATUS_OK) return status;
 

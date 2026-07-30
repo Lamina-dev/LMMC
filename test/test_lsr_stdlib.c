@@ -788,6 +788,8 @@ int main(void)
     }
 
     mat.data[0] = NAN;
+    eig_table.values_real.rows = 123;
+    svd_table.U.rows = 123;
     if (lmmc_lsr_linalg_transpose(&mat, &result) !=
             LMMC_STATUS_NUMERICAL_FAILURE ||
         lmmc_lsr_linalg_adjoint(&mat, &result) !=
@@ -813,6 +815,10 @@ int main(void)
         lmmc_lsr_linalg_svd_table(&mat, &svd_table) !=
             LMMC_STATUS_NUMERICAL_FAILURE) {
         fprintf(stderr, "std.linalg non-finite matrix input not rejected\n");
+        return 1;
+    }
+    if (eig_table.values_real.rows != 0 || svd_table.U.rows != 0) {
+        fprintf(stderr, "std.linalg table failure outputs not cleared\n");
         return 1;
     }
 
