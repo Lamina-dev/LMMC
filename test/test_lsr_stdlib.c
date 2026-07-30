@@ -391,6 +391,22 @@ int main(void)
         fprintf(stderr, "std.units non-finite input not rejected\n");
         return 1;
     }
+    if (lmmc_lsr_units_convert(1, NULL, "m", &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_units_convert(1, "m", NULL, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_units_convert(1, "m", "m", NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_units_strip(1, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_units_is_dimensionless(NULL, &dimensionless) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_units_is_dimensionless("m", NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_units_is_dimensionless("unknown", &dimensionless) !=
+            LMMC_STATUS_INVALID_ARGUMENT) {
+        fprintf(stderr, "std.units invalid arguments not rejected\n");
+        return 1;
+    }
 
     if (lmmc_lsr_stats_mean(values, 4, &out) != LMMC_STATUS_OK ||
         !close_real(out, 2.5)) {
