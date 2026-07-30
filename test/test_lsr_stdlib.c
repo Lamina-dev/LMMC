@@ -321,6 +321,29 @@ int main(void)
         fprintf(stderr, "std.math.exp overflow did not report numeric failure\n");
         return 1;
     }
+    if (lmmc_lsr_math_sin(0, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_cos(0, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_tan(0, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_pow(2, 3, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_asin(0, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_acos(0, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_atan(0, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_sqrt(4, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_exp(1, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_ln(1, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_log(1, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_log_base(8, 2, NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_log10(10, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_abs(-1, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_floor(1, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_ceil(1, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_round(1, NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_math_clamp(1, 0, 2, NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT) {
+        fprintf(stderr, "std.math scalar null outputs not rejected\n");
+        return 1;
+    }
 
     if (lmmc_lsr_math_clamp(5, 1, 3, &out) != LMMC_STATUS_OK ||
         !close_real(out, 3)) {
