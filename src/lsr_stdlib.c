@@ -608,7 +608,9 @@ lmmc_status_t lmmc_lsr_stats_mean(const lmmc_real_t* values, size_t count,
 {
     lmmc_vec_t view;
     lmmc_real_t value;
-    lmmc_status_t status = lmmc_lsr_wrap_const_vec(values, count, &view);
+    lmmc_status_t status;
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    status = lmmc_lsr_wrap_const_vec(values, count, &view);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_vec_mean(&view, &value);
     if (status != LMMC_STATUS_OK) return status;
@@ -620,7 +622,9 @@ lmmc_status_t lmmc_lsr_stats_median(const lmmc_real_t* values, size_t count,
 {
     lmmc_vec_t view;
     lmmc_real_t value;
-    lmmc_status_t status = lmmc_lsr_wrap_const_vec(values, count, &view);
+    lmmc_status_t status;
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    status = lmmc_lsr_wrap_const_vec(values, count, &view);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_vec_median(&view, &value);
     if (status != LMMC_STATUS_OK) return status;
@@ -632,7 +636,9 @@ lmmc_status_t lmmc_lsr_stats_var(const lmmc_real_t* values, size_t count,
 {
     lmmc_vec_t view;
     lmmc_real_t value;
-    lmmc_status_t status = lmmc_lsr_wrap_const_vec(values, count, &view);
+    lmmc_status_t status;
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    status = lmmc_lsr_wrap_const_vec(values, count, &view);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_vec_variance_sample(&view, &value);
     if (status != LMMC_STATUS_OK) return status;
@@ -644,7 +650,9 @@ lmmc_status_t lmmc_lsr_stats_std(const lmmc_real_t* values, size_t count,
 {
     lmmc_vec_t view;
     lmmc_real_t value;
-    lmmc_status_t status = lmmc_lsr_wrap_const_vec(values, count, &view);
+    lmmc_status_t status;
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    status = lmmc_lsr_wrap_const_vec(values, count, &view);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_vec_stddev_sample(&view, &value);
     if (status != LMMC_STATUS_OK) return status;
@@ -657,6 +665,7 @@ lmmc_status_t lmmc_lsr_stats_quantile(const lmmc_real_t* values, size_t count,
     lmmc_vec_t view;
     lmmc_real_t value;
     lmmc_status_t status;
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
     if (!lmmc_lsr_real_is_finite(q)) return LMMC_STATUS_NUMERICAL_FAILURE;
     if (q < (lmmc_real_t)0 || q > (lmmc_real_t)1) {
         return LMMC_STATUS_OUT_OF_RANGE;
@@ -676,7 +685,9 @@ lmmc_status_t lmmc_lsr_stats_cov(const lmmc_real_t* x,
     lmmc_vec_t x_view;
     lmmc_vec_t y_view;
     lmmc_real_t value;
-    lmmc_status_t status = lmmc_lsr_wrap_const_vec(x, count, &x_view);
+    lmmc_status_t status;
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    status = lmmc_lsr_wrap_const_vec(x, count, &x_view);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_lsr_wrap_const_vec(y, count, &y_view);
     if (status != LMMC_STATUS_OK) return status;
@@ -693,7 +704,9 @@ lmmc_status_t lmmc_lsr_stats_corr(const lmmc_real_t* x,
     lmmc_vec_t x_view;
     lmmc_vec_t y_view;
     lmmc_real_t value;
-    lmmc_status_t status = lmmc_lsr_wrap_const_vec(x, count, &x_view);
+    lmmc_status_t status;
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    status = lmmc_lsr_wrap_const_vec(x, count, &x_view);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_lsr_wrap_const_vec(y, count, &y_view);
     if (status != LMMC_STATUS_OK) return status;

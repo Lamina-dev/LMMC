@@ -451,6 +451,54 @@ int main(void)
         fprintf(stderr, "std.stats.corr mismatch\n");
         return 1;
     }
+    if (lmmc_lsr_stats_mean(values, 0, &out) != LMMC_STATUS_EMPTY_INPUT ||
+        lmmc_lsr_stats_median(values, 0, &out) != LMMC_STATUS_EMPTY_INPUT ||
+        lmmc_lsr_stats_var(values, 0, &out) != LMMC_STATUS_EMPTY_INPUT ||
+        lmmc_lsr_stats_std(values, 0, &out) != LMMC_STATUS_EMPTY_INPUT ||
+        lmmc_lsr_stats_quantile(values, 0, 0.5, &out) !=
+            LMMC_STATUS_EMPTY_INPUT ||
+        lmmc_lsr_stats_cov(values, scaled_values, 0, &out) !=
+            LMMC_STATUS_EMPTY_INPUT ||
+        lmmc_lsr_stats_corr(values, scaled_values, 0, &out) !=
+            LMMC_STATUS_EMPTY_INPUT) {
+        fprintf(stderr, "std.stats empty input not rejected\n");
+        return 1;
+    }
+    if (lmmc_lsr_stats_mean(NULL, 4, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_mean(values, 4, NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_median(NULL, 4, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_median(values, 4, NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_var(NULL, 4, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_var(values, 4, NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_std(NULL, 4, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_std(values, 4, NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_quantile(NULL, 4, 0.5, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_quantile(values, 4, 0.5, NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_cov(NULL, scaled_values, 4, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_cov(values, NULL, 4, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_cov(values, scaled_values, 4, NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_corr(NULL, scaled_values, 4, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_corr(values, NULL, 4, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_corr(values, scaled_values, 4, NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT) {
+        fprintf(stderr, "std.stats invalid arguments not rejected\n");
+        return 1;
+    }
     if (lmmc_lsr_stats_mean(nonfinite_values, 3, &out) !=
             LMMC_STATUS_NUMERICAL_FAILURE ||
         lmmc_lsr_stats_median(nonfinite_values, 3, &out) !=
