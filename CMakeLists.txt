@@ -73,12 +73,14 @@ endif()
 
 set(LMMC_SOURCES
     src/blas_backend.c
+    src/complex.c
     src/dense.c
     src/eigen.c
     src/fft.c
     src/init.c
     src/interp.c
     src/itersolve.c
+    src/lsr_stdlib.c
     src/itersolve_minres_lsqr.c
     src/linear_algebra.c
     src/nonlinear.c
@@ -110,8 +112,9 @@ endif()
 foreach(_lmmc_target IN LISTS LMMC_LIB_TARGETS)
     target_include_directories(${_lmmc_target}
         PUBLIC
-            ${CMAKE_CURRENT_SOURCE_DIR}/include
-            ${LAMMP_INCLUDE_DIR}
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<BUILD_INTERFACE:${LAMMP_INCLUDE_DIR}>
+            $<INSTALL_INTERFACE:include>
     )
 endforeach()
 
@@ -186,10 +189,16 @@ function(lmmc_copy_lammp_runtime target_name)
         endif()
 
         set(_lammp_runtime_dll "${_lammp_dist_root}/bin/${_lammp_cfg_dir}/${_lammp_runtime_base}.dll")
+        if(NOT EXISTS "${_lammp_runtime_dll}")
+            set(_lammp_runtime_prefixed_dll "${_lammp_dist_root}/bin/${_lammp_cfg_dir}/lib${_lammp_runtime_base}.dll")
+            if(EXISTS "${_lammp_runtime_prefixed_dll}")
+                set(_lammp_runtime_dll "${_lammp_runtime_prefixed_dll}")
+            endif()
+        endif()
         add_custom_command(TARGET ${target_name} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${_lammp_runtime_dll}"
-                "$<TARGET_FILE_DIR:${target_name}>"
+                "$<TARGET_FILE_DIR:${target_name}>/${_lammp_runtime_base}.dll"
             COMMENT "LMMC: copy ${_lammp_runtime_base}.dll for ${target_name}"
             VERBATIM
         )

@@ -56,14 +56,12 @@ void lmmc_deinit(void) {
         atomic_store_explicit(&lmmc_alloc_count, 0, memory_order_relaxed);
 #endif /* LMMC_DEBUG_LEAKS */
 
-        /* 释放栈分配器 */
-        lmmp_stack_reset(0);
-
         /* 释放全局堆资源 */
         lmmp_global_deinit();
     }
 }
 
 void lmmc_stack_reset(size_t size) {
-    lmmp_stack_reset(size);
+    lmmp_stack_deinit();
+    lmmp_stack_init(size);
 }

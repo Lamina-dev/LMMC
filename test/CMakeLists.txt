@@ -150,3 +150,5 @@ add_lmmc_test(lmmc_test_sparse_formats test_sparse_formats.c)
 add_lmmc_test(lmmc_test_random_dist_stats test_random_dist_stats.c)
 
 add_lmmc_test(lmmc_test_mat_inv_trisolve test_mat_inv_trisolve.c)
+
+add_lmmc_test(lmmc_test_lsr_stdlib test_lsr_stdlib.c)
