@@ -402,7 +402,7 @@ int main(void)
 
     srand((unsigned int)time(NULL));
 
-    printf("=== Property 3: 向量 axpy 线性组合正确性 ===\n");
+    printf("=== 向量 axpy 线性组合正确性 ===\n");
 
     if (test_axpy_correctness()) { rc = 1; printf("  [FAIL] axpy correctness\n"); }
     else { printf("  [PASS] axpy correctness (%d iterations)\n", NUM_ITERATIONS); }
@@ -413,7 +413,7 @@ int main(void)
     if (test_axpy_alpha_zero()) { rc = 1; printf("  [FAIL] axpy alpha=0\n"); }
     else { printf("  [PASS] axpy alpha=0\n"); }
 
-    printf("\n=== Property 4: 向量范数非负性与一致性 ===\n");
+    printf("\n=== 向量范数非负性与一致性 ===\n");
 
     if (test_norm_properties()) { rc = 1; printf("  [FAIL] norm properties\n"); }
     else { printf("  [PASS] norm properties (%d iterations)\n", NUM_ITERATIONS); }
@@ -424,7 +424,7 @@ int main(void)
     if (test_norm_single_element()) { rc = 1; printf("  [FAIL] norm single element\n"); }
     else { printf("  [PASS] norm single element\n"); }
 
-    printf("\n=== Property 5: 向量 copy/swap 数据保持 ===\n");
+    printf("\n=== 向量 copy/swap 数据保持 ===\n");
 
     if (test_copy_correctness()) { rc = 1; printf("  [FAIL] copy correctness\n"); }
     else { printf("  [PASS] copy correctness (%d iterations)\n", NUM_ITERATIONS); }

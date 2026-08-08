@@ -294,7 +294,7 @@ int main(void) {
     lmmc_init();
 
     printf("=== Property Test: Tensor Contraction ===\n");
-    printf("Property 7: output matches unrolled nested-loop reference\n");
+    printf("output matches unrolled nested-loop reference\n");
     printf("Tolerance: 1e-10 * (1 + ||a||_F * ||b||_F)\n");
 
     /* Create RNG */

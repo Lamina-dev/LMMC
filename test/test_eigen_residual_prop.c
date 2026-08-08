@@ -188,7 +188,7 @@ int main(void) {
     int total_trials = 0;
 
     printf("=== Property Test: Eigenpair Residual ===\n");
-    printf("Property 4: ||A*v - lambda*v||_2 <= 1e-8 * (1 + ||A||_F) * ||v||_2\n");
+    printf("||A*v - lambda*v||_2 <= 1e-8 * (1 + ||A||_F) * ||v||_2\n");
 
     /* Create RNG with time-based seed for randomness */
     st = lmmc_rng_create(&rng);

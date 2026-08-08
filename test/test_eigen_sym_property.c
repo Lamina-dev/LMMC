@@ -197,7 +197,7 @@ int main(void)
 
     srand((unsigned int)time(NULL));
 
-    printf("=== Property 8: 对称特征值分解重构 ===\n");
+    printf("=== 对称特征值分解重构 ===\n");
 
     if (test_eigen_sym_property()) {
         rc = 1;

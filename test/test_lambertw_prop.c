@@ -235,7 +235,7 @@ int main(void)
     size_t n_passed = 0;
     size_t n_failed = 0;
 
-    printf("=== Property 2: Lambert W identity ===\n");
+    printf("=== Lambert W identity ===\n");
     printf("Verify W(z) * exp(W(z)) == z within 1e-10 * (1 + |z|)\n\n");
 
     rng_seed(RNG_SEED);

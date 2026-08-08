@@ -270,7 +270,7 @@ int main(void)
 
     srand((unsigned int)time(NULL));
 
-    printf("=== Property 6: 矩阵加减法互逆性 ===\n");
+    printf("=== 矩阵加减法互逆性 ===\n");
 
     if (test_mat_add_sub_inverse()) { rc = 1; printf("  [FAIL] mat_add then mat_sub inverse\n"); }
     else { printf("  [PASS] mat_add then mat_sub inverse\n"); }
@@ -278,7 +278,7 @@ int main(void)
     if (test_mat_sub_add_inverse()) { rc = 1; printf("  [FAIL] mat_sub then mat_add inverse\n"); }
     else { printf("  [PASS] mat_sub then mat_add inverse\n"); }
 
-    printf("\n=== Property 7: 单位矩阵性质 ===\n");
+    printf("\n=== 单位矩阵性质 ===\n");
 
     if (test_identity_structure()) { rc = 1; printf("  [FAIL] identity structure\n"); }
     else { printf("  [PASS] identity structure\n"); }

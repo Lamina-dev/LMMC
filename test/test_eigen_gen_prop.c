@@ -418,7 +418,7 @@ int main(void)
     size_t n_passed = 0;
     size_t n_failed = 0;
 
-    printf("=== Property 9: 一般特征值方程验证 ===\n");
+    printf("=== 一般特征值方程验证 ===\n");
 
     for (i = 0; i < n_tests; i++) {
         printf("[%zu/%zu] %s ... ", i + 1, n_tests, tests[i].name);

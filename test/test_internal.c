@@ -427,7 +427,7 @@ int main(void)
 
     srand((unsigned int)time(NULL));
 
-    printf("=== Property 1: Integer overflow detection correctness ===\n");
+    printf("=== Integer overflow detection correctness ===\n");
 
     if (test_safe_mul_overflow()) { rc = 1; printf("  [FAIL] safe_mul overflow\n"); }
     else { printf("  [PASS] safe_mul overflow\n"); }
@@ -441,7 +441,7 @@ int main(void)
     if (test_safe_add_normal()) { rc = 1; printf("  [FAIL] safe_add normal\n"); }
     else { printf("  [PASS] safe_add normal\n"); }
 
-    printf("\n=== Property 2: Real utility function mathematical properties ===\n");
+    printf("\n=== Real utility function mathematical properties ===\n");
 
     if (test_abs_property()) { rc = 1; printf("  [FAIL] abs property\n"); }
     else { printf("  [PASS] abs property\n"); }

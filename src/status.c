@@ -33,6 +33,14 @@ const char* lmmc_status_string(lmmc_status_t status) {
             return "warning: max depth reached";
         case LMMC_STATUS_EMPTY_INPUT:
             return "empty input";
+        case LMMC_STATUS_UNIT_STRIP_TYPE_MISMATCH:
+            return "unit strip type mismatch";
+        case LMMC_STATUS_UNIT_STRIP_OVERFLOW:
+            return "unit strip overflow";
+        case LMMC_STATUS_UNIT_STRIP_INVALID:
+            return "unit strip invalid";
+        case LMMC_STATUS_UNIT_STRIP_LEGACY_SYNTAX:
+            return "unit strip legacy syntax";
         default:
             return "unknown";
     }

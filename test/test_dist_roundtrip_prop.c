@@ -455,7 +455,7 @@ int main(void)
     size_t n_passed = 0;
     size_t n_failed = 0;
 
-    printf("=== Property 10: Distribution round-trip ===\n");
+    printf("=== Distribution round-trip ===\n");
     printf("Verify |quantile(cdf(x)) - x| <= 1e-8 for continuous distributions\n");
     printf("Test erf accuracy against high-precision reference for x in [-5, 5]\n\n");
 

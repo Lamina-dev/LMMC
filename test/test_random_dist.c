@@ -442,7 +442,7 @@ int main(void)
 
     srand((unsigned int)time(NULL));
 
-    printf("=== Property 23: 均匀分布范围约束 ===\n");
+    printf("=== 均匀分布范围约束 ===\n");
 
     if (test_uniform_range_single()) { rc = 1; printf("  [FAIL] uniform range (single)\n"); }
     else { printf("  [PASS] uniform range single (%d configs x %d samples)\n", NUM_CONFIGS, NUM_SAMPLES); }
@@ -456,7 +456,7 @@ int main(void)
     if (test_uniform_range_large_interval()) { rc = 1; printf("  [FAIL] uniform large interval\n"); }
     else { printf("  [PASS] uniform large interval (%d samples)\n", NUM_SAMPLES); }
 
-    printf("\n=== Property 24: 指数分布非负性 ===\n");
+    printf("\n=== 指数分布非负性 ===\n");
 
     if (test_exponential_nonneg()) { rc = 1; printf("  [FAIL] exponential non-negative\n"); }
     else { printf("  [PASS] exponential non-negative (%d configs x %d samples)\n", NUM_CONFIGS, NUM_SAMPLES); }
@@ -467,7 +467,7 @@ int main(void)
     if (test_exponential_nonneg_large_rate()) { rc = 1; printf("  [FAIL] exponential large rate\n"); }
     else { printf("  [PASS] exponential large rate (%d samples)\n", NUM_SAMPLES); }
 
-    printf("\n=== Property 25: Shuffle 保持元素集合不变 ===\n");
+    printf("\n=== Shuffle 保持元素集合不变 ===\n");
 
     if (test_shuffle_preserves_elements_real()) { rc = 1; printf("  [FAIL] shuffle preserves (real)\n"); }
     else { printf("  [PASS] shuffle preserves elements real (%d configs)\n", NUM_CONFIGS); }

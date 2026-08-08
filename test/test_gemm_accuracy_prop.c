@@ -198,7 +198,7 @@ int main(void) {
     int total_trials = 0;
 
     printf("=== Property Test: GEMM Accuracy ===\n");
-    printf("Property 6: GEMM result matches naive triple-loop within tolerance\n");
+    printf("GEMM result matches naive triple-loop within tolerance\n");
     printf("Tolerance: 1e-10 * (1 + |alpha| * ||A||_F * ||B||_F + |beta| * ||C0||_F)\n");
 
     /* Create RNG with time-based seed */

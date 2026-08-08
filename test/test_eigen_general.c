@@ -364,7 +364,7 @@ int main(void)
     size_t n_failed = 0;
 
     printf("=== General Eigenvalue Decomposition Property Tests ===\n");
-    printf("Property 9: Validates Requirements 6.1, 6.4\n\n");
+    printf("General eigenvalue decomposition checks\n\n");
 
     for (size_t i = 0; i < n_tests; i++) {
         printf("[%zu/%zu] %s ... ", i + 1, n_tests, tests[i].name);

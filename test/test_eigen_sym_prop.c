@@ -179,7 +179,7 @@ int main(void)
 
     srand(0xC0FFEEu);
 
-    printf("=== Property 8: 对称特征值分解重构 ===\n");
+    printf("=== 对称特征值分解重构 ===\n");
     printf("  Iterations: %d, sizes 2x2..6x6\n\n", NUM_ITERATIONS);
 
     if (test_eigen_sym_property()) {

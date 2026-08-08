@@ -261,7 +261,7 @@ int main(void)
 
     srand((unsigned int)time(NULL));
 
-    printf("=== Property 22: RNG Reproducibility ===\n");
+    printf("=== RNG Reproducibility ===\n");
 
     printf("--- Same seed produces identical sequences ---\n");
     if (test_multiple_specific_seeds()) { rc = 1; printf("  [FAIL] specific seeds\n"); }

@@ -354,12 +354,6 @@ static void test_cholesky_arrowhead_fillin(void)
     lmmc_sparse_destroy(&A);
 }
 
-/* ==========================================================================
- * TEST: Destroy after failed factorization (non-SPD for Cholesky)
- *
- * Verifies Requirement 4.7: after a failed factorization, the context
- * remains in a destroyable state.
- * ========================================================================== */
 static void test_destroy_after_failed_cholesky(void)
 {
     printf("Test: Destroy after failed Cholesky (non-SPD matrix)\n");
@@ -407,11 +401,6 @@ static void test_destroy_after_failed_cholesky(void)
     lmmc_sparse_destroy(&A);
 }
 
-/* ==========================================================================
- * TEST: Destroy after failed LU factorization (singular matrix)
- *
- * Verifies Requirement 4.7: context is destroyable after failure.
- * ========================================================================== */
 static void test_destroy_after_failed_lu(void)
 {
     printf("Test: Destroy after failed LU (singular matrix)\n");

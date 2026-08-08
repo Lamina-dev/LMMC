@@ -334,7 +334,7 @@ int main(void)
     size_t n_passed = 0;
     size_t n_failed = 0;
 
-    printf("=== Property 1: Round-trip FFT ===\n");
+    printf("=== Round-trip FFT ===\n");
     printf("Verify forward then inverse recovers input within 1e-9 * (1 + max|x|)\n");
     printf("Test single-sinusoid spectral purity\n\n");
 

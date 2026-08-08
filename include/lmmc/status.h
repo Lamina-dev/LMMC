@@ -32,7 +32,11 @@ typedef enum {
     LMMC_STATUS_OUT_OF_RANGE = 9,          /**< 数值超出允许范围。 */
     LMMC_STATUS_INDEX_OUT_OF_BOUNDS = 10,  /**< 数组 / 矩阵下标越界。 */
     LMMC_STATUS_WARNING_MAX_DEPTH = 11,    /**< 自适应算法达到最大递归深度（结果可能仍可用）。 */
-    LMMC_STATUS_EMPTY_INPUT = 12           /**< 输入集合为空。 */
+    LMMC_STATUS_EMPTY_INPUT = 12,          /**< 输入集合为空。 */
+    LMMC_STATUS_UNIT_STRIP_TYPE_MISMATCH = 13, /**< 量纲剥离作用于非数值类型。 */
+    LMMC_STATUS_UNIT_STRIP_OVERFLOW = 14,  /**< 量纲剥离发生表示范围溢出。 */
+    LMMC_STATUS_UNIT_STRIP_INVALID = 15,   /**< 量纲剥离的单位转换阶段失败。 */
+    LMMC_STATUS_UNIT_STRIP_LEGACY_SYNTAX = 16 /**< 使用了废弃的量纲剥离语法。 */
 } lmmc_status_t;
 
 /**
