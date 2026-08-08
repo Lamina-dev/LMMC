@@ -188,15 +188,6 @@ static int test_rng_uniformity_chi_squared(void)
 
 /* ===================== Property Test: Unique Seeds ===================== */
 
-/**
- * @brief Verify two RNGs created without explicit seed within the same process
- *        produce different sequences in the first 16 samples.
- *
- * This tests Requirement 9.6: even within the same wall-clock second,
- * two RNGs must produce different output.
- *
- * Returns 0 on success, 1 on failure.
- */
 static int test_rng_unique_sequences(void)
 {
     lmmc_rng_t* rng1 = NULL;

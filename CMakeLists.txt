@@ -118,7 +118,7 @@ foreach(_lmmc_target IN LISTS LMMC_LIB_TARGETS)
     )
 endforeach()
 
-# Optional BLAS/LAPACK acceleration (Requirement 18)
+# Optional BLAS/LAPACK acceleration
 option(LMMC_USE_BLAS "Enable external BLAS/LAPACK acceleration" OFF)
 if(LMMC_USE_BLAS)
     find_package(BLAS REQUIRED)
