@@ -1339,6 +1339,97 @@ int main(void)
         fprintf(stderr, "std.stats.corr zero variance was not diagnosed\n");
         return 1;
     }
+    if (lmmc_lsr_stats_normal_pdf(0, 0, 1, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 0.3989422804014327) ||
+        lmmc_lsr_stats_normal_cdf(0, 0, 1, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 0.5) ||
+        lmmc_lsr_stats_normal_quantile(0.5, 0, 1, &out) !=
+            LMMC_STATUS_OK ||
+        !close_real(out, 0.0)) {
+        fprintf(stderr, "std.stats normal distribution mismatch\n");
+        return 1;
+    }
+    if (lmmc_lsr_stats_t_pdf(0, 1, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 1.0 / LMMC_PI) ||
+        lmmc_lsr_stats_t_cdf(0, 1, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 0.5) ||
+        lmmc_lsr_stats_t_quantile(0.5, 1, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 0.0)) {
+        fprintf(stderr, "std.stats t distribution mismatch\n");
+        return 1;
+    }
+    if (lmmc_lsr_stats_chi2_pdf(2, 2, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 0.5 * exp(-1.0)) ||
+        lmmc_lsr_stats_chi2_cdf(0, 2, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 0.0) ||
+        lmmc_lsr_stats_chi2_quantile(1.0 - exp(-1.0), 2, &out) !=
+            LMMC_STATUS_OK ||
+        fabs((double)(out - 2.0)) > 1e-8) {
+        fprintf(stderr, "std.stats chi2 distribution mismatch\n");
+        return 1;
+    }
+    if (lmmc_lsr_stats_f_pdf(1, 2, 2, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 0.25) ||
+        lmmc_lsr_stats_f_cdf(1, 2, 2, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 0.5) ||
+        lmmc_lsr_stats_f_quantile(0.5, 2, 2, &out) != LMMC_STATUS_OK ||
+        fabs((double)(out - 1.0)) > 1e-8) {
+        fprintf(stderr, "std.stats f distribution mismatch\n");
+        return 1;
+    }
+    if (lmmc_lsr_stats_gamma_pdf(2, 1, 2, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 0.5 * exp(-1.0)) ||
+        lmmc_lsr_stats_gamma_cdf(0, 1, 2, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 0.0) ||
+        lmmc_lsr_stats_gamma_quantile(1.0 - exp(-1.0), 1, 2, &out) !=
+            LMMC_STATUS_OK ||
+        fabs((double)(out - 2.0)) > 1e-8) {
+        fprintf(stderr, "std.stats gamma distribution mismatch\n");
+        return 1;
+    }
+    if (lmmc_lsr_stats_beta_pdf(0.5, 1, 1, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 1.0) ||
+        lmmc_lsr_stats_beta_cdf(0.5, 1, 1, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 0.5) ||
+        lmmc_lsr_stats_beta_quantile(0.5, 1, 1, &out) != LMMC_STATUS_OK ||
+        fabs((double)(out - 0.5)) > 1e-8) {
+        fprintf(stderr, "std.stats beta distribution mismatch\n");
+        return 1;
+    }
+    if (lmmc_lsr_stats_binomial_pmf(2, 4, 0.5, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 0.375) ||
+        lmmc_lsr_stats_binomial_cdf(4, 4, 0.5, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 1.0) ||
+        lmmc_lsr_stats_poisson_pmf(2, 2, &out) != LMMC_STATUS_OK ||
+        !close_real(out, 2.0 * exp(-2.0)) ||
+        lmmc_lsr_stats_poisson_cdf(0, 1, &out) != LMMC_STATUS_OK ||
+        !close_real(out, exp(-1.0))) {
+        fprintf(stderr, "std.stats discrete distribution mismatch\n");
+        return 1;
+    }
+    if (lmmc_lsr_stats_normal_pdf(0, 0, 0, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_normal_quantile(0, 0, 1, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_t_pdf(0, 0, &out) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_stats_chi2_pdf(0, 1, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_stats_f_pdf(0, 1, 2, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_stats_gamma_pdf(0, 0.5, 1, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_stats_beta_pdf(0, 0.5, 1, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_stats_binomial_pmf(0, 1, NAN, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_stats_poisson_pmf(0, NAN, &out) !=
+            LMMC_STATUS_NUMERICAL_FAILURE ||
+        lmmc_lsr_stats_poisson_pmf(0, 1, NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT) {
+        fprintf(stderr, "std.stats distribution failures not diagnosed\n");
+        return 1;
+    }
     if (lmmc_lsr_stats_var(single_value, 1, &out) !=
             LMMC_STATUS_INVALID_ARGUMENT ||
         lmmc_lsr_stats_std(single_value, 1, &out) !=

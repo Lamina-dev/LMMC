@@ -307,6 +307,65 @@ lmmc_status_t lmmc_lsr_stats_corr(const lmmc_real_t* x,
                                   const lmmc_real_t* y,
                                   size_t count,
                                   lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_normal_pdf(lmmc_real_t x, lmmc_real_t mean,
+                                        lmmc_real_t stddev,
+                                        lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_normal_cdf(lmmc_real_t x, lmmc_real_t mean,
+                                        lmmc_real_t stddev,
+                                        lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_normal_quantile(lmmc_real_t p,
+                                             lmmc_real_t mean,
+                                             lmmc_real_t stddev,
+                                             lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_t_pdf(lmmc_real_t x, lmmc_real_t df,
+                                   lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_t_cdf(lmmc_real_t x, lmmc_real_t df,
+                                   lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_t_quantile(lmmc_real_t p, lmmc_real_t df,
+                                        lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_chi2_pdf(lmmc_real_t x, lmmc_real_t df,
+                                      lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_chi2_cdf(lmmc_real_t x, lmmc_real_t df,
+                                      lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_chi2_quantile(lmmc_real_t p, lmmc_real_t df,
+                                           lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_f_pdf(lmmc_real_t x, lmmc_real_t df1,
+                                   lmmc_real_t df2, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_f_cdf(lmmc_real_t x, lmmc_real_t df1,
+                                   lmmc_real_t df2, lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_f_quantile(lmmc_real_t p, lmmc_real_t df1,
+                                        lmmc_real_t df2,
+                                        lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_gamma_pdf(lmmc_real_t x, lmmc_real_t shape,
+                                       lmmc_real_t scale,
+                                       lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_gamma_cdf(lmmc_real_t x, lmmc_real_t shape,
+                                       lmmc_real_t scale,
+                                       lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_gamma_quantile(lmmc_real_t p,
+                                            lmmc_real_t shape,
+                                            lmmc_real_t scale,
+                                            lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_beta_pdf(lmmc_real_t x, lmmc_real_t alpha,
+                                      lmmc_real_t beta,
+                                      lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_beta_cdf(lmmc_real_t x, lmmc_real_t alpha,
+                                      lmmc_real_t beta,
+                                      lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_beta_quantile(lmmc_real_t p,
+                                           lmmc_real_t alpha,
+                                           lmmc_real_t beta,
+                                           lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_binomial_pmf(size_t k, size_t n,
+                                          lmmc_real_t p,
+                                          lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_binomial_cdf(size_t k, size_t n,
+                                          lmmc_real_t p,
+                                          lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_poisson_pmf(size_t k, lmmc_real_t lambda,
+                                         lmmc_real_t* out);
+lmmc_status_t lmmc_lsr_stats_poisson_cdf(size_t k, lmmc_real_t lambda,
+                                         lmmc_real_t* out);
 
 lmmc_status_t lmmc_lsr_random_seed(lmmc_rng_t* rng, uint64_t seed);
 lmmc_status_t lmmc_lsr_random_rand(lmmc_rng_t* rng, lmmc_real_t* out);
