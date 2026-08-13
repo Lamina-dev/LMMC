@@ -119,6 +119,11 @@ target_include_directories(lmmc
         $<INSTALL_INTERFACE:include>
 )
 
+# LAMMP selects MSVC import declarations through this platform define.
+if(MSVC)
+    target_compile_definitions(lmmc PRIVATE LAMMP_WINDOWS)
+endif()
+
 # Optional BLAS/LAPACK acceleration
 option(LMMC_USE_BLAS "Enable external BLAS/LAPACK acceleration" OFF)
 if(LMMC_USE_BLAS)

@@ -800,3 +800,92 @@ lmmc_status_t lmmc_double_nearly_equal(lmmc_real_t a, lmmc_real_t b, int* out_eq
     LMMC_REAL_CLEAR(&rel_tol);
     return st;
 }
+
+lmmc_status_t lmmc_asin(lmmc_real_t x, lmmc_real_t* out) {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (x < -1.0 || x > 1.0) return LMMC_STATUS_OUT_OF_RANGE;
+    *out = asin(x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_acos(lmmc_real_t x, lmmc_real_t* out) {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (x < -1.0 || x > 1.0) return LMMC_STATUS_OUT_OF_RANGE;
+    *out = acos(x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_atan(lmmc_real_t x, lmmc_real_t* out) {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out = atan(x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_sinh(lmmc_real_t x, lmmc_real_t* out) {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out = sinh(x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_cosh(lmmc_real_t x, lmmc_real_t* out) {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out = cosh(x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_tanh(lmmc_real_t x, lmmc_real_t* out) {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out = tanh(x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_asinh(lmmc_real_t x, lmmc_real_t* out) {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out = asinh(x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_acosh(lmmc_real_t x, lmmc_real_t* out) {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (x < 1.0) return LMMC_STATUS_OUT_OF_RANGE;
+    *out = acosh(x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_atanh(lmmc_real_t x, lmmc_real_t* out) {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (x <= -1.0 || x >= 1.0) return LMMC_STATUS_OUT_OF_RANGE;
+    *out = atanh(x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_pow(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out) {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (x < 0.0 && floor(y) != y) return LMMC_STATUS_OUT_OF_RANGE;
+    *out = pow(x, y);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_ceil(lmmc_real_t x, lmmc_real_t* out) {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out = ceil(x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_floor(lmmc_real_t x, lmmc_real_t* out) {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out = floor(x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_round(lmmc_real_t x, lmmc_real_t* out) {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out = round(x);
+    return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_trunc(lmmc_real_t x, lmmc_real_t* out) {
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out = trunc(x);
+    return LMMC_STATUS_OK;
+}

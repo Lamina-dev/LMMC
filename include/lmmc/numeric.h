@@ -43,12 +43,16 @@ extern "C" {
 #define LMMC_DEFAULT_REL_TOL 1e-10
 #endif
 
+/* ===================== 特殊值生成 ===================== */
+
 /** @brief 写入 IEEE-754 正无穷。 */
 lmmc_status_t lmmc_inf(lmmc_real_t* out_inf);
 /** @brief 写入 IEEE-754 NaN。 */
 lmmc_status_t lmmc_nan(lmmc_real_t* out_nan);
 /** @brief 写入机器精度（1 与下一个可表示数的差）。 */
 lmmc_status_t lmmc_eps(lmmc_real_t* out_eps);
+
+/* ===================== 浮点分类 ===================== */
 
 /** @brief 检测是否为 NaN ，结果写入 @c *out_isnan （0/1）。 */
 lmmc_status_t lmmc_isnan(lmmc_real_t x, int* out_isnan);
@@ -59,12 +63,16 @@ lmmc_status_t lmmc_isfinite(lmmc_real_t x, int* out_isfinite);
 /** @brief 检测符号位（含 -0 ）。 */
 lmmc_status_t lmmc_signbit(lmmc_real_t x, int* out_signbit);
 
+/* ===================== 三角与几何 ===================== */
+
 /** @brief 计算 @f$\mathrm{atan2}(y,x)@f$ 。 */
 lmmc_status_t lmmc_atan2(lmmc_real_t y, lmmc_real_t x, lmmc_real_t* out_res);
 /** @brief 同时计算 sin/cos （某些平台可加速）。 */
 lmmc_status_t lmmc_sincos(lmmc_real_t x, lmmc_real_t* out_sin, lmmc_real_t* out_cos);
 /** @brief 计算 @f$\sqrt{x^2+y^2}@f$ ，避免溢出。 */
 lmmc_status_t lmmc_hypot(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out_res);
+
+/* ===================== 指数与对数补充 ===================== */
 
 /** @brief 计算 @f$2^x@f$ 。 */
 lmmc_status_t lmmc_exp2(lmmc_real_t x, lmmc_real_t* out_res);
@@ -75,6 +83,8 @@ lmmc_status_t lmmc_expm1(lmmc_real_t x, lmmc_real_t* out_res);
 /** @brief 计算 @f$\log(1+x)@f$ ，对小 x 更精确。 */
 lmmc_status_t lmmc_log1p(lmmc_real_t x, lmmc_real_t* out_res);
 
+/* ===================== 浮点分解 ===================== */
+
 /** @brief 拆分整数部分与小数部分：x = iptr + frac 。 */
 lmmc_status_t lmmc_split_int_frac(lmmc_real_t x, lmmc_real_t* out_iptr, lmmc_real_t* out_frac);
 /** @brief 计算 @f$x \mod y@f$ （fmod 语义）。 */
@@ -83,6 +93,8 @@ lmmc_status_t lmmc_fmod(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out_res);
 lmmc_status_t lmmc_ldexp(lmmc_real_t x, int exp, lmmc_real_t* out_res);
 /** @brief 计算 @c x 朝 @c y 方向的下一个可表示浮点数。 */
 lmmc_status_t lmmc_nextafter(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out_res);
+
+/* ===================== 近似相等比较 ===================== */
 
 /**
  * @brief 简单 epsilon 比较：@f$|a-b| \le \epsilon@f$ 。
@@ -117,6 +129,8 @@ lmmc_status_t lmmc_double_nearly_equal_tol(
 
 /** @brief 使用默认容差的近似相等比较，等价于以 ::LMMC_DEFAULT_ABS_TOL / ::LMMC_DEFAULT_REL_TOL 调用 ::lmmc_double_nearly_equal_tol 。 */
 lmmc_status_t lmmc_double_nearly_equal(lmmc_real_t a, lmmc_real_t b, int* out_equal);
+
+/* ===================== 离散傅里叶变换（radix-4） ===================== */
 
 /**
  * @brief 计算不小于 @p n 的最近 4 的幂，用于 FFT 长度对齐。
@@ -165,6 +179,8 @@ lmmc_status_t lmmc_fft_radix4_pad_into(
     const lmmc_real_t* real_in, const lmmc_real_t* imag_in, size_t n,
     lmmc_real_t* real_out, lmmc_real_t* imag_out, size_t* out_nfft);
 
+/* ===================== 通用 N 点 FFT ===================== */
+
 /**
  * @brief 计算任意长度 N 点 DFT（正变换或逆变换）。
  *
@@ -194,6 +210,8 @@ lmmc_status_t lmmc_fft_forward(lmmc_real_t* real, lmmc_real_t* imag, size_t n);
 
 /** @brief 等价于 ::lmmc_fft(real, imag, n, 1) 。 */
 lmmc_status_t lmmc_fft_inverse(lmmc_real_t* real, lmmc_real_t* imag, size_t n);
+
+/* ===================== 特殊函数（误差函数、伽马函数等） ===================== */
 
 /**
  * @brief 计算误差函数 @f$\mathrm{erf}(x) = \frac{2}{\sqrt{\pi}} \int_0^x e^{-t^2} dt@f$ 。
@@ -261,6 +279,170 @@ lmmc_status_t lmmc_beta(lmmc_real_t a, lmmc_real_t b, lmmc_real_t* out);
  * @return LMMC_STATUS_OK 成功；LMMC_STATUS_INVALID_ARGUMENT 若 x ≤ 0 或 out 为 NULL。
  */
 lmmc_status_t lmmc_digamma(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算反正弦 @f$\arcsin(x)@f$ 。
+ *
+ * @param[in]  x   输入值，必须满足 @f$|x| \le 1@f$ 。
+ * @param[out] out 输出 @f$\arcsin(x)@f$ ，结果在 @f$[-\pi/2, \pi/2]@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL；
+ *         ::LMMC_STATUS_OUT_OF_RANGE 若 @f$|x| > 1@f$ 。
+ */
+lmmc_status_t lmmc_asin(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算反余弦 @f$\arccos(x)@f$ 。
+ *
+ * @param[in]  x   输入值，必须满足 @f$|x| \le 1@f$ 。
+ * @param[out] out 输出 @f$\arccos(x)@f$ ，结果在 @f$[0, \pi]@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL；
+ *         ::LMMC_STATUS_OUT_OF_RANGE 若 @f$|x| > 1@f$ 。
+ */
+lmmc_status_t lmmc_acos(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算反正切 @f$\arctan(x)@f$ 。
+ *
+ * @param[in]  x   输入值，无定义域限制。
+ * @param[out] out 输出 @f$\arctan(x)@f$ ，结果在 @f$(-\pi/2, \pi/2)@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_atan(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算双曲正弦 @f$\sinh(x)@f$ 。
+ *
+ * @param[in]  x   输入值，无定义域限制。
+ * @param[out] out 输出 @f$\sinh(x)@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_sinh(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算双曲余弦 @f$\cosh(x)@f$ 。
+ *
+ * @param[in]  x   输入值，无定义域限制。
+ * @param[out] out 输出 @f$\cosh(x)@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_cosh(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算双曲正切 @f$\tanh(x)@f$ 。
+ *
+ * @param[in]  x   输入值，无定义域限制。
+ * @param[out] out 输出 @f$\tanh(x)@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_tanh(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算反双曲正弦 @f$\mathrm{asinh}(x)@f$ 。
+ *
+ * @param[in]  x   输入值，无定义域限制。
+ * @param[out] out 输出 @f$\mathrm{asinh}(x)@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_asinh(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算反双曲余弦 @f$\mathrm{acosh}(x)@f$ ，要求 @f$x \ge 1@f$ 。
+ *
+ * @param[in]  x   输入值，必须满足 @f$x \ge 1@f$ 。
+ * @param[out] out 输出 @f$\mathrm{acosh}(x)@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL；
+ *         ::LMMC_STATUS_OUT_OF_RANGE 若 @f$x < 1@f$ 。
+ */
+lmmc_status_t lmmc_acosh(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算反双曲正切 @f$\mathrm{atanh}(x)@f$ ，要求 @f$|x| < 1@f$ 。
+ *
+ * @param[in]  x   输入值，必须满足 @f$|x| < 1@f$ 。
+ * @param[out] out 输出 @f$\mathrm{atanh}(x)@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL；
+ *         ::LMMC_STATUS_OUT_OF_RANGE 若 @f$|x| \ge 1@f$ 。
+ */
+lmmc_status_t lmmc_atanh(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算幂 @f$x^y@f$ 。
+ *
+ * 当 @f$x < 0@f$ 且 @f$y@f$ 非整数（@f$\lfloor y \rfloor \ne y@f$）时返回域错误。
+ *
+ * @param[in]  x   底数。
+ * @param[in]  y   指数。
+ * @param[out] out 输出 @f$x^y@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL；
+ *         ::LMMC_STATUS_OUT_OF_RANGE 若 x < 0 且 y 非整数。
+ */
+lmmc_status_t lmmc_pow(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out);
+
+/**
+ * @brief 计算向上取整 @f$\lceil x \rceil@f$ 。
+ *
+ * @param[in]  x   输入值。
+ * @param[out] out 输出 @f$\lceil x \rceil@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_ceil(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算向下取整 @f$\lfloor x \rfloor@f$ 。
+ *
+ * @param[in]  x   输入值。
+ * @param[out] out 输出 @f$\lfloor x \rfloor@f$ 。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_floor(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算四舍五入 @f$\mathrm{round}(x)@f$ 。
+ *
+ * @param[in]  x   输入值。
+ * @param[out] out 输出四舍五入结果。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_round(lmmc_real_t x, lmmc_real_t* out);
+
+/**
+ * @brief 计算截断取整 @f$\mathrm{trunc}(x)@f$ （向零方向取整）。
+ *
+ * @param[in]  x   输入值。
+ * @param[out] out 输出截断取整结果。
+ *
+ * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out 为 NULL。
+ */
+lmmc_status_t lmmc_trunc(lmmc_real_t x, lmmc_real_t* out);
+
+/* ===================== Lambert W 函数 ===================== */
 
 /**
  * @brief 计算 Lambert W 函数主分支 @f$W_0(z)@f$ 。
