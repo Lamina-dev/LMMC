@@ -7,9 +7,13 @@
 #include "lmmc/lmmc.h"
 
 
-static void my_nonlinear_logger(size_t iter, lmmc_real_t x, lmmc_real_t f_x, void* user_data) {
+static void my_diagnostic_logger(const lmmc_diagnostic_t* diagnostic, void* user_data) {
     const char* prefix = (const char*)user_data;
-    printf("[%s] Step %zu: root_guess = %.6f, error = %.3e\n", prefix, iter, x, f_x);
+    printf("[%s] %s step %zu", prefix, diagnostic->operation, diagnostic->iteration);
+    for (size_t i = 0; i < diagnostic->value_count; ++i) {
+        printf(" value[%zu]=%.6g", i, diagnostic->values[i]);
+    }
+    printf("\n");
 }
 
 static lmmc_real_t my_function(lmmc_real_t x, void* user_data) {
@@ -33,8 +37,8 @@ int main(void) {
         return 1;
     }
 
-    printf("--- Part 1: Default Verbose Logging ---\n");
-    cfg.verbose = 1;
+    printf("--- Part 1: Diagnostic Sink ---\n");
+    cfg.diagnostics = (lmmc_diagnostic_sink_t){my_diagnostic_logger, "Newton", LMMC_DIAGNOSTIC_TRACE};
     st = lmmc_newton_solve(my_function, my_derivative, NULL, 1.0, &cfg, &res);
     printf("Final Status: %s", lmmc_status_string(st));
     if (st == LMMC_STATUS_OK) {
@@ -43,10 +47,8 @@ int main(void) {
         printf("\n\n");
     }
 
-    printf("--- Part 2: Custom Callback Logging ---\n");
-    cfg.verbose = 0;
-    cfg.log_cb = my_nonlinear_logger;
-    cfg.log_user_data = "CustomLog";
+    printf("--- Part 2: Reconfigured Diagnostic Sink ---\n");
+    cfg.diagnostics.user_data = "CustomLog";
 
     st = lmmc_newton_solve(my_function, my_derivative, NULL, 2.0, &cfg, &res);
     printf("Final Status: %s", lmmc_status_string(st));
@@ -56,10 +58,8 @@ int main(void) {
         printf("\n\n");
     }
 
-    printf("--- Part 3: Custom Callback Logging ---\n");
-    cfg.verbose = 0;
-    cfg.log_cb = my_nonlinear_logger;
-    cfg.log_user_data = (void*)"CustomSolver";
+    printf("--- Part 3: Reconfigured Diagnostic Sink ---\n");
+    cfg.diagnostics.user_data = (void*)"CustomSolver";
 
     st = lmmc_newton_solve(my_function, my_derivative, NULL, 2.0, &cfg, &res);
     printf("Final Status: %s", lmmc_status_string(st));

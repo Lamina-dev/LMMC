@@ -1,7 +1,7 @@
 function(add_lmmc_example target_name source_file)
 	add_executable(${target_name} ${source_file})
 	target_link_libraries(${target_name} PRIVATE lmmc)
-	lmmc_copy_lammp_runtime(${target_name})
+	lmmc_prepare_runtime(${target_name})
 endfunction()
 
 add_lmmc_example(lmmc_example_linear_solve example_linear_solve.c)

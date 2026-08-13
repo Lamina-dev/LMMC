@@ -340,8 +340,6 @@ lmmc_status_t lmmc_vec_dot(const lmmc_vec_t* a, const lmmc_vec_t* b, lmmc_real_t
  */
 lmmc_status_t lmmc_mat_vec_mul(const lmmc_mat_t* a, const lmmc_vec_t* x, lmmc_vec_t* y);
 
-/* ===================== BLAS Level 1 向量运算 ===================== */
-
 /**
  * @brief 计算向量的欧几里得（L2）范数：@f$\|x\|_2 = \sqrt{\sum_i x_i^2}@f$。
  *
@@ -473,8 +471,6 @@ lmmc_status_t lmmc_vec_asum(const lmmc_vec_t* x, lmmc_real_t* out_asum);
  * - 无。纯计算。
  */
 lmmc_status_t lmmc_vec_iamax(const lmmc_vec_t* x, size_t* out_idx);
-
-/* ===================== 矩阵基本运算 ===================== */
 
 /**
  * @brief 同维矩阵逐元素加法：c = a + b。

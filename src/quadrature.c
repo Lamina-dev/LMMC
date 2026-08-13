@@ -73,11 +73,6 @@ lmmc_status_t lmmc_quad_simpson(
     return LMMC_STATUS_OK;
 }
 
-
-/* ========================================================================
- * Gauss-Legendre 求积
- * ======================================================================== */
-
 #define LMMC_GL_MAX_ORDER 20
 #define LMMC_GL_MIN_ORDER 2
 
@@ -380,11 +375,6 @@ lmmc_status_t lmmc_quad_gauss_legendre(
     return LMMC_STATUS_OK;
 }
 
-
-/* ========================================================================
- * 自适应 Gauss-Kronrod 15 积分
- * ======================================================================== */
-
 static const lmmc_real_t gk15_nodes[15] = {
     -0.9914553711208126392, -0.9491079123427585245, -0.8648644233597690728,
     -0.7415311855993944399, -0.5860872354676911303, -0.4058451513773971669,
@@ -515,11 +505,6 @@ lmmc_status_t lmmc_quad_adaptive(
     return status;
 }
 
-
-/* ========================================================================
- * Romberg 积分 (Richardson extrapolation on trapezoidal rule)
- * ======================================================================== */
-
 lmmc_status_t lmmc_quad_romberg(
     lmmc_quad_func_t f, void* ud,
     lmmc_real_t a, lmmc_real_t b,
@@ -603,7 +588,7 @@ lmmc_status_t lmmc_quad_romberg(
 }
 
 
-/* ========================================================================
+/**
  * Tanh-Sinh (Double Exponential) 积分
  *
  * The double-exponential transformation maps [a,b] to (-inf, inf):
@@ -614,7 +599,7 @@ lmmc_status_t lmmc_quad_romberg(
  *   w_j = (pi/2) * cosh(j*h) / cosh^2(pi/2 * sinh(j*h))
  *
  * Convergence is checked by comparing successive levels (halving h).
- * ======================================================================== */
+ */
 
 lmmc_status_t lmmc_quad_tanh_sinh(
     lmmc_quad_func_t f, void* ud,
@@ -737,7 +722,7 @@ lmmc_status_t lmmc_quad_tanh_sinh(
 }
 
 
-/* ========================================================================
+/**
  * Gauss-Hermite 求积 (weight: exp(-x^2), domain: (-inf, +inf))
  *
  * Uses Golub-Welsch algorithm: the nodes are eigenvalues of the symmetric
@@ -747,7 +732,7 @@ lmmc_status_t lmmc_quad_tanh_sinh(
  * For physicist's Hermite: H_n(x), weight exp(-x^2)
  *   Recurrence: x H_n = H_{n+1}/2 + n H_{n-1}
  *   Jacobi matrix: a_i = 0, b_i = sqrt(i/2) for i=1..n-1
- * ======================================================================== */
+ */
 
 #define LMMC_GH_MAX_ORDER 20
 
@@ -875,7 +860,7 @@ lmmc_status_t lmmc_quad_gauss_hermite(
 }
 
 
-/* ========================================================================
+/**
  * Gauss-Laguerre 求积 (weight: exp(-x), domain: [0, +inf))
  *
  * Uses Golub-Welsch algorithm with Laguerre polynomial recurrence.
@@ -883,7 +868,7 @@ lmmc_status_t lmmc_quad_gauss_hermite(
  *   x L_n(x) = L_{n+1}(x) + (2n+1) L_n(x) - n^2 L_{n-1}(x)
  * Jacobi matrix: alpha_i = 2*i + 1, beta_i = i (for i = 1..n-1)
  * mu_0 = integral of exp(-x) over [0, inf) = 1
- * ======================================================================== */
+ */
 
 #define LMMC_GL_LAG_MAX_ORDER 20
 

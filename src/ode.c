@@ -4,7 +4,6 @@
  */
 #include <math.h>
 #include <string.h>
-#include <stdio.h>
 #include "memory_bridge.h"
 #include "internal.h"
 #include "lmmc/ode.h"
@@ -13,11 +12,11 @@
 #include "lmmc/linear_algebra.h"
 
 static void lmmc_ode_do_log(const lmmc_ode_config_t* cfg, size_t step, lmmc_real_t t, const lmmc_real_t* y, size_t dim) {
-    if (cfg->log_cb != NULL) {
-        cfg->log_cb(step, t, y, dim, cfg->log_user_data);
-    } else if (cfg->verbose) {
-        printf("Step %zu: t = %.10e, y[0] = %.10e\n", step, t, dim > 0 ? y[0] : 0.0);
-    }
+    const lmmc_real_t values[] = {t, dim > 0 ? y[0] : 0.0};
+    const lmmc_diagnostic_t diagnostic = {
+        LMMC_DIAGNOSTIC_TRACE, "ode", "accepted step", step, values, 2
+    };
+    lmmc_diagnostic_emit(&cfg->diagnostics, &diagnostic);
 }
 
 static void lmmc_ode_reset_result(lmmc_ode_result_t* out_result, lmmc_real_t t_start) {
@@ -113,9 +112,7 @@ lmmc_status_t lmmc_ode_default_config(
     out_cfg->rel_tol = LMMC_DEFAULT_REL_TOL;
     out_cfg->max_steps = max_steps;
     out_cfg->adaptive_step_beta = 0.9;
-    out_cfg->verbose = 0;
-    out_cfg->log_cb = NULL;
-    out_cfg->log_user_data = NULL;
+    out_cfg->diagnostics = (lmmc_diagnostic_sink_t){0};
     out_cfg->jacobian = NULL;
     return LMMC_STATUS_OK;
 }
@@ -364,8 +361,6 @@ lmmc_status_t lmmc_ode_euler_solve(
     return LMMC_STATUS_OK;
 }
 
-/* ===================== Cash-Karp RK45 Coefficients ===================== */
-
 /*
  * Cash-Karp embedded Runge-Kutta 4(5) pair.
  * 6 stages, 4th-order solution for stepping, 5th-order for error estimation.
@@ -435,8 +430,6 @@ static const lmmc_real_t ck_e[6] = {
     512.0 / 1771.0 - 1.0 / 4.0
 };
 
-/* ===================== RK45 Adaptive Solver ===================== */
-
 lmmc_status_t lmmc_ode_rk45_solve(
     lmmc_ode_rhs_t rhs,
     void* user_data,
@@ -466,7 +459,6 @@ lmmc_status_t lmmc_ode_rk45_solve(
         return init_st;
     }
 
-    /* Allocate workspace for 6 stage vectors + 1 temporary state */
     k1 = (lmmc_real_t*)lmmc_alloc(work_bytes);
     k2 = (lmmc_real_t*)lmmc_alloc(work_bytes);
     k3 = (lmmc_real_t*)lmmc_alloc(work_bytes);
@@ -878,8 +870,6 @@ rk4_fail:
     return LMMC_STATUS_NUMERICAL_FAILURE;
 }
 
-/* ===================== Implicit ODE Solver Helpers ===================== */
-
 /**
  * @brief 有限差分近似 Jacobian df/dy。
  */
@@ -921,8 +911,6 @@ static lmmc_status_t ode_get_jacobian(
     }
     return ode_fd_jacobian(rhs, user_data, t, y, dim, J, f0, y_pert, f_pert);
 }
-
-/* ===================== Implicit Euler Context ===================== */
 
 typedef struct {
     lmmc_ode_rhs_t rhs;
@@ -1080,8 +1068,6 @@ lmmc_status_t lmmc_ode_implicit_euler_solve(
     lmmc_free(x_vec.data);
     return LMMC_STATUS_OK;
 }
-
-/* ===================== Trapezoidal Context ===================== */
 
 typedef struct {
     lmmc_ode_rhs_t rhs;
@@ -1254,8 +1240,6 @@ lmmc_status_t lmmc_ode_trapezoidal_solve(
     lmmc_free(x_vec.data);
     return LMMC_STATUS_OK;
 }
-
-/* ===================== SDIRK4 Coefficients ===================== */
 /*
  * 4-stage SDIRK method with embedded error estimate for adaptive stepping.
  * Uses the TR-BDF2 inspired approach: gamma = 1-sqrt(2)/2 ≈ 0.2929.
@@ -1295,8 +1279,6 @@ static const lmmc_real_t sdirk_b[SDIRK4_STAGES] = {
 static const lmmc_real_t sdirk_bhat[SDIRK4_STAGES] = {
     1.20849664917601007033, -0.64436317068446906976, 0.43586652150845899942
 };
-
-/* ===================== SDIRK4 Stage Context ===================== */
 
 typedef struct {
     lmmc_ode_rhs_t rhs;
@@ -1560,9 +1542,6 @@ sdirk4_fail:
     for (s = SDIRK4_STAGES - 1; s >= 0; --s) lmmc_free(k[s]);
     return LMMC_STATUS_NUMERICAL_FAILURE;
 }
-
-
-/* ===================== Rosenbrock GRK4T Coefficients ===================== */
 /*
  * 4-stage Rosenbrock-Wanner method (linearly implicit).
  * Based on the ROS34PW2 method from Rang & Angermann (2005).

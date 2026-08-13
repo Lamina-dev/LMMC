@@ -236,8 +236,6 @@ static void householder_apply_right(lmmc_mat_t *M, size_t i0, size_t i1,
                                     size_t j0, size_t len,
                                     const lmmc_real_t *v, lmmc_real_t tau);
 
-/* ===== Hessenberg Reduction and Francis Double-Shift QR ===== */
-
 /**
  * @brief Reduce a general square matrix to upper Hessenberg form via
  *        Householder reflectors (reuses householder_make, householder_apply_left,
@@ -585,8 +583,6 @@ static void hqr_eig2(lmmc_real_t a, lmmc_real_t b,
 void lmmc_eigen_gen_result_destroy(lmmc_eigen_gen_result_t *result) {
     if (!result) return; lmmc_vec_destroy(&result->real_parts); lmmc_vec_destroy(&result->imag_parts);
 }
-
-/* ===== Eigenvector Computation via Inverse Iteration ===== */
 
 /**
  * @brief Compute eigenvectors via inverse iteration with Wilkinson shift.

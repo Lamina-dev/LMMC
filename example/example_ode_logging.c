@@ -6,13 +6,13 @@
 #include "lmmc/lmmc.h"
 
 
-static void my_ode_logger(size_t step, lmmc_real_t t, const lmmc_real_t* y, size_t dim, void* user_data) {
+static void my_diagnostic_logger(const lmmc_diagnostic_t* diagnostic, void* user_data) {
     (void)user_data;
-    printf("[Step %zu] Time = %.3f, State = [", step, t);
-    for (size_t i = 0; i < dim; ++i) {
-        printf("%.4f%s", y[i], (i == dim - 1) ? "" : ", ");
+    printf("[%s %zu]", diagnostic->operation, diagnostic->iteration);
+    for (size_t i = 0; i < diagnostic->value_count; ++i) {
+        printf(" %.4f", diagnostic->values[i]);
     }
-    printf("]\n");
+    printf("\n");
 }
 
 
@@ -34,8 +34,8 @@ int main(void) {
     st = lmmc_ode_default_config(0.0, 1.0, 1, &cfg);
     if (st != LMMC_STATUS_OK) return 1;
 
-    printf("--- Part 1: ODE RK4 with Verbose Logging ---\n");
-    cfg.verbose = 1;
+    printf("--- Part 1: ODE RK4 with Diagnostic Sink ---\n");
+    cfg.diagnostics = (lmmc_diagnostic_sink_t){my_diagnostic_logger, NULL, LMMC_DIAGNOSTIC_TRACE};
     cfg.initial_step = 0.2;
     st = lmmc_ode_rk4_solve(decay_rhs, NULL, 1, 0.0, 1.0, y, &cfg, &res);
     printf("Status: %s", lmmc_status_string(st));
@@ -45,10 +45,8 @@ int main(void) {
         printf("\n\n");
     }
 
-    printf("--- Part 2: ODE RK45 with Custom Callback ---\n");
+    printf("--- Part 2: ODE RK45 with Diagnostic Sink ---\n");
     LMMC_REAL_SET_D(&y[0], 1.0);
-    cfg.verbose = 0;
-    cfg.log_cb = my_ode_logger;
     st = lmmc_ode_rk45_solve(decay_rhs, NULL, 1, 0.0, 1.0, y, &cfg, &res);
     printf("Status: %s", lmmc_status_string(st));
     if (st == LMMC_STATUS_OK) {

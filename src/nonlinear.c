@@ -3,17 +3,16 @@
  * @brief 标量非线性方程求根算法实现。
  */
 #include <math.h>
-#include <stdio.h>
 #include <float.h>
 #include "internal.h"
 #include "lmmc/nonlinear.h"
 
 static void lmmc_nonlinear_do_log(const lmmc_nonlinear_config_t* cfg, size_t iter, lmmc_real_t x, lmmc_real_t f_x) {
-    if (cfg->log_cb != NULL) {
-        cfg->log_cb(iter, x, f_x, cfg->log_user_data);
-    } else if (cfg->verbose) {
-        printf("Iteration %zu: x = %.10e, f(x) = %.10e\n", iter, x, f_x);
-    }
+    const lmmc_real_t values[] = {x, f_x};
+    const lmmc_diagnostic_t diagnostic = {
+        LMMC_DIAGNOSTIC_TRACE, "nonlinear", "iteration", iter, values, 2
+    };
+    lmmc_diagnostic_emit(&cfg->diagnostics, &diagnostic);
 }
 
 static void lmmc_abs_inplace(lmmc_real_t* res, const lmmc_real_t* x) {
@@ -135,9 +134,7 @@ lmmc_status_t lmmc_nonlinear_default_config(lmmc_nonlinear_config_t* out_cfg) {
     out_cfg->derivative_step = 1e-6;
     out_cfg->min_derivative = 1e-14;
     out_cfg->min_step = 1e-14;
-    out_cfg->verbose = 0;
-    out_cfg->log_cb = NULL;
-    out_cfg->log_user_data = NULL;
+    out_cfg->diagnostics = (lmmc_diagnostic_sink_t){0};
     return LMMC_STATUS_OK;
 }
 

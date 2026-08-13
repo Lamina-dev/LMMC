@@ -47,13 +47,10 @@ typedef struct {
     size_t count;
 } newton_log_data_t;
 
-static void newton_log_cb(size_t iter, lmmc_real_t x, lmmc_real_t f_x,
-                           void* user_data) {
-    (void)iter;
-    (void)f_x;
+static void newton_log_cb(const lmmc_diagnostic_t* diagnostic, void* user_data) {
     newton_log_data_t* data = (newton_log_data_t*)user_data;
-    if (data->count < MAX_NEWTON_ITERS) {
-        data->x_values[data->count] = x;
+    if (diagnostic->value_count >= 1 && data->count < MAX_NEWTON_ITERS) {
+        data->x_values[data->count] = diagnostic->values[0];
         data->count++;
     }
 }
@@ -65,13 +62,10 @@ typedef struct {
     size_t count;
 } bisect_log_data_t;
 
-static void bisect_log_cb(size_t iter, lmmc_real_t x, lmmc_real_t f_x,
-                           void* user_data) {
-    (void)iter;
-    (void)f_x;
+static void bisect_log_cb(const lmmc_diagnostic_t* diagnostic, void* user_data) {
     bisect_log_data_t* data = (bisect_log_data_t*)user_data;
-    if (data->count < MAX_BISECT_ITERS) {
-        data->x_values[data->count] = x;
+    if (diagnostic->value_count >= 1 && data->count < MAX_BISECT_ITERS) {
+        data->x_values[data->count] = diagnostic->values[0];
         data->count++;
     }
 }
@@ -258,8 +252,7 @@ int main(void) {
         cfg.max_iter = 50;
         cfg.abs_tol = 1e-15;
         cfg.rel_tol = 1e-15;
-        cfg.log_cb = newton_log_cb;
-        cfg.log_user_data = &log_data;
+        cfg.diagnostics = (lmmc_diagnostic_sink_t){newton_log_cb, &log_data, LMMC_DIAGNOSTIC_TRACE};
 
         lmmc_status_t st = lmmc_newton_solve(newton_fn, newton_dfn, NULL, 2.0,
                                              &cfg, &result);
@@ -307,8 +300,7 @@ int main(void) {
         cfg.max_iter = 50;
         cfg.abs_tol = 1e-15;
         cfg.rel_tol = 1e-15;
-        cfg.log_cb = bisect_log_cb;
-        cfg.log_user_data = &log_data;
+        cfg.diagnostics = (lmmc_diagnostic_sink_t){bisect_log_cb, &log_data, LMMC_DIAGNOSTIC_TRACE};
 
         lmmc_status_t st = lmmc_bisection_solve(bisect_fn, NULL, 0.0, 2.0,
                                                 &cfg, &result);

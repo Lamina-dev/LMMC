@@ -435,8 +435,6 @@ lmmc_status_t lmmc_fft_radix4_inverse(lmmc_real_t* real, lmmc_real_t* imag, size
     return lmmc_fft_radix4(real, imag, n, 1);
 }
 
-/* ===================== 特殊函数实现 ===================== */
-
 /**
  * @brief 误差函数 erf(x) — 使用 C 标准库 erf() 并包装为 LMMC 接口。
  *
@@ -613,8 +611,6 @@ lmmc_status_t lmmc_digamma(lmmc_real_t x, lmmc_real_t* out) {
     *out = result;
     return LMMC_STATUS_OK;
 }
-
-/* ===================== Lambert W 函数实现 ===================== */
 
 lmmc_status_t lmmc_lambertw(lmmc_real_t z, lmmc_real_t* out_res) {
     const double tol = LMMC_DEFAULT_REL_TOL;

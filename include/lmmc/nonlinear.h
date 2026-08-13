@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 #include "lmmc/numeric.h"
+#include "lmmc/diagnostic.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,16 +52,6 @@ typedef struct {
 } lmmc_nonlinear_result_t;
 
 /**
- * @brief 求根日志回调签名。
- */
-typedef void (*lmmc_nonlinear_log_callback_t)(
-    size_t iter,
-    lmmc_real_t x,
-    lmmc_real_t f_x,
-    void* user_data
-);
-
-/**
  * @brief 求根算法配置。
  */
 typedef struct {
@@ -70,9 +61,7 @@ typedef struct {
     lmmc_real_t derivative_step;                  /**< 数值导数差分步长（仅割线 / 自动差分使用）。 */
     lmmc_real_t min_derivative;                   /**< Newton 法允许的最小导数绝对值。 */
     lmmc_real_t min_step;                         /**< 步长下限（防止震荡）。 */
-    int verbose;                                  /**< 非 0 时打印日志。 */
-    lmmc_nonlinear_log_callback_t log_cb;         /**< 自定义日志回调，可为 NULL 。 */
-    void* log_user_data;                          /**< 传入回调的上下文。 */
+    lmmc_diagnostic_sink_t diagnostics;           /**< 统一诊断出口。 */
 } lmmc_nonlinear_config_t;
 
 /** @brief 获取失败原因对应的可读字符串。 */

@@ -11,10 +11,6 @@
 #include <string.h>
 #include <math.h>
 
-/* ========================================================================
- * 内部辅助
- * ======================================================================== */
-
 static size_t interp_find_interval(const lmmc_real_t* xs, size_t n,
                                    lmmc_real_t query_x)
 {
@@ -36,10 +32,6 @@ static int interp_check_strictly_increasing(const lmmc_real_t* xs, size_t n)
     return 1;
 }
 
-/* ========================================================================
- * 一维线性插值
- * ======================================================================== */
-
 lmmc_status_t lmmc_interp_linear(
     const lmmc_real_t* xs, const lmmc_real_t* ys, size_t n,
     lmmc_real_t query_x, lmmc_real_t* out_y)
@@ -55,10 +47,6 @@ lmmc_status_t lmmc_interp_linear(
     *out_y = ys[lo] + (ys[lo + 1] - ys[lo]) * t;
     return LMMC_STATUS_OK;
 }
-
-/* ========================================================================
- * 三次样条插值
- * ======================================================================== */
 
 struct lmmc_interp_cspline_t {
     size_t n;
@@ -526,10 +514,6 @@ lmmc_status_t lmmc_interp_cspline_create(
     return lmmc_interp_cspline_create_ex(xs, ys, n, LMMC_SPLINE_NATURAL, 0.0, 0.0, out_spline);
 }
 
-/* ========================================================================
- * PCHIP (Fritsch-Carlson) 单调三次插值
- * ======================================================================== */
-
 struct lmmc_interp_pchip_t {
     size_t n;
     lmmc_real_t* xs;
@@ -653,10 +637,6 @@ lmmc_status_t lmmc_interp_pchip_eval(
     return LMMC_STATUS_OK;
 }
 
-/* ========================================================================
- * Akima 局部三次插值
- * ======================================================================== */
-
 struct lmmc_interp_akima_t {
     size_t n;
     lmmc_real_t* xs;
@@ -769,10 +749,6 @@ lmmc_status_t lmmc_interp_akima_eval(
     return LMMC_STATUS_OK;
 }
 
-/* ========================================================================
- * Lagrange 多项式插值
- * ======================================================================== */
-
 struct lmmc_interp_lagrange_t {
     size_t n;
     lmmc_real_t* xs;
@@ -858,10 +834,6 @@ void lmmc_interp_lagrange_destroy(lmmc_interp_lagrange_t* lagrange)
     lmmc_free(lagrange->xs);
     lmmc_free(lagrange);
 }
-
-/* ========================================================================
- * 二维插值（矩形网格）
- * ======================================================================== */
 
 lmmc_status_t lmmc_interp_bilinear(
     const lmmc_real_t* xs, size_t nx,

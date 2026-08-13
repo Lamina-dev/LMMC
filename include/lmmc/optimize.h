@@ -12,12 +12,11 @@
 #include "lmmc/status.h"
 #include "lmmc/config.h"
 #include "lmmc/dense.h"
+#include "lmmc/diagnostic.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/* ===================== 回调类型 ===================== */
 
 /**
  * @brief 非线性函数回调：计算 F(x)。
@@ -58,8 +57,6 @@ typedef lmmc_status_t (*lmmc_opt_grad_t)(const lmmc_vec_t* x, lmmc_vec_t* grad, 
  */
 typedef lmmc_real_t (*lmmc_opt_obj_t)(const lmmc_vec_t* x, void* user_data);
 
-/* ===================== 配置与结果类型 ===================== */
-
 /**
  * @brief 优化算法配置参数。
  */
@@ -69,7 +66,7 @@ typedef struct {
     size_t max_iter;           /**< 最大迭代次数。 */
     size_t lbfgs_memory;       /**< L-BFGS 存储的 (s,y) 对数，默认 10。 */
     lmmc_real_t lm_damping;    /**< Levenberg-Marquardt 初始阻尼参数 λ。 */
-    int verbose;               /**< 非零时输出迭代信息。 */
+    lmmc_diagnostic_sink_t diagnostics; /**< 统一诊断出口。 */
 } lmmc_optimize_config_t;
 
 /**
@@ -93,13 +90,11 @@ typedef struct {
     lmmc_optimize_failure_t failure_reason; /**< 失败原因（converged=0 时有效）。 */
 } lmmc_optimize_result_t;
 
-/* ===================== 公共函数 ===================== */
-
 /**
  * @brief 初始化默认优化配置。
  *
  * 默认值：abs_tol=1e-12, rel_tol=1e-10, max_iter=1000,
- * lbfgs_memory=10, lm_damping=1e-3, verbose=0。
+ * lbfgs_memory=10, lm_damping=1e-3，诊断 sink 为空。
  */
 lmmc_status_t lmmc_optimize_default_config(lmmc_optimize_config_t* cfg);
 

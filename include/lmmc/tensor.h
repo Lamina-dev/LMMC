@@ -16,8 +16,6 @@
 extern "C" {
 #endif
 
-/* ===================== N-D Tensor API ===================== */
-
 /** @brief 支持的最大张量维度。 */
 #define LMMC_TENSOR_MAX_NDIM 8
 
@@ -113,8 +111,6 @@ lmmc_status_t lmmc_tensor_nd_reshape_view(const lmmc_tensor_nd_t* src,
 
 /** @brief 销毁 N-D 张量（仅当 owns_data 为 1 时释放缓冲区）。 */
 void lmmc_tensor_nd_destroy(lmmc_tensor_nd_t* t);
-
-/* ===================== Legacy Rank-3 API (backward compatible) ===================== */
 
 /**
  * @brief 三阶张量结构（向后兼容）。

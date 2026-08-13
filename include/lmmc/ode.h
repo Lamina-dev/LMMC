@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 #include "lmmc/numeric.h"
+#include "lmmc/diagnostic.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,23 +52,6 @@ typedef struct {
 } lmmc_ode_result_t;
 
 /**
- * @brief ODE 求解日志回调。
- *
- * @param step      当前步号。
- * @param t         当前时间。
- * @param y         当前状态向量。
- * @param dim       状态维度。
- * @param user_data 用户上下文。
- */
-typedef void (*lmmc_ode_log_callback_t)(
-    size_t step,
-    lmmc_real_t t,
-    const lmmc_real_t* y,
-    size_t dim,
-    void* user_data
-);
-
-/**
  * @brief ODE Jacobian 回调签名 @f$J = \partial f / \partial y@f$ 。
  *
  * @param[in]  t          当前时间。
@@ -94,9 +78,7 @@ typedef struct {
     lmmc_real_t rel_tol;                       /**< 局部误差相对容差。 */
     size_t max_steps;                          /**< 最大允许步数。 */
     lmmc_real_t adaptive_step_beta;            /**< 自适应步长安全系数（典型 0.8~0.9）。 */
-    int verbose;                               /**< 非 0 时打印日志。 */
-    lmmc_ode_log_callback_t log_cb;            /**< 自定义日志回调。 */
-    void* log_user_data;                       /**< 回调上下文。 */
+    lmmc_diagnostic_sink_t diagnostics;        /**< 统一诊断出口。 */
     lmmc_ode_jac_t jacobian;                   /**< 可选 Jacobian 回调（隐式方法使用，NULL 时用有限差分）。 */
 } lmmc_ode_config_t;
 
@@ -151,7 +133,7 @@ lmmc_status_t lmmc_ode_default_config(
  * - 就地修改 @p y 数组为终态值。
  * - 内部分配临时工作数组（1 个长度为 dim 的缓冲区），函数返回前释放。
  * - 回调 @p rhs 被调用 num_steps 次（每步一次）。
- * - 若 cfg->log_cb 非 NULL，则每步额外调用一次日志回调。
+ * - 若配置了诊断 sink，则每步发送一个诊断事件。
  */
 lmmc_status_t lmmc_ode_euler_solve(
     lmmc_ode_rhs_t rhs,
@@ -187,7 +169,7 @@ lmmc_status_t lmmc_ode_euler_solve(
  * - 就地修改 @p y 数组为终态值。
  * - 内部分配临时工作数组（4 个长度为 dim 的缓冲区用于 k1~k4），函数返回前释放。
  * - 回调 @p rhs 被调用 4 × num_steps 次。
- * - 若 cfg->log_cb 非 NULL，则每步额外调用一次日志回调。
+ * - 若配置了诊断 sink，则每步发送一个诊断事件。
  */
 lmmc_status_t lmmc_ode_rk4_solve(
     lmmc_ode_rhs_t rhs,
@@ -225,7 +207,7 @@ lmmc_status_t lmmc_ode_rk4_solve(
  * - 就地修改 @p y 数组为终态值。
  * - 内部分配临时工作数组（6 个长度为 dim 的缓冲区用于 k1~k6 及误差估计），函数返回前释放。
  * - 回调 @p rhs 被调用约 6 × num_steps 次（被拒绝的步也会消耗求值次数）。
- * - 若 cfg->log_cb 非 NULL，则每个被接受的步调用一次日志回调。
+ * - 若配置了诊断 sink，则每个被接受的步发送一个诊断事件。
  */
 lmmc_status_t lmmc_ode_rk45_solve(
     lmmc_ode_rhs_t rhs,

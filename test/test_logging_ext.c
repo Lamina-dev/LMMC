@@ -11,21 +11,12 @@ typedef struct {
     lmmc_real_t last_val;
 } test_ctx_t;
 
-static void test_nonlinear_cb(size_t iter, lmmc_real_t x, lmmc_real_t f_x, void* user_data) {
-    (void)f_x;
+static void test_diagnostic_cb(const lmmc_diagnostic_t* diagnostic, void* user_data) {
     test_ctx_t* ctx = (test_ctx_t*)user_data;
     ctx->count++;
-    ctx->last_val = x;
-    (void)iter;
-}
-
-static void test_ode_cb(size_t step, lmmc_real_t t, const lmmc_real_t* y, size_t dim, void* user_data) {
-    (void)dim;
-    test_ctx_t* ctx = (test_ctx_t*)user_data;
-    ctx->count++;
-    ctx->last_val = t;
-    (void)step;
-    (void)y;
+    if (diagnostic->value_count > 0) {
+        ctx->last_val = diagnostic->values[0];
+    }
 }
 
 static lmmc_real_t test_fn(lmmc_real_t x, void* user_data) {
@@ -55,8 +46,7 @@ int main(void) {
 
         lmmc_status_t st_cfg = lmmc_nonlinear_default_config(&cfg);
         assert(st_cfg == LMMC_STATUS_OK);
-        cfg.log_cb = test_nonlinear_cb;
-        cfg.log_user_data = &ctx;
+        cfg.diagnostics = (lmmc_diagnostic_sink_t){test_diagnostic_cb, &ctx, LMMC_DIAGNOSTIC_TRACE};
 
         lmmc_status_t st = lmmc_bisection_solve(test_fn, NULL, 0.0, 10.0, &cfg, &res);
         assert(st == LMMC_STATUS_OK);
@@ -79,8 +69,7 @@ int main(void) {
 
         lmmc_status_t st_cfg = lmmc_ode_default_config(0.0, 1.0, 1, &cfg);
         assert(st_cfg == LMMC_STATUS_OK);
-        cfg.log_cb = test_ode_cb;
-        cfg.log_user_data = &ctx;
+        cfg.diagnostics = (lmmc_diagnostic_sink_t){test_diagnostic_cb, &ctx, LMMC_DIAGNOSTIC_TRACE};
         cfg.initial_step = 0.1;
 
         lmmc_status_t st = lmmc_ode_euler_solve(test_rhs, NULL, 1, 0.0, 1.0, y, &cfg, &res);

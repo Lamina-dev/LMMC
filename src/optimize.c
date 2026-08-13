@@ -6,14 +6,25 @@
  */
 #include <math.h>
 #include <string.h>
-#include <stdio.h>
 #include "memory_bridge.h"
 #include "lmmc/config.h"
 #include "lmmc/dense.h"
 #include "lmmc/linear_algebra.h"
 #include "lmmc/optimize.h"
 
-/* ===================== 内部辅助函数 ===================== */
+static void lmmc_optimize_emit(
+    const lmmc_optimize_config_t* cfg,
+    const char* operation,
+    size_t iteration,
+    const lmmc_real_t* values,
+    size_t value_count
+) {
+    const lmmc_diagnostic_t diagnostic = {
+        LMMC_DIAGNOSTIC_TRACE, operation, "iteration", iteration,
+        values, value_count
+    };
+    lmmc_diagnostic_emit(&cfg->diagnostics, &diagnostic);
+}
 
 /**
  * @brief 计算向量的 L2 范数。
@@ -80,8 +91,6 @@ static lmmc_status_t finite_difference_jacobian(
     return LMMC_STATUS_OK;
 }
 
-/* ===================== 公共函数实现 ===================== */
-
 lmmc_status_t lmmc_optimize_default_config(lmmc_optimize_config_t* cfg) {
     if (cfg == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
@@ -91,11 +100,9 @@ lmmc_status_t lmmc_optimize_default_config(lmmc_optimize_config_t* cfg) {
     cfg->max_iter = 1000;
     cfg->lbfgs_memory = 10;
     cfg->lm_damping = 1e-3;
-    cfg->verbose = 0;
+    cfg->diagnostics = (lmmc_diagnostic_sink_t){0};
     return LMMC_STATUS_OK;
 }
-
-/* ===================== Newton 法 ===================== */
 
 lmmc_status_t lmmc_nleq_newton(
     lmmc_opt_func_t F,
@@ -237,9 +244,7 @@ lmmc_status_t lmmc_nleq_newton(
             }
         }
 
-        if (cfg->verbose) {
-            fprintf(stderr, "Newton iter %zu: ||F|| = %.6e\n", iter + 1, res_norm);
-        }
+        lmmc_optimize_emit(cfg, "newton", iter + 1, &res_norm, 1);
     }
 
     /* Max iterations reached */
@@ -253,8 +258,6 @@ cleanup:
     lmmc_free(pivots);
     return LMMC_STATUS_OK;
 }
-
-/* ===================== Broyden 法 ===================== */
 
 lmmc_status_t lmmc_nleq_broyden(
     lmmc_opt_func_t F,
@@ -426,9 +429,7 @@ lmmc_status_t lmmc_nleq_broyden(
         /* Update Fx for next iteration */
         memcpy(Fx.data, Fx_new.data, n * sizeof(lmmc_real_t));
 
-        if (cfg->verbose) {
-            fprintf(stderr, "Broyden iter %zu: ||F|| = %.6e\n", iter + 1, res_norm);
-        }
+        lmmc_optimize_emit(cfg, "broyden", iter + 1, &res_norm, 1);
     }
 
     /* Max iterations reached */
@@ -446,9 +447,6 @@ broyden_cleanup:
     lmmc_free(pivots);
     return LMMC_STATUS_OK;
 }
-
-
-/* ===================== L-BFGS ===================== */
 
 lmmc_status_t lmmc_minimize_lbfgs(
     lmmc_opt_obj_t obj,
@@ -666,8 +664,9 @@ lmmc_status_t lmmc_minimize_lbfgs(
             memcpy(g.data, g_new.data, n * sizeof(lmmc_real_t));
         }
 
-        if (cfg->verbose) {
-            fprintf(stderr, "L-BFGS iter %zu: f = %.6e, ||g|| = %.6e\n", iter + 1, f_val, grad_norm);
+        {
+            const lmmc_real_t values[] = {f_val, grad_norm};
+            lmmc_optimize_emit(cfg, "lbfgs", iter + 1, values, 2);
         }
     }
 
@@ -692,9 +691,6 @@ lbfgs_alloc_fail:
     lmmc_free(rho);
     return LMMC_STATUS_ALLOCATION_FAILED;
 }
-
-
-/* ===================== Levenberg-Marquardt ===================== */
 
 lmmc_status_t lmmc_minimize_levenberg_marquardt(
     lmmc_opt_func_t residual,
@@ -904,8 +900,9 @@ lmmc_status_t lmmc_minimize_levenberg_marquardt(
             }
         }
 
-        if (cfg->verbose) {
-            fprintf(stderr, "LM iter %zu: ||r|| = %.6e, lambda = %.6e\n", iter + 1, res_norm, lambda);
+        {
+            const lmmc_real_t values[] = {res_norm, lambda};
+            lmmc_optimize_emit(cfg, "levenberg_marquardt", iter + 1, values, 2);
         }
     }
 
@@ -922,8 +919,6 @@ lm_cleanup:
     lmmc_free(pivots);
     return LMMC_STATUS_OK;
 }
-
-/* ===================== 梯度下降 ===================== */
 
 lmmc_status_t lmmc_minimize_gradient_descent(
     lmmc_opt_obj_t obj,
@@ -1013,8 +1008,9 @@ lmmc_status_t lmmc_minimize_gradient_descent(
             f_val = f_new;
         }
 
-        if (cfg->verbose) {
-            fprintf(stderr, "GD iter %zu: f = %.6e, ||g|| = %.6e\n", iter + 1, f_val, grad_norm);
+        {
+            const lmmc_real_t values[] = {f_val, grad_norm};
+            lmmc_optimize_emit(cfg, "gradient_descent", iter + 1, values, 2);
         }
     }
 

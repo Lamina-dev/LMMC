@@ -15,10 +15,6 @@
 extern "C" {
 #endif
 
-/* ========================================================================
- * 一维线性插值
- * ======================================================================== */
-
 /**
  * @brief 在节点 @c (xs[i], ys[i]) 间做分段线性插值。
  *
@@ -35,10 +31,6 @@ lmmc_status_t lmmc_interp_linear(
     lmmc_real_t query_x,
     lmmc_real_t* out_y
 );
-
-/* ========================================================================
- * 三次样条插值
- * ======================================================================== */
 
 /** @brief 三次样条插值上下文（不透明类型，自然边界条件）。 */
 typedef struct lmmc_interp_cspline_t lmmc_interp_cspline_t;
@@ -123,10 +115,6 @@ lmmc_status_t lmmc_interp_cspline_eval(
 /** @brief 销毁三次样条上下文，释放内部分配的所有内存。 */
 void lmmc_interp_cspline_destroy(lmmc_interp_cspline_t* spline);
 
-/* ========================================================================
- * PCHIP 单调插值 (Fritsch-Carlson)
- * ======================================================================== */
-
 /** @brief PCHIP 插值上下文（不透明类型）。 */
 typedef struct lmmc_interp_pchip_t lmmc_interp_pchip_t;
 
@@ -165,10 +153,6 @@ lmmc_status_t lmmc_interp_pchip_eval(
 
 /** @brief 销毁 PCHIP 插值上下文，释放内部分配的所有内存。 */
 void lmmc_interp_pchip_destroy(lmmc_interp_pchip_t* p);
-
-/* ========================================================================
- * Akima 局部三次插值
- * ======================================================================== */
 
 /** @brief Akima 插值上下文（不透明类型）。 */
 typedef struct lmmc_interp_akima_t lmmc_interp_akima_t;
@@ -209,10 +193,6 @@ lmmc_status_t lmmc_interp_akima_eval(
 /** @brief 销毁 Akima 插值上下文，释放内部分配的所有内存。 */
 void lmmc_interp_akima_destroy(lmmc_interp_akima_t* a);
 
-/* ========================================================================
- * Lagrange 多项式插值
- * ======================================================================== */
-
 /** @brief Lagrange 多项式插值上下文（不透明类型）。 */
 typedef struct lmmc_interp_lagrange_t lmmc_interp_lagrange_t;
 
@@ -235,10 +215,6 @@ lmmc_status_t lmmc_interp_lagrange_eval(
 
 /** @brief 销毁 Lagrange 插值上下文。 */
 void lmmc_interp_lagrange_destroy(lmmc_interp_lagrange_t* lagrange);
-
-/* ========================================================================
- * 二维插值（矩形网格）
- * ======================================================================== */
 
 /**
  * @brief 双线性插值（矩形网格）。

@@ -8,7 +8,6 @@
 #include "lmmc/init.h"
 
 #include <stdatomic.h>
-#include <stdio.h>
 
 #include "lammp/lmmp.h"
 
@@ -46,12 +45,6 @@ void lmmc_deinit(void) {
         /* 1→0 转换：执行真正的全局清理 */
 
 #ifdef LMMC_DEBUG_LEAKS
-        long long remaining = atomic_load_explicit(&lmmc_alloc_count, memory_order_relaxed);
-        if (remaining != 0) {
-            fprintf(stderr,
-                    "[LMMC_DEBUG_LEAKS] Final deinit: %lld allocation(s) still outstanding.\n",
-                    remaining);
-        }
         /* 重置计数器 */
         atomic_store_explicit(&lmmc_alloc_count, 0, memory_order_relaxed);
 #endif /* LMMC_DEBUG_LEAKS */

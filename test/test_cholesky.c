@@ -73,8 +73,8 @@ int main(void) {
     LMMC_REAL_SET_D(&a_npd.data[0], 1.0); LMMC_REAL_SET_D(&a_npd.data[1], 2.0);
     LMMC_REAL_SET_D(&a_npd.data[2], 2.0); LMMC_REAL_SET_D(&a_npd.data[3], 1.0);
     st = lmmc_cholesky_decompose_inplace(&a_npd);
-    if (st != LMMC_STATUS_NUMERICAL_FAILURE) {
-        printf("Expected NUMERICAL_FAILURE for non-positive definite matrix, got %s\n", lmmc_status_string(st));
+    if (st != LMMC_STATUS_NOT_POSITIVE_DEFINITE) {
+        printf("Expected NOT_POSITIVE_DEFINITE for non-positive definite matrix, got %s\n", lmmc_status_string(st));
         rc = 1;
     }
     lmmc_mat_destroy(&a_npd);

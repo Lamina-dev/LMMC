@@ -2983,6 +2983,88 @@ lmmc_status_t lmmc_lsr_linalg_mat_pow_scalar(const lmmc_mat_t* base,
     return status;
 }
 
+lmmc_status_t lmmc_lsr_linalg_mat_pow_int(const lmmc_mat_t* base,
+                                          int64_t exponent,
+                                          lmmc_mat_t* out)
+{
+    lmmc_status_t status;
+    lmmc_mat_t factor = {0, 0, 0, NULL, 0};
+    lmmc_mat_t result = {0, 0, 0, NULL, 0};
+
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    status = lmmc_lsr_require_finite_mat(base);
+    if (status != LMMC_STATUS_OK) return status;
+    if (base->rows != base->cols) return LMMC_STATUS_DIMENSION_MISMATCH;
+
+    uint64_t power;
+    if (exponent < 0) {
+        status = lmmc_lsr_linalg_inv(base, &factor);
+        if (status != LMMC_STATUS_OK) return status;
+        power = (uint64_t)(-(exponent + 1)) + UINT64_C(1);
+    } else {
+        status = lmmc_lsr_copy_mat(base, &factor);
+        if (status != LMMC_STATUS_OK) return status;
+        power = (uint64_t)exponent;
+    }
+
+    status = lmmc_mat_identity(base->rows, &result);
+    if (status != LMMC_STATUS_OK) {
+        lmmc_mat_destroy(&factor);
+        return status;
+    }
+
+    while (power > 0) {
+        if ((power & UINT64_C(1)) != 0) {
+            lmmc_mat_t product = {0, 0, 0, NULL, 0};
+            status = lmmc_mat_create(result.rows, factor.cols, &product);
+            if (status != LMMC_STATUS_OK) {
+                lmmc_mat_destroy(&result);
+                lmmc_mat_destroy(&factor);
+                return status;
+            }
+            status = lmmc_mat_mul(&result, &factor, &product);
+            if (status == LMMC_STATUS_OK) {
+                status = lmmc_lsr_require_finite_mat(&product);
+            }
+            if (status != LMMC_STATUS_OK) {
+                lmmc_mat_destroy(&product);
+                lmmc_mat_destroy(&result);
+                lmmc_mat_destroy(&factor);
+                return status;
+            }
+            lmmc_mat_destroy(&result);
+            result = product;
+        }
+
+        power >>= 1;
+        if (power > 0) {
+            lmmc_mat_t square = {0, 0, 0, NULL, 0};
+            status = lmmc_mat_create(factor.rows, factor.cols, &square);
+            if (status != LMMC_STATUS_OK) {
+                lmmc_mat_destroy(&result);
+                lmmc_mat_destroy(&factor);
+                return status;
+            }
+            status = lmmc_mat_mul(&factor, &factor, &square);
+            if (status == LMMC_STATUS_OK) {
+                status = lmmc_lsr_require_finite_mat(&square);
+            }
+            if (status != LMMC_STATUS_OK) {
+                lmmc_mat_destroy(&square);
+                lmmc_mat_destroy(&result);
+                lmmc_mat_destroy(&factor);
+                return status;
+            }
+            lmmc_mat_destroy(&factor);
+            factor = square;
+        }
+    }
+
+    lmmc_mat_destroy(&factor);
+    *out = result;
+    return LMMC_STATUS_OK;
+}
+
 lmmc_status_t lmmc_lsr_linalg_mat_scale(const lmmc_mat_t* a,
                                         lmmc_real_t alpha,
                                         lmmc_mat_t* out)

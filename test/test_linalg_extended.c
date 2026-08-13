@@ -322,8 +322,8 @@ int main(void) {
         a.data[6] = 3.0;  a.data[7] = 2.0;  a.data[8] = 1.0;
 
         lmmc_status_t st = lmmc_cholesky_decompose_inplace(&a);
-        if (st != LMMC_STATUS_NUMERICAL_FAILURE) {
-            printf("Non-PD matrix: expected NUMERICAL_FAILURE, got %s\n", lmmc_status_string(st));
+        if (st != LMMC_STATUS_NOT_POSITIVE_DEFINITE) {
+            printf("Non-PD matrix: expected NOT_POSITIVE_DEFINITE, got %s\n", lmmc_status_string(st));
             rc = 1; goto done;
         }
         lmmc_mat_destroy(&a);

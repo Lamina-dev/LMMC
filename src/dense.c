@@ -941,7 +941,6 @@ lmmc_status_t lmmc_mat_inv(const lmmc_mat_t* A, lmmc_mat_t* A_inv) {
         return status;
     }
 
-    /* Create temporary vectors for solving */
     status = lmmc_vec_create(n, &ei);
     if (status != LMMC_STATUS_OK) {
         lmmc_free(pivots);

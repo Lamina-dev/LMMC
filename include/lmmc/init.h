@@ -30,8 +30,8 @@ void lmmc_init(void);
  * 与 ::lmmc_init 配对使用，原子引用计数归零时（1→0 转换）执行真正的清理：
  * 释放栈分配器并调用 lmmp_global_deinit。
  *
- * 当编译时定义了 LMMC_DEBUG_LEAKS 宏，最终反初始化时若仍有未释放的分配，
- * 将向 stderr 输出泄漏摘要。
+ * 当编译时定义了 LMMC_DEBUG_LEAKS 宏，可在反初始化前通过
+ * ::lmmc_debug_leaks_get_count 查询未释放的分配。
  */
 void lmmc_deinit(void);
 

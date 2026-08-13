@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @file sparse_direct.c
  * 稀疏 LU / Cholesky 直接分解，含 AMD 重排序与 Gilbert-Peierls 数值分解。
  */
@@ -39,11 +39,7 @@ struct lmmc_sparse_chol_t {
     size_t L_capacity;
     size_t* etree;         /* elimination tree */
 };
-
-
-/* ======================================================================== */
 /* 确保 CSC 格式                                                            */
-/* ======================================================================== */
 
 static lmmc_status_t ensure_csc(const lmmc_sparse_mat_t* a,
                                 lmmc_sparse_mat_t* csc_out,
@@ -57,10 +53,7 @@ static lmmc_status_t ensure_csc(const lmmc_sparse_mat_t* a,
     *needs_free = 1;
     return lmmc_sparse_to_csc(a, csc_out);
 }
-
-/* ======================================================================== */
 /* 动态容量缓冲区增长                                                       */
-/* ======================================================================== */
 
 static lmmc_status_t sparse_ensure_capacity(size_t** idx, lmmc_real_t** vals,
                                             size_t* capacity, size_t needed)
@@ -85,11 +78,7 @@ static lmmc_status_t sparse_ensure_capacity(size_t** idx, lmmc_real_t** vals,
     *capacity = new_cap;
     return LMMC_STATUS_OK;
 }
-
-
-/* ======================================================================== */
 /* AMD (Approximate Minimum Degree) Reordering                              */
-/* ======================================================================== */
 
 /**
  * @brief Compute AMD column permutation for a symmetric sparsity pattern.
@@ -282,11 +271,7 @@ static lmmc_status_t build_symmetric_csc(
     *out_sym_row_idx = sym_row_idx;
     return LMMC_STATUS_OK;
 }
-
-
-/* ======================================================================== */
 /* Elimination Tree                                                          */
-/* ======================================================================== */
 
 /**
  * @brief Build elimination tree from a CSC lower-triangular pattern.
@@ -330,11 +315,7 @@ static void build_etree(size_t n,
     }
     lmmc_free(ancestor);
 }
-
-
-/* ======================================================================== */
 /* Sparse LU: Symbolic Phase                                                 */
-/* ======================================================================== */
 
 lmmc_status_t lmmc_sparse_lu_symbolic(
     const lmmc_sparse_mat_t* a,
@@ -443,11 +424,7 @@ lmmc_status_t lmmc_sparse_lu_symbolic(
     *out_lu = lu;
     return LMMC_STATUS_OK;
 }
-
-
-/* ======================================================================== */
 /* Sparse LU: Numeric Phase (Gilbert-Peierls)                                */
-/* ======================================================================== */
 
 /**
  * @brief Gilbert-Peierls sparse LU factorization with partial pivoting.
@@ -651,11 +628,7 @@ cleanup:
     if (csc_needs_free) lmmc_sparse_destroy(&csc);
     return status;
 }
-
-
-/* ======================================================================== */
 /* Sparse LU: Solve Phase                                                    */
-/* ======================================================================== */
 
 /**
  * @brief Solve Ax = b using the factored LU with AMD permutation.
@@ -740,11 +713,7 @@ lmmc_status_t lmmc_sparse_lu_solve(
     lmmc_free(work);
     return LMMC_STATUS_OK;
 }
-
-
-/* ======================================================================== */
 /* Sparse LU: Destroy                                                        */
-/* ======================================================================== */
 
 void lmmc_sparse_lu_destroy(lmmc_sparse_lu_t* lu)
 {
@@ -761,11 +730,7 @@ void lmmc_sparse_lu_destroy(lmmc_sparse_lu_t* lu)
     if (lu->U_values) lmmc_free(lu->U_values);
     lmmc_free(lu);
 }
-
-
-/* ======================================================================== */
 /* Sparse Cholesky: Symbolic Phase                                           */
-/* ======================================================================== */
 
 lmmc_status_t lmmc_sparse_chol_symbolic(
     const lmmc_sparse_mat_t* a,
@@ -859,11 +824,7 @@ lmmc_status_t lmmc_sparse_chol_symbolic(
     *out_chol = chol;
     return LMMC_STATUS_OK;
 }
-
-
-/* ======================================================================== */
 /* Sparse Cholesky: Numeric Phase                                            */
-/* ======================================================================== */
 
 lmmc_status_t lmmc_sparse_chol_numeric(
     const lmmc_sparse_mat_t* a,
@@ -982,11 +943,7 @@ chol_cleanup:
     if (csc_needs_free) lmmc_sparse_destroy(&csc);
     return status;
 }
-
-
-/* ======================================================================== */
 /* Sparse Cholesky: Solve Phase                                              */
-/* ======================================================================== */
 
 /**
  * @brief Solve A*x = b using Cholesky factorization with AMD permutation.
@@ -1082,11 +1039,7 @@ lmmc_status_t lmmc_sparse_chol_solve(
     lmmc_free(work);
     return LMMC_STATUS_OK;
 }
-
-
-/* ======================================================================== */
 /* Sparse Cholesky: Destroy                                                  */
-/* ======================================================================== */
 
 void lmmc_sparse_chol_destroy(lmmc_sparse_chol_t* chol)
 {

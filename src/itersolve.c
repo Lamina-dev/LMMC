@@ -4,7 +4,6 @@
  */
 #include <math.h>
 #include <string.h>
-#include <stdio.h>
 #include "memory_bridge.h"
 #include "lmmc/config.h"
 #include "lmmc/dense.h"
@@ -142,13 +141,11 @@ static lmmc_status_t lmmc_gmres_back_substitute(
 }
 
 static void lmmc_itersolve_do_log(const lmmc_itersolve_config_t* cfg, size_t iter, lmmc_real_t residual_norm) {
-    if (cfg->log_cb != NULL) {
-        cfg->log_cb(iter, residual_norm, cfg->log_user_data);
-    } else if (cfg->verbose) {
-
-
-        printf("Iteration %zu: residual norm = %.10e\n", iter, residual_norm);
-    }
+    const lmmc_diagnostic_t diagnostic = {
+        LMMC_DIAGNOSTIC_TRACE, "itersolve", "iteration", iter,
+        &residual_norm, 1
+    };
+    lmmc_diagnostic_emit(&cfg->diagnostics, &diagnostic);
 }
 
 lmmc_status_t lmmc_itersolve_default_config(size_t problem_size, lmmc_itersolve_config_t* out_cfg) {
@@ -175,9 +172,7 @@ lmmc_status_t lmmc_itersolve_default_config(size_t problem_size, lmmc_itersolve_
 
     out_cfg->max_iter = max_iter;
     out_cfg->restart = (problem_size < 30) ? problem_size : 30;
-    out_cfg->verbose = 0;
-    out_cfg->log_cb = NULL;
-    out_cfg->log_user_data = NULL;
+    out_cfg->diagnostics = (lmmc_diagnostic_sink_t){0};
     out_cfg->apply_op = NULL;
     out_cfg->op_user_data = NULL;
     return LMMC_STATUS_OK;

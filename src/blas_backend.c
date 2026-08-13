@@ -11,10 +11,10 @@
 #include <cblas.h>
 #include <stdlib.h>
 
-/* ========================================================================
+/**
  * LAPACK Fortran prototypes (column-major, pass-by-pointer convention).
  * Most vendor LAPACK libraries export these symbols with trailing underscore.
- * ======================================================================== */
+ */
 extern void dgetrf_(const int* m, const int* n, double* A, const int* lda,
                     int* ipiv, int* info);
 extern void dgetrs_(const char* trans, const int* n, const int* nrhs,
@@ -31,11 +31,6 @@ extern void dgesvd_(const char* jobu, const char* jobvt, const int* m,
                     const int* n, double* A, const int* lda, double* S,
                     double* U, const int* ldu, double* VT, const int* ldvt,
                     double* work, const int* lwork, int* info);
-
-
-/* ========================================================================
- * BLAS Bridges
- * ======================================================================== */
 
 void lmmc_blas_dgemm(
     size_t m, size_t n, size_t k,
@@ -225,7 +220,7 @@ lmmc_real_t lmmc_blas_dnrm2(
 }
 
 
-/* ========================================================================
+/**
  * LAPACK Bridges
  *
  * Each bridge validates dimensions before calling the vendor.
@@ -233,7 +228,7 @@ lmmc_real_t lmmc_blas_dnrm2(
  *   info = 0  success
  *   info < 0  the |info|-th argument was invalid (dimension check failed)
  *   info > 0  algorithm-specific failure
- * ======================================================================== */
+ */
 
 int lmmc_lapack_getrf(int m, int n, double* A, int lda, int* ipiv)
 {

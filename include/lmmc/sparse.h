@@ -387,8 +387,6 @@ lmmc_status_t lmmc_sparse_to_csc(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
  */
 lmmc_status_t lmmc_sparse_to_csr(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t* dst);
 
-/* ===================== 稀疏 LU 分解 ===================== */
-
 /**
  * @brief 稀疏 LU 分解上下文（不透明类型）。
  *
@@ -475,8 +473,6 @@ lmmc_status_t lmmc_sparse_lu_solve(
 /** @brief 销毁稀疏 LU 上下文。 */
 void lmmc_sparse_lu_destroy(lmmc_sparse_lu_t* lu);
 
-/* ===================== 稀疏 Cholesky 分解 ===================== */
-
 /**
  * @brief 稀疏 Cholesky 分解上下文（不透明类型，要求 @c A 对称正定）。
  *
@@ -511,8 +507,6 @@ lmmc_status_t lmmc_sparse_chol_solve(
 
 /** @brief 销毁稀疏 Cholesky 上下文。 */
 void lmmc_sparse_chol_destroy(lmmc_sparse_chol_t* chol);
-
-/* ===================== COO 三元组接口 ===================== */
 
 /**
  * @brief 三元组 (COO) 形式的稀疏矩阵临时表示。
@@ -556,8 +550,6 @@ lmmc_status_t lmmc_sparse_coo_to_csc(
 /** @brief 销毁 COO 矩阵并释放其缓冲区。 */
 void lmmc_sparse_coo_destroy(lmmc_sparse_coo_t* coo);
 
-/* ===================== 通用稀疏运算 ===================== */
-
 /** @brief 计算 @c C = alpha * A + beta * B 。要求 @p a 与 @p b 同维同格式。 */
 lmmc_status_t lmmc_sparse_add(
     lmmc_real_t alpha, const lmmc_sparse_mat_t* a,
@@ -582,8 +574,6 @@ lmmc_status_t lmmc_sparse_diag(
     const lmmc_sparse_mat_t* a,
     lmmc_vec_t* out_diag
 );
-
-/* ===================== BSR (Block Sparse Row) 格式 ===================== */
 
 /**
  * @brief 块稀疏行 (BSR) 格式矩阵。
@@ -637,8 +627,6 @@ lmmc_status_t lmmc_sparse_dense_to_bsr(const lmmc_mat_t* dense, size_t block_siz
 
 /** @brief 销毁 BSR 矩阵，必要时释放底层缓冲区。 */
 void lmmc_sparse_bsr_destroy(lmmc_sparse_bsr_t* bsr);
-
-/* ===================== 对称半存储 CSR 格式 ===================== */
 
 /**
  * @brief 对称半存储选择：上三角或下三角。

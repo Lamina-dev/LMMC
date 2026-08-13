@@ -6,9 +6,10 @@
 #include "lmmc/lmmc.h"
 
 
-void my_solver_logger(size_t iter, lmmc_real_t residual_norm, void* user_data) {
+void my_solver_logger(const lmmc_diagnostic_t* diagnostic, void* user_data) {
     const char* prefix = (const char*)user_data;
-    printf("[%s] Step %zu: Residual = %.4e\n", prefix, iter, residual_norm);
+    printf("[%s] Step %zu: Residual = %.4e\n", prefix, diagnostic->iteration,
+           diagnostic->value_count > 0 ? diagnostic->values[0] : 0.0);
 }
 
 int main(void) {
@@ -48,8 +49,7 @@ int main(void) {
         lmmc_sparse_destroy(&a); lmmc_vec_destroy(&x); lmmc_vec_destroy(&b); lmmc_mat_destroy(&a_dense);
         return 1;
     }
-    cfg.log_cb = my_solver_logger;
-    cfg.log_user_data = (void*)"CG-Poisson";
+    cfg.diagnostics = (lmmc_diagnostic_sink_t){my_solver_logger, (void*)"CG-Poisson", LMMC_DIAGNOSTIC_TRACE};
     cfg.max_iter = 100;
     cfg.rel_tol = 1e-6;
 
@@ -62,11 +62,10 @@ int main(void) {
     }
 
 
-    cfg.log_cb = NULL;
-    cfg.verbose = 1;
+    cfg.diagnostics.callback = NULL;
     lmmc_vec_fill(&x, 0.0);
 
-    printf("Starting BiCGSTAB solve with built-in verbose logging:\n");
+    printf("Starting BiCGSTAB solve without diagnostics:\n");
     st = lmmc_bicgstab_solve(&a, &b, NULL, &cfg, &x, &res);
 
     if (st == LMMC_STATUS_OK && res.converged) {

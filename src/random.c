@@ -232,9 +232,9 @@ lmmc_status_t lmmc_rng_uniform(
     return LMMC_STATUS_OK;
 }
 
-/* ============================================================
+/**
  * Ziggurat normal sampler (256 rectangles)
- * ============================================================
+ *
  * Reference: Marsaglia & Tsang, "The Ziggurat Method for
  * Generating Random Variables", JSS 2000.
  *
@@ -469,11 +469,6 @@ lmmc_status_t lmmc_rng_shuffle(
     return LMMC_STATUS_OK;
 }
 
-
-/* ============================================================
- * Gamma distribution: Marsaglia-Tsang method
- * ============================================================ */
-
 /**
  * @brief Internal: generate standard normal using Ziggurat.
  */
@@ -537,11 +532,6 @@ lmmc_status_t lmmc_rng_gamma(
     }
 }
 
-
-/* ============================================================
- * Beta distribution: via two Gamma samples
- * ============================================================ */
-
 lmmc_status_t lmmc_rng_beta(
     lmmc_rng_t* rng,
     lmmc_real_t alpha,
@@ -568,11 +558,6 @@ lmmc_status_t lmmc_rng_beta(
     return LMMC_STATUS_OK;
 }
 
-
-/* ============================================================
- * Chi-squared distribution: Chi2(df) = Gamma(df/2, 2)
- * ============================================================ */
-
 lmmc_status_t lmmc_rng_chi_squared(
     lmmc_rng_t* rng,
     lmmc_real_t df,
@@ -587,11 +572,6 @@ lmmc_status_t lmmc_rng_chi_squared(
 
     return lmmc_rng_gamma(rng, df / 2.0, 2.0, out);
 }
-
-
-/* ============================================================
- * Student-t distribution: t(df) = N(0,1) / sqrt(Chi2(df)/df)
- * ============================================================ */
 
 lmmc_status_t lmmc_rng_student_t(
     lmmc_rng_t* rng,
@@ -616,11 +596,6 @@ lmmc_status_t lmmc_rng_student_t(
     *out = z / sqrt(chi2 / df);
     return LMMC_STATUS_OK;
 }
-
-
-/* ============================================================
- * F distribution: F(df1, df2) = (Chi2(df1)/df1) / (Chi2(df2)/df2)
- * ============================================================ */
 
 lmmc_status_t lmmc_rng_f(
     lmmc_rng_t* rng,
@@ -649,11 +624,11 @@ lmmc_status_t lmmc_rng_f(
 }
 
 
-/* ============================================================
+/**
  * Poisson distribution
  * - Inversion for lambda < 10
  * - PTRD (Hörmann) for lambda >= 10
- * ============================================================ */
+ */
 
 /**
  * @brief Poisson inversion method for small lambda.
@@ -741,11 +716,11 @@ lmmc_status_t lmmc_rng_poisson(
 }
 
 
-/* ============================================================
+/**
  * Binomial distribution
  * For small n*min(p,1-p), use direct Bernoulli trials.
  * For larger values, use the BTRD algorithm (Hörmann).
- * ============================================================ */
+ */
 
 lmmc_status_t lmmc_rng_binomial(
     lmmc_rng_t* rng,
@@ -817,11 +792,6 @@ lmmc_status_t lmmc_rng_binomial(
         return LMMC_STATUS_OK;
     }
 }
-
-
-/* ============================================================
- * Uniform integer distribution on [lo, hi]
- * ============================================================ */
 
 lmmc_status_t lmmc_rng_int_uniform(
     lmmc_rng_t* rng,

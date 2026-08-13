@@ -16,8 +16,6 @@
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 
-/* ======================== Utility helpers ======================== */
-
 /**
  * @brief Check if n is a power of 2.
  */
@@ -46,8 +44,6 @@ static size_t fft_next_power_of_two(size_t n) {
     }
     return p;
 }
-
-/* ======================== Radix-2 Cooley-Tukey FFT ======================== */
 
 /**
  * @brief Bit-reversal permutation for power-of-2 length.
@@ -130,8 +126,6 @@ static lmmc_status_t fft_radix2(lmmc_real_t* real, lmmc_real_t* imag, size_t n, 
 
     return LMMC_STATUS_OK;
 }
-
-/* ======================== Bluestein Chirp-Z ======================== */
 
 /**
  * @brief Bluestein chirp-z transform for arbitrary length N.
@@ -250,8 +244,6 @@ cleanup:
     if (b_i) lmmc_free(b_i);
     return st;
 }
-
-/* ======================== Public API ======================== */
 
 lmmc_status_t lmmc_fft(lmmc_real_t* real, lmmc_real_t* imag, size_t n, int inverse) {
     if (real == NULL || imag == NULL || n == 0) {

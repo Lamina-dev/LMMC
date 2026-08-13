@@ -2,13 +2,12 @@
  * @file stats.c
  * @brief 基础统计量与组合数学实现。
  */
+#include <float.h>
 #include <math.h>
 #include "memory_bridge.h"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 #include "lmmc/stats.h"
-#include "lammp/lmmp.h"
-#include "lammp/numth.h"
 
 static int lmmc_mul_overflow_size(size_t a, size_t b, size_t* out) {
     if (a == 0 || b == 0) {
@@ -896,85 +895,69 @@ lmmc_status_t lmmc_mat_correlation_sample(const lmmc_mat_t* x, lmmc_mat_t* out_c
     return lmmc_mat_covariance_or_correlation(x, 1, 1, out_correlation);
 }
 
-static double lmmp_convert_to_double(mp_srcptr src, mp_size_t size) {
-    double res = 0.0;
-    if (size == 0) return 0.0;
-
-    double scale = 1.0;
-    double limb_radix = 1.0;
-    int k;
-    for (k = 0; k < LIMB_BITS; ++k) {
-        limb_radix *= 2.0;
-    }
-
-    for (mp_size_t i = 0; i < size; ++i) {
-        res += (double)src[i] * scale;
-        scale *= limb_radix;
-    }
-    return res;
-}
-
-static void lmmp_to_lmmc_real(lmmc_real_t* dst, mp_srcptr src, mp_size_t size) {
-
-    LMMC_REAL_SET_D(dst, lmmp_convert_to_double(src, size));
-
-
+static int lmmc_real_mul_overflows(lmmc_real_t value, lmmc_real_t factor) {
+    return factor != 0.0 && value > (lmmc_real_t)(DBL_MAX / factor);
 }
 
 void lmmc_stats_factorial(lmmc_real_t* out_val, uint32_t n) {
-    mp_bitcnt_t bits = 0;
-    mp_size_t len = lmmp_factorial_size_(n, &bits);
-    mp_ptr dst = (mp_ptr)lmmc_alloc(len * sizeof(mp_limb_t));
-    if (dst == NULL) {
-        LMMC_REAL_SET_D(out_val, -1.0);
+    if (out_val == NULL) {
         return;
     }
-
-    mp_size_t an = lmmp_factorial_(dst, bits, len, n);
-    lmmp_to_lmmc_real(out_val, dst, an);
-
-    lmmc_free(dst);
+    lmmc_real_t result = 1.0;
+    for (uint32_t k = 2; k <= n; ++k) {
+        lmmc_real_t factor = (lmmc_real_t)k;
+        if (lmmc_real_mul_overflows(result, factor)) {
+            LMMC_REAL_SET_D(out_val, INFINITY);
+            return;
+        }
+        result *= factor;
+    }
+    LMMC_REAL_SET(out_val, &result);
 }
 
 void lmmc_stats_nPr(lmmc_real_t* out_val, uint32_t n, uint32_t r) {
+    if (out_val == NULL) {
+        return;
+    }
     if (r > n) {
         LMMC_REAL_SET_D(out_val, 0.0);
         return;
     }
-    mp_bitcnt_t bits = 0;
-    mp_size_t len = lmmp_nPr_size_(n, r, &bits);
-    mp_ptr dst = (mp_ptr)lmmc_alloc(len * sizeof(mp_limb_t));
-    if (dst == NULL) {
-        LMMC_REAL_SET_D(out_val, -1.0);
-        return;
+    lmmc_real_t result = 1.0;
+    for (uint32_t k = 0; k < r; ++k) {
+        lmmc_real_t factor = (lmmc_real_t)(n - k);
+        if (lmmc_real_mul_overflows(result, factor)) {
+            LMMC_REAL_SET_D(out_val, INFINITY);
+            return;
+        }
+        result *= factor;
     }
-
-    mp_size_t an = lmmp_nPr_(dst, bits, len, n, r);
-    lmmp_to_lmmc_real(out_val, dst, an);
-
-    lmmc_free(dst);
+    LMMC_REAL_SET(out_val, &result);
 }
 
 void lmmc_stats_nCr(lmmc_real_t* out_val, uint32_t n, uint32_t r) {
+    if (out_val == NULL) {
+        return;
+    }
     if (r > n) {
         LMMC_REAL_SET_D(out_val, 0.0);
         return;
     }
-    mp_bitcnt_t bits = 0;
-    mp_size_t len = lmmp_nCr_size_(n, r, &bits);
-    mp_ptr dst = (mp_ptr)lmmc_alloc(len * sizeof(mp_limb_t));
-    if (dst == NULL) {
-        LMMC_REAL_SET_D(out_val, -1.0);
-        return;
+    if (r > n - r) {
+        r = n - r;
     }
-
-    mp_size_t an = lmmp_nCr_(dst, bits, len, n, r);
-    lmmp_to_lmmc_real(out_val, dst, an);
-
-    lmmc_free(dst);
+    lmmc_real_t result = 1.0;
+    for (uint32_t k = 1; k <= r; ++k) {
+        lmmc_real_t numerator = (lmmc_real_t)(n - r + k);
+        lmmc_real_t denominator = (lmmc_real_t)k;
+        if (lmmc_real_mul_overflows(result, numerator)) {
+            LMMC_REAL_SET_D(out_val, INFINITY);
+            return;
+        }
+        result = (result * numerator) / denominator;
+    }
+    LMMC_REAL_SET(out_val, &result);
 }
-
-/* ===================== 描述性统计 ===================== */
 
 /**
  * @brief 比较函数，用于 qsort 排序 lmmc_real_t 数组。
@@ -1097,8 +1080,6 @@ lmmc_status_t lmmc_vec_histogram(const lmmc_vec_t* x, size_t nbins, lmmc_real_t*
 
     return LMMC_STATUS_OK;
 }
-
-/* ===================== 概率分布辅助函数 ===================== */
 
 #ifndef LMMC_SQRT_2PI
 #define LMMC_SQRT_2PI 2.5066282746310002
@@ -1247,8 +1228,6 @@ static lmmc_real_t regularized_beta(lmmc_real_t x, lmmc_real_t a, lmmc_real_t b)
     }
 }
 
-/* ===================== 正态分布 ===================== */
-
 lmmc_status_t lmmc_dist_normal_pdf(lmmc_real_t x, lmmc_real_t mu,
                                     lmmc_real_t sigma, lmmc_real_t* out) {
     lmmc_real_t z, exponent;
@@ -1330,8 +1309,6 @@ lmmc_status_t lmmc_dist_normal_quantile(lmmc_real_t p, lmmc_real_t mu,
     return LMMC_STATUS_OK;
 }
 
-/* ===================== t 分布 ===================== */
-
 lmmc_status_t lmmc_dist_t_pdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out) {
     lmmc_real_t coeff, base;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
@@ -1384,8 +1361,6 @@ lmmc_status_t lmmc_dist_t_quantile(lmmc_real_t p, lmmc_real_t df, lmmc_real_t* o
     *out = x;
     return LMMC_STATUS_OK;
 }
-
-/* ===================== χ² 分布 ===================== */
 
 lmmc_status_t lmmc_dist_chi2_pdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out) {
     lmmc_real_t k2;
@@ -1441,8 +1416,6 @@ lmmc_status_t lmmc_dist_chi2_quantile(lmmc_real_t p, lmmc_real_t df, lmmc_real_t
     *out = x;
     return LMMC_STATUS_OK;
 }
-
-/* ===================== F 分布 ===================== */
 
 lmmc_status_t lmmc_dist_f_pdf(lmmc_real_t x, lmmc_real_t df1, lmmc_real_t df2,
                                lmmc_real_t* out) {
@@ -1500,8 +1473,6 @@ lmmc_status_t lmmc_dist_f_quantile(lmmc_real_t p, lmmc_real_t df1, lmmc_real_t d
     return LMMC_STATUS_OK;
 }
 
-/* ===================== 伽马分布 ===================== */
-
 lmmc_status_t lmmc_dist_gamma_pdf(lmmc_real_t x, lmmc_real_t shape,
                                    lmmc_real_t scale, lmmc_real_t* out) {
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
@@ -1554,8 +1525,6 @@ lmmc_status_t lmmc_dist_gamma_quantile(lmmc_real_t p, lmmc_real_t shape,
     *out = x;
     return LMMC_STATUS_OK;
 }
-
-/* ===================== 贝塔分布 ===================== */
 
 lmmc_status_t lmmc_dist_beta_pdf(lmmc_real_t x, lmmc_real_t alpha,
                                   lmmc_real_t beta_param, lmmc_real_t* out) {
@@ -1622,8 +1591,6 @@ lmmc_status_t lmmc_dist_beta_quantile(lmmc_real_t p, lmmc_real_t alpha,
     return LMMC_STATUS_OK;
 }
 
-/* ===================== 二项分布 ===================== */
-
 lmmc_status_t lmmc_dist_binomial_pmf(size_t k, size_t n, lmmc_real_t p,
                                       lmmc_real_t* out) {
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
@@ -1659,8 +1626,6 @@ lmmc_status_t lmmc_dist_binomial_cdf(size_t k, size_t n, lmmc_real_t p_param,
     *out = regularized_beta(1.0 - p_param, (lmmc_real_t)(n - k), (lmmc_real_t)(k + 1));
     return LMMC_STATUS_OK;
 }
-
-/* ===================== 泊松分布 ===================== */
 
 lmmc_status_t lmmc_dist_poisson_pmf(size_t k, lmmc_real_t lambda,
                                      lmmc_real_t* out) {

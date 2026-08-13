@@ -104,8 +104,6 @@ lmmc_status_t lmmc_mat_correlation_population(const lmmc_mat_t* x, lmmc_mat_t* o
 /** @brief 计算样本 Pearson 相关矩阵，要求行数 >= 2 。 */
 lmmc_status_t lmmc_mat_correlation_sample(const lmmc_mat_t* x, lmmc_mat_t* out_correlation);
 
-/* ===================== 描述性统计 ===================== */
-
 /**
  * @brief 计算向量中位数。
  *
@@ -146,8 +144,6 @@ lmmc_status_t lmmc_vec_quantile(const lmmc_vec_t* x, lmmc_real_t p, lmmc_real_t*
  * @return LMMC_STATUS_OK 成功。
  */
 lmmc_status_t lmmc_vec_histogram(const lmmc_vec_t* x, size_t nbins, lmmc_real_t* edges, size_t* counts);
-
-/* ===================== 概率分布 ===================== */
 
 /* --- 正态分布 --- */
 

@@ -12,6 +12,7 @@
 
 #include <stddef.h>
 #include "lmmc/numeric.h"
+#include "lmmc/diagnostic.h"
 #include "lmmc/precond.h"
 #include "lmmc/sparse.h"
 
@@ -28,19 +29,6 @@ typedef struct {
     lmmc_real_t initial_residual_norm;      /**< 初始残差 2-范数。 */
     lmmc_real_t final_residual_norm;        /**< 终止时的残差 2-范数。 */
 } lmmc_itersolve_result_t;
-
-/**
- * @brief 迭代求解器逐步日志回调签名。
- *
- * @param iter         当前迭代步（从 0 起）。
- * @param residual_norm 当前残差 2-范数。
- * @param user_data    用户透明上下文。
- */
-typedef void (*lmmc_itersolve_log_callback_t)(
-    size_t iter,
-    lmmc_real_t residual_norm,
-    void* user_data
-);
 
 /**
  * @brief 矩阵-向量乘法算子回调类型（matrix-free 模式）。
@@ -63,9 +51,7 @@ typedef struct {
     lmmc_real_t rel_tol;                              /**< 残差相对容差（相对于初始残差）。 */
     size_t max_iter;                                  /**< 最大迭代步数。 */
     size_t restart;                                   /**< GMRES 重启长度（其它求解器忽略）。 */
-    int verbose;                                      /**< 非 0 时启用 stdout 日志。 */
-    lmmc_itersolve_log_callback_t log_cb;             /**< 自定义日志回调，可为 NULL 。 */
-    void* log_user_data;                              /**< 传递给 @c log_cb 的上下文。 */
+    lmmc_diagnostic_sink_t diagnostics;               /**< 统一诊断出口。 */
     lmmc_matvec_op_t apply_op;                        /**< 矩阵-向量乘法算子回调，NULL 表示使用稀疏矩阵。 */
     void* op_user_data;                               /**< 传递给 @c apply_op 的上下文。 */
 } lmmc_itersolve_config_t;

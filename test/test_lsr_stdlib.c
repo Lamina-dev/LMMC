@@ -2117,6 +2117,10 @@ int main(void)
             LMMC_STATUS_INVALID_ARGUMENT ||
         lmmc_lsr_linalg_mat_pow_scalar(&mat, 2, NULL) !=
             LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_linalg_mat_pow_int(NULL, 2, &result) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
+        lmmc_lsr_linalg_mat_pow_int(&mat, 2, NULL) !=
+            LMMC_STATUS_INVALID_ARGUMENT ||
         lmmc_lsr_linalg_mat_compare(NULL,
                                     &rhs,
                                     LMMC_LSR_COMPARE_EQ,
@@ -2488,6 +2492,42 @@ int main(void)
     }
     lmmc_mat_destroy(&result);
 
+    if (lmmc_lsr_linalg_mat_pow_int(&mat, 2, &result) != LMMC_STATUS_OK ||
+        result.rows != 2 || result.cols != 2 ||
+        !mat_close_at(&result, 0, 0, 7) ||
+        !mat_close_at(&result, 0, 1, 10) ||
+        !mat_close_at(&result, 1, 0, 15) ||
+        !mat_close_at(&result, 1, 1, 22)) {
+        fprintf(stderr, "std.linalg matrix integer power mismatch\n");
+        lmmc_mat_destroy(&result);
+        return 1;
+    }
+    lmmc_mat_destroy(&result);
+
+    if (lmmc_lsr_linalg_mat_pow_int(&mat, 0, &result) != LMMC_STATUS_OK ||
+        result.rows != 2 || result.cols != 2 ||
+        !mat_close_at(&result, 0, 0, 1) ||
+        !mat_close_at(&result, 0, 1, 0) ||
+        !mat_close_at(&result, 1, 0, 0) ||
+        !mat_close_at(&result, 1, 1, 1)) {
+        fprintf(stderr, "std.linalg matrix zero integer power mismatch\n");
+        lmmc_mat_destroy(&result);
+        return 1;
+    }
+    lmmc_mat_destroy(&result);
+
+    if (lmmc_lsr_linalg_mat_pow_int(&mat, -1, &result) != LMMC_STATUS_OK ||
+        result.rows != 2 || result.cols != 2 ||
+        !mat_close_at(&result, 0, 0, -2) ||
+        !mat_close_at(&result, 0, 1, 1) ||
+        !mat_close_at(&result, 1, 0, 1.5) ||
+        !mat_close_at(&result, 1, 1, -0.5)) {
+        fprintf(stderr, "std.linalg matrix negative integer power mismatch\n");
+        lmmc_mat_destroy(&result);
+        return 1;
+    }
+    lmmc_mat_destroy(&result);
+
     if (lmmc_lsr_linalg_mat_compare_scalar(&mat,
                                            LMMC_LSR_COMPARE_GE,
                                            3,
@@ -2662,6 +2702,8 @@ int main(void)
             LMMC_STATUS_DIMENSION_MISMATCH ||
         lmmc_lsr_linalg_mat_pow_elem(&mat, &rectangular, &result) !=
             LMMC_STATUS_DIMENSION_MISMATCH ||
+        lmmc_lsr_linalg_mat_pow_int(&rectangular, 2, &result) !=
+            LMMC_STATUS_DIMENSION_MISMATCH ||
         lmmc_lsr_linalg_mat_compare(&mat,
                                     &rectangular,
                                     LMMC_LSR_COMPARE_EQ,
@@ -2676,6 +2718,8 @@ int main(void)
     }
 
     if (lmmc_lsr_linalg_inv(&singular, &result) !=
+            LMMC_STATUS_SINGULAR_MATRIX ||
+        lmmc_lsr_linalg_mat_pow_int(&singular, -1, &result) !=
             LMMC_STATUS_SINGULAR_MATRIX ||
         lmmc_lsr_linalg_solve_left(&singular, &rhs, &result) !=
             LMMC_STATUS_SINGULAR_MATRIX ||

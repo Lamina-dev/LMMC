@@ -4,7 +4,6 @@
  */
 #include <math.h>
 #include <string.h>
-#include <stdio.h>
 #include "memory_bridge.h"
 #include "lmmc/config.h"
 #include "lmmc/dense.h"
@@ -44,10 +43,10 @@ static lmmc_status_t apply_precond(
 }
 
 static void do_log(const lmmc_itersolve_config_t* cfg, size_t iter, lmmc_real_t rn) {
-    if (cfg->log_cb != NULL)
-        cfg->log_cb(iter, rn, cfg->log_user_data);
-    else if (cfg->verbose)
-        printf("Iteration %zu: residual norm = %.10e\n", iter, rn);
+    const lmmc_diagnostic_t diagnostic = {
+        LMMC_DIAGNOSTIC_TRACE, "itersolve", "iteration", iter, &rn, 1
+    };
+    lmmc_diagnostic_emit(&cfg->diagnostics, &diagnostic);
 }
 
 /* Matrix-free dispatch: compute y = A*x */
@@ -116,8 +115,6 @@ static lmmc_status_t matvec_transpose_dispatch(
         return matvec_transpose_csr(a, x_in, y_out);
     return matvec_transpose_csc(a, x_in, y_out);
 }
-
-/* ===================== MINRES ===================== */
 
 lmmc_status_t lmmc_minres_solve(
     const lmmc_sparse_mat_t* a,
@@ -365,8 +362,6 @@ minres_end:
     lmmc_vec_destroy(&v_prev);
     return st;
 }
-
-/* ===================== LSQR ===================== */
 
 lmmc_status_t lmmc_lsqr_solve(
     const lmmc_sparse_mat_t* a,

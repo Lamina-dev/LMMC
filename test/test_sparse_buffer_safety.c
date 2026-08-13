@@ -145,12 +145,6 @@ static lmmc_real_t compute_residual(const lmmc_sparse_mat_t* A,
     return sqrt(norm);
 }
 
-/* ==========================================================================
- * TEST: Sparse LU factorization with tridiagonal matrix (exercises capacity)
- *
- * The tridiagonal matrix has ~3n-2 nonzeros. The LU factors will have
- * entries that grow beyond the initial capacity, exercising reallocation.
- * ========================================================================== */
 static void test_lu_tridiagonal_fillin(void)
 {
     printf("Test: Sparse LU factorization with tridiagonal (n=20)\n");
@@ -188,9 +182,6 @@ static void test_lu_tridiagonal_fillin(void)
     lmmc_sparse_destroy(&A);
 }
 
-/* ==========================================================================
- * TEST: Sparse LU with larger matrix (n=100) to stress reallocation
- * ========================================================================== */
 static void test_lu_large_tridiagonal(void)
 {
     printf("Test: Sparse LU with tridiagonal (n=100, stress reallocation)\n");
@@ -227,14 +218,6 @@ static void test_lu_large_tridiagonal(void)
     lmmc_sparse_destroy(&A);
 }
 
-/* ==========================================================================
- * TEST: Sparse Cholesky with dense SPD stored as sparse (maximum fill-in)
- *
- * The dense SPD matrix (n=15) has n^2 = 225 entries. The Cholesky factor
- * will be fully lower-triangular (n*(n+1)/2 = 120 entries), which exceeds
- * the initial capacity of max(nnz_A, 64) = 225, but the factor growth
- * during computation exercises the reallocation path.
- * ========================================================================== */
 static void test_cholesky_dense_fillin(void)
 {
     printf("Test: Sparse Cholesky with dense SPD matrix (n=15, max fill-in)\n");
@@ -292,12 +275,6 @@ static void test_cholesky_dense_fillin(void)
     lmmc_sparse_destroy(&A);
 }
 
-/* ==========================================================================
- * TEST: Sparse Cholesky with arrowhead SPD (moderate fill-in)
- *
- * The arrowhead matrix has ~3n-2 nonzeros but produces fill-in in the
- * Cholesky factor due to the dense first row/column.
- * ========================================================================== */
 static void test_cholesky_arrowhead_fillin(void)
 {
     printf("Test: Sparse Cholesky with arrowhead SPD (n=30)\n");
@@ -437,9 +414,6 @@ static void test_destroy_after_failed_lu(void)
     lmmc_sparse_destroy(&A);
 }
 
-/* ==========================================================================
- * TEST: Destroy NULL contexts (safety check)
- * ========================================================================== */
 static void test_destroy_null(void)
 {
     printf("Test: Destroy NULL contexts\n");
@@ -451,9 +425,6 @@ static void test_destroy_null(void)
     TEST_ASSERT(1, "Cholesky destroy NULL does not crash");
 }
 
-/* ==========================================================================
- * TEST: Successful factorization followed by destroy (basic lifecycle)
- * ========================================================================== */
 static void test_successful_factorize_then_destroy(void)
 {
     printf("Test: Successful factorization then destroy (lifecycle)\n");
@@ -464,7 +435,6 @@ static void test_successful_factorize_then_destroy(void)
     lmmc_sparse_chol_t* chol = NULL;
     lmmc_status_t st;
 
-    /* Test LU lifecycle */
     st = build_tridiagonal(n, &A);
     TEST_ASSERT(st == LMMC_STATUS_OK, "build tridiagonal matrix");
 
@@ -478,7 +448,6 @@ static void test_successful_factorize_then_destroy(void)
     TEST_ASSERT(1, "LU destroy after success does not crash");
     lmmc_sparse_destroy(&A);
 
-    /* Test Cholesky lifecycle */
     st = build_arrowhead_spd(n, &A);
     TEST_ASSERT(st == LMMC_STATUS_OK, "build SPD matrix");
 

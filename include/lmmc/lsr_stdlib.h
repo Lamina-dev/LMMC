@@ -481,6 +481,9 @@ lmmc_status_t lmmc_lsr_linalg_mat_pow_elem(const lmmc_mat_t* base,
 lmmc_status_t lmmc_lsr_linalg_mat_pow_scalar(const lmmc_mat_t* base,
                                              lmmc_real_t exponent,
                                              lmmc_mat_t* out);
+lmmc_status_t lmmc_lsr_linalg_mat_pow_int(const lmmc_mat_t* base,
+                                          int64_t exponent,
+                                          lmmc_mat_t* out);
 lmmc_status_t lmmc_lsr_linalg_mat_scale(const lmmc_mat_t* a,
                                         lmmc_real_t alpha,
                                         lmmc_mat_t* out);

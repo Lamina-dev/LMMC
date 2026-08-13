@@ -1619,8 +1619,6 @@ lmmc_status_t lmmc_sparse_diag(
     return LMMC_STATUS_OK;
 }
 
-/* ===================== BSR (Block Sparse Row) 格式实现 ===================== */
-
 lmmc_status_t lmmc_sparse_bsr_create(size_t rows, size_t cols, size_t block_size,
     size_t nnz_blocks, lmmc_sparse_bsr_t* out) {
     size_t row_ptr_bytes = 0;
@@ -1861,8 +1859,6 @@ void lmmc_sparse_bsr_destroy(lmmc_sparse_bsr_t* bsr) {
     bsr->nnz_blocks = 0;
     bsr->owns_data = 0;
 }
-
-/* ===================== 对称半存储 CSR 格式实现 ===================== */
 
 lmmc_status_t lmmc_sparse_sym_csr_from_csr(const lmmc_sparse_mat_t* full,
     lmmc_sparse_sym_half_t half, lmmc_sparse_sym_csr_t* out) {

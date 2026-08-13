@@ -180,7 +180,6 @@ lmmc_status_t lmmc_tensor_set(lmmc_tensor_t* tensor, size_t i, size_t j, size_t 
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    /* Construct a temporary N-D view */
     nd.ndim = 3;
     nd.dims[0] = tensor->dim0;
     nd.dims[1] = tensor->dim1;
@@ -208,7 +207,6 @@ lmmc_status_t lmmc_tensor_get(const lmmc_tensor_t* tensor, size_t i, size_t j, s
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    /* Construct a temporary N-D view */
     nd.ndim = 3;
     nd.dims[0] = tensor->dim0;
     nd.dims[1] = tensor->dim1;
@@ -748,9 +746,6 @@ lmmc_status_t lmmc_tensor_slice_view(
     out_view->owns_data = 0;
     return LMMC_STATUS_OK;
 }
-
-
-/* ===================== N-D Tensor API Implementation ===================== */
 
 /**
  * @brief Check if an N-D tensor is contiguous (row-major).

@@ -9,18 +9,20 @@ set(CMAKE_C_EXTENSIONS OFF)
 # as UTF-8. Avoids C2026/C4819 errors when including lammp/lmmp.h on locales whose
 # default code page is not UTF-8 (e.g. Chinese Windows / GBK).
 if(MSVC)
-    add_compile_options(/utf-8)
+    add_compile_options($<$<COMPILE_LANGUAGE:C>:/utf-8>)
 endif()
 
 # GCC/Clang: be explicit that source and execution charset are UTF-8.
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-    add_compile_options(-finput-charset=UTF-8 -fexec-charset=UTF-8)
+    add_compile_options(
+        $<$<COMPILE_LANGUAGE:C>:-finput-charset=UTF-8>
+        $<$<COMPILE_LANGUAGE:C>:-fexec-charset=UTF-8>
+    )
 endif()
 
 option(LMMC_BUILD_TESTS "Build LMMC tests" ON)
 option(LMMC_BUILD_EXAMPLES "Build LMMC examples" ON)
-option(LMMC_BUILD_SHARED "Build shared LMMC library (for Python ctypes/FFI)" ON)
-option(LMMC_REQUIRE_LAMMP_STATIC "Require prebuilt static LAMMP library" ON)
+option(LMMC_BUILD_SHARED "Build LMMC as a shared library" ON)
 
 set(LAMMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/LAMMP" CACHE PATH "Path to LAMMP root")
 set(LAMMP_INCLUDE_DIR "${LAMMP_ROOT}/include" CACHE PATH "Path to LAMMP include directory")
@@ -75,6 +77,7 @@ set(LMMC_SOURCES
     src/blas_backend.c
     src/complex.c
     src/dense.c
+    src/diagnostic.c
     src/eigen.c
     src/fft.c
     src/init.c
@@ -97,45 +100,42 @@ set(LMMC_SOURCES
     src/tensor.c
 )
 
-add_library(lmmc STATIC ${LMMC_SOURCES})
-set(LMMC_LIB_TARGETS lmmc)
-
 if(LMMC_BUILD_SHARED)
-    add_library(lmmc_shared SHARED ${LMMC_SOURCES})
-    set_target_properties(lmmc_shared PROPERTIES OUTPUT_NAME lmmc_shared)
-    if(WIN32)
-        set_target_properties(lmmc_shared PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
-    endif()
-    list(APPEND LMMC_LIB_TARGETS lmmc_shared)
-endif()
-
-foreach(_lmmc_target IN LISTS LMMC_LIB_TARGETS)
-    target_include_directories(${_lmmc_target}
-        PUBLIC
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-            $<BUILD_INTERFACE:${LAMMP_INCLUDE_DIR}>
-            $<INSTALL_INTERFACE:include>
+    add_library(lmmc SHARED ${LMMC_SOURCES})
+    set_target_properties(lmmc PROPERTIES
+        OUTPUT_NAME lmmc
+        EXPORT_NAME lmmc
     )
-endforeach()
+    if(WIN32)
+        set_target_properties(lmmc PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+    endif()
+else()
+    add_library(lmmc STATIC ${LMMC_SOURCES})
+endif()
+target_include_directories(lmmc
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${LAMMP_INCLUDE_DIR}>
+        $<INSTALL_INTERFACE:include>
+)
 
 # Optional BLAS/LAPACK acceleration
 option(LMMC_USE_BLAS "Enable external BLAS/LAPACK acceleration" OFF)
 if(LMMC_USE_BLAS)
     find_package(BLAS REQUIRED)
     find_package(LAPACK REQUIRED)
-    foreach(_lmmc_target IN LISTS LMMC_LIB_TARGETS)
-        target_compile_definitions(${_lmmc_target} PRIVATE LMMC_USE_BLAS=1)
-        target_link_libraries(${_lmmc_target} PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
-    endforeach()
+    target_compile_definitions(lmmc PRIVATE LMMC_USE_BLAS=1)
+    target_link_libraries(lmmc PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
 endif()
 
 if(TARGET LammpCore)
     # LammpCore is already a CMake target (e.g. built via add_subdirectory
     # from the parent project).  Link directly against it.
-    foreach(_lmmc_target IN LISTS LMMC_LIB_TARGETS)
-        target_link_libraries(${_lmmc_target} PUBLIC LammpCore)
-        target_compile_definitions(${_lmmc_target} PRIVATE LMMC_USE_LAMMP_ALLOC=1)
-    endforeach()
+    target_link_libraries(lmmc PUBLIC LammpCore)
+    target_compile_definitions(lmmc PRIVATE LMMC_USE_LAMMP_ALLOC=1)
+    if(WIN32)
+        set_target_properties(LammpCore PROPERTIES PREFIX "")
+    endif()
     message(STATUS "LMMC: linking against LammpCore CMake target")
 elseif(LAMMP_STATIC_LIBRARY)
     if(NOT EXISTS "${LAMMP_STATIC_LIBRARY}")
@@ -146,62 +146,54 @@ elseif(LAMMP_STATIC_LIBRARY)
         IMPORTED_LOCATION "${LAMMP_STATIC_LIBRARY}"
         INTERFACE_INCLUDE_DIRECTORIES "${LAMMP_INCLUDE_DIR}"
     )
-    foreach(_lmmc_target IN LISTS LMMC_LIB_TARGETS)
-        target_link_libraries(${_lmmc_target} PUBLIC lammp_static)
-        target_compile_definitions(${_lmmc_target} PRIVATE LMMC_USE_LAMMP_ALLOC=1)
-    endforeach()
+    target_link_libraries(lmmc PUBLIC lammp_static)
+    target_compile_definitions(lmmc PRIVATE LMMC_USE_LAMMP_ALLOC=1)
     message(STATUS "LMMC: linking static LAMMP library: ${LAMMP_STATIC_LIBRARY}")
-elseif(LMMC_REQUIRE_LAMMP_STATIC)
+elseif(EXISTS "${LAMMP_ROOT}/CMakeLists.txt")
+    add_subdirectory("${LAMMP_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/lammp" EXCLUDE_FROM_ALL)
+    if(WIN32)
+        set_target_properties(LammpCore PROPERTIES PREFIX "")
+    endif()
+    target_link_libraries(lmmc PUBLIC LammpCore)
+    target_compile_definitions(lmmc PRIVATE LMMC_USE_LAMMP_ALLOC=1)
+    message(STATUS "LMMC: building the LammpCore dependency from ${LAMMP_ROOT}")
+else()
     message(FATAL_ERROR
-        "LMMC_REQUIRE_LAMMP_STATIC=ON but LAMMP core library was not found. "
+        "LAMMP core was not found. "
         "Build LAMMP first (e.g. cmake -S LAMMP -B build/lammp; cmake --build build/lammp --config Release), "
         "or set -DLAMMP_STATIC_LIBRARY=<path> explicitly."
     )
-else()
-    message(WARNING "LMMC: LAMMP core library not found, fallback to C runtime allocator bridge is enabled only because LMMC_REQUIRE_LAMMP_STATIC=OFF")
 endif()
 
 option(LMMC_ENABLE_FAST_MATH "Enable aggressive floating point optimizations (-ffast-math, /fp:fast)" OFF)
 option(LMMC_ENABLE_NATIVE_ARCH "Enable native architecture instructions (-march=native, /arch:AVX2)" OFF)
 
-    foreach(_lmmc_target IN LISTS LMMC_LIB_TARGETS)
-        set(_gcc_opts "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic>")
-        if(LMMC_ENABLE_FAST_MATH)
-            list(APPEND _gcc_opts "$<$<CONFIG:Release>:$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-ffast-math>$<$<CXX_COMPILER_ID:MSVC>:/fp:fast>>")
-        endif()
-        if(LMMC_ENABLE_NATIVE_ARCH)
-            list(APPEND _gcc_opts "$<$<CONFIG:Release>:$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-march=native>$<$<CXX_COMPILER_ID:MSVC>:/arch:AVX2>>")
-        endif()
-        list(APPEND _gcc_opts "$<$<CONFIG:Release>:$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O3>$<$<CXX_COMPILER_ID:MSVC>:/O2>>")
-        target_compile_options(${_lmmc_target} PRIVATE ${_gcc_opts})
-    endforeach()
+set(_gcc_opts "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic>")
+if(LMMC_ENABLE_FAST_MATH)
+    list(APPEND _gcc_opts "$<$<CONFIG:Release>:$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-ffast-math>$<$<CXX_COMPILER_ID:MSVC>:/fp:fast>>")
+endif()
+if(LMMC_ENABLE_NATIVE_ARCH)
+    list(APPEND _gcc_opts "$<$<CONFIG:Release>:$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-march=native>$<$<CXX_COMPILER_ID:MSVC>:/arch:AVX2>>")
+endif()
+list(APPEND _gcc_opts "$<$<CONFIG:Release>:$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O3>$<$<CXX_COMPILER_ID:MSVC>:/O2>>")
+target_compile_options(lmmc PRIVATE ${_gcc_opts})
 
-function(lmmc_copy_lammp_runtime target_name)
-    if(WIN32 AND LAMMP_STATIC_LIBRARY)
-        get_filename_component(_lammp_lib_name "${LAMMP_STATIC_LIBRARY}" NAME_WE)
-        get_filename_component(_lammp_lib_dir "${LAMMP_STATIC_LIBRARY}" DIRECTORY)
-        get_filename_component(_lammp_lib_root "${_lammp_lib_dir}" DIRECTORY)
-        get_filename_component(_lammp_dist_root "${_lammp_lib_root}" DIRECTORY)
-        get_filename_component(_lammp_cfg_dir "${_lammp_lib_dir}" NAME)
-        set(_lammp_runtime_base "${_lammp_lib_name}")
-        if(_lammp_runtime_base MATCHES "^lib(.+)$")
-            set(_lammp_runtime_base "${CMAKE_MATCH_1}")
-        endif()
-
-        set(_lammp_runtime_dll "${_lammp_dist_root}/bin/${_lammp_cfg_dir}/${_lammp_runtime_base}.dll")
-        if(NOT EXISTS "${_lammp_runtime_dll}")
-            set(_lammp_runtime_prefixed_dll "${_lammp_dist_root}/bin/${_lammp_cfg_dir}/lib${_lammp_runtime_base}.dll")
-            if(EXISTS "${_lammp_runtime_prefixed_dll}")
-                set(_lammp_runtime_dll "${_lammp_runtime_prefixed_dll}")
-            endif()
-        endif()
+function(lmmc_prepare_runtime target_name)
+    if(WIN32 AND LMMC_BUILD_SHARED)
         add_custom_command(TARGET ${target_name} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${_lammp_runtime_dll}"
-                "$<TARGET_FILE_DIR:${target_name}>/${_lammp_runtime_base}.dll"
-            COMMENT "LMMC: copy ${_lammp_runtime_base}.dll for ${target_name}"
+                "$<TARGET_FILE:lmmc>"
+                "$<TARGET_FILE_DIR:${target_name}>"
             VERBATIM
         )
+        if(TARGET LammpCore)
+            add_custom_command(TARGET ${target_name} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:LammpCore>"
+                    "$<TARGET_FILE_DIR:${target_name}>"
+                VERBATIM
+            )
+        endif()
     endif()
 endfunction()
 
