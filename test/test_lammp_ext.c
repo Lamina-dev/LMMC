@@ -106,7 +106,7 @@ int main(void) {
     rem = lmmp_mulmod_ulong_(4, 6, 13, &q);
     CHECK_OR_FAIL("mulmod", rem == 11 && q == 1);
 
-    CHECK_OR_FAIL("powmod", lmmp_powmod_ulong_(7, 128, 13) == 3);
+    CHECK_OR_FAIL("powmod", lmmp_powmod_ulong_odd_(7, 128, 13) == 3);
 
     CHECK_OR_FAIL("is_prime", lmmp_is_prime_ulong_(97) && !lmmp_is_prime_ulong_(100));
 

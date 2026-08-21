@@ -109,9 +109,7 @@ lmmc_status_t lmmc_lsr_constants_entry(size_t index,
                                        lmmc_real_t* out_value,
                                        const char** out_unit);
 
-/** @brief Return std.math.i, the imaginary unit. */
-lmmc_status_t lmmc_lsr_math_i(lmmc_complex_t* out);
-/** @brief Return std.math.I, an alias of std.math.i. */
+/** @brief Return std.math.I, the imaginary unit. */
 lmmc_status_t lmmc_lsr_math_I(lmmc_complex_t* out);
 
 /** @brief Compare finite numeric values for LSR structural key equality. */

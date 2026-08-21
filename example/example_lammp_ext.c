@@ -21,10 +21,10 @@ int main(void) {
     lmmp_strong_rng_t* strong_rng = NULL;
     mp_size_t strong_actual = 0;
 
-    printf("LAMMP version: %s\n", LAMMP_VERSION);
-    printf("LAMMP compiler: %s (%d)\n", LAMMP_COMPILER, LAMMP_COMPILER_VERSION);
+    printf("LAMMP version: %s\n", lmmp_get_version());
+    printf("LAMMP build: %s\n", lmmp_get_build_type());
     printf("gcd(48,18) = %llu\n", (unsigned long long)lmmp_gcd_11_(48, 18));
-    printf("powmod(7,128,13) = %llu\n", (unsigned long long)lmmp_powmod_ulong_(7, 128, 13));
+    printf("powmod(7,128,13) = %llu\n", (unsigned long long)lmmp_powmod_ulong_odd_(7, 128, 13));
     printf("is_prime(97) = %d\n", lmmp_is_prime_ulong_(97) ? 1 : 0);
 
     lmmp_global_rng_init_(20260411, 1);

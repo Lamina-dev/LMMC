@@ -225,15 +225,14 @@ int main(void)
         return 1;
     }
 
-    if (lmmc_lsr_math_i(&z) != LMMC_STATUS_OK ||
+    if (lmmc_lsr_math_I(&z) != LMMC_STATUS_OK ||
         !close_real(z.real, 0) || !close_real(z.imag, 1)) {
-        fprintf(stderr, "std.math.i mismatch\n");
+        fprintf(stderr, "std.math.I mismatch\n");
         return 1;
     }
     if (lmmc_lsr_math_pi(NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
         lmmc_lsr_math_e(NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
         lmmc_lsr_math_phi(NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
-        lmmc_lsr_math_i(NULL) != LMMC_STATUS_INVALID_ARGUMENT ||
         lmmc_lsr_math_I(NULL) != LMMC_STATUS_INVALID_ARGUMENT) {
         fprintf(stderr, "std.math constant null outputs not rejected\n");
         return 1;
@@ -325,12 +324,6 @@ int main(void)
                     required_constants[i].name);
             return 1;
         }
-    }
-
-    if (lmmc_lsr_math_I(&w) != LMMC_STATUS_OK ||
-        !close_real(w.real, z.real) || !close_real(w.imag, z.imag)) {
-        fprintf(stderr, "std.math.I alias mismatch\n");
-        return 1;
     }
 
     if (lmmc_lsr_num_equal(1.5, 1.5, &num_equal) != LMMC_STATUS_OK ||

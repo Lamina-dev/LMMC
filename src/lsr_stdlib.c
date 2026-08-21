@@ -387,14 +387,9 @@ lmmc_status_t lmmc_lsr_constants_entry(size_t index,
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_lsr_math_i(lmmc_complex_t* out)
-{
-    return lmmc_complex_create((lmmc_real_t)0, (lmmc_real_t)1, out);
-}
-
 lmmc_status_t lmmc_lsr_math_I(lmmc_complex_t* out)
 {
-    return lmmc_lsr_math_i(out);
+    return lmmc_complex_create((lmmc_real_t)0, (lmmc_real_t)1, out);
 }
 
 lmmc_status_t lmmc_lsr_num_equal(lmmc_real_t lhs, lmmc_real_t rhs, int* out)
