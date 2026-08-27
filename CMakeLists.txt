@@ -76,26 +76,55 @@ endif()
 set(LMMC_SOURCES
     src/blas_backend.c
     src/complex.c
-    src/dense.c
     src/diagnostic.c
-    src/eigen.c
+    src/dense_arithmetic.c
+    src/dense_elementwise.c
+    src/dense_products.c
+    src/dense_solvers.c
+    src/dense_storage.c
+    src/eigen_general.c
+    src/eigen_internal.c
+    src/eigen_symmetric.c
+    src/singular_value_decomposition.c
     src/fft.c
     src/init.c
     src/interp.c
     src/itersolve.c
-    src/lsr_stdlib.c
+    src/lsr_boolean_sets.c
+    src/lsr_complex_sets.c
+    src/lsr_constants_units.c
+    src/lsr_linalg_elementwise.c
+    src/lsr_linalg_structural.c
+    src/lsr_numeric_sets.c
+    src/lsr_scalar_functions.c
+    src/lsr_statistics_random.c
+    src/lsr_text_sets.c
     src/itersolve_minres_lsqr.c
     src/linear_algebra.c
     src/nonlinear.c
     src/numeric.c
-    src/ode.c
+    src/ode_common.c
+    src/ode_explicit.c
+    src/ode_implicit.c
+    src/ode_rosenbrock.c
+    src/ode_singly_diagonally_implicit.c
     src/optimize.c
     src/precond.c
     src/quadrature.c
     src/random.c
-    src/sparse.c
+    src/sparse_arithmetic.c
+    src/sparse_block.c
+    src/sparse_builder.c
+    src/sparse_conversion.c
+    src/sparse_products.c
+    src/sparse_storage.c
+    src/sparse_symmetric.c
     src/sparse_direct.c
-    src/stats.c
+    src/probability_continuous.c
+    src/probability_discrete.c
+    src/statistics_combinatorics.c
+    src/statistics_descriptive.c
+    src/statistics_internal.c
     src/status.c
     src/tensor.c
 )
