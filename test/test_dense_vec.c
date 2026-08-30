@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <time.h>
 #include <string.h>
 
 #include "lmmc/config.h"
@@ -400,7 +399,8 @@ int main(void)
 {
     int rc = 0;
 
-    srand((unsigned int)time(NULL));
+    const unsigned int seed = 0x44564543u;
+    srand(seed);
 
     printf("=== 向量 axpy 线性组合正确性 ===\n");
 

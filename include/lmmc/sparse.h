@@ -390,20 +390,17 @@ lmmc_status_t lmmc_sparse_to_csr(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
 /**
  * @brief 稀疏 LU 分解上下文(不透明类型).
  *
- * 符号阶段使用 AMD(近似最小度)填充 @c col_perm,以降低 LU 因子填充量.
- * 分解按符号分析,数值分解与求解三个阶段执行.
- *
- * @see Patrick R. Amestoy, Timothy A. Davis, and Iain S. Duff,
- *      "An Approximate Minimum Degree Ordering Algorithm,"
- *      SIAM Journal on Matrix Analysis and Applications 17(4), 1996.
+ * 符号阶段在 A+A^T 的去重对称简单图上执行确定性的贪心残余度排序。
+ * 该排序只删除已消元顶点的关联边，不建模消元填充，因此不宣称为 AMD。
+ * 分解按符号分析、数值分解与求解三个阶段执行。
  */
 typedef struct lmmc_sparse_lu_t lmmc_sparse_lu_t;
 
 /**
- * @brief 稀疏 LU 符号分析阶段:AMD 重排序 + 消去树构建.
+ * @brief 稀疏 LU 符号分析阶段：去重简单图 + 贪心残余度重排序。
  *
- * 分析矩阵的稀疏结构,计算 AMD(近似最小度)列置换以减少填充,
- * 并预分配 L/U 因子的存储空间.分析结果可复用于多次数值分解
+ * 分析矩阵的稀疏结构，计算确定性的度数/原索引顺序，并预分配 L/U
+ * 因子的存储空间。分析结果可复用于多次数值分解
  * (当矩阵结构不变,仅数值变化时).
  *
  * @param[in]  a      输入方阵(不被修改),rows 须等于 cols.
@@ -424,10 +421,10 @@ lmmc_status_t lmmc_sparse_lu_symbolic(
 );
 
 /**
- * @brief 稀疏 LU 数值分解阶段(Gilbert-Peierls 算法 + 部分主元).
+ * @brief 稀疏 LU 数值分解阶段（稠密列工作区左看算法 + 部分主元）。
  *
- * 在已完成符号分析的 lu 上下文中执行数值分解.
- * 可对同一 lu 多次调用(当矩阵数值变化但结构不变时).
+ * 在已完成符号分析的 lu 上下文中执行数值分解。
+ * 每列散布到稠密工作区并由已有 L 列更新；矩阵数值变化但结构不变时可复用 lu。
  *
  * @param[in]     a  输入方阵(不被修改),维度须与符号分析时一致.
  * @param[in,out] lu 已完成符号分析的 LU 上下文,数值因子被覆写.
@@ -442,9 +439,6 @@ lmmc_status_t lmmc_sparse_lu_symbolic(
  * - 修改 lu 内部的 L/U 数值数组和行置换.
  * - 分配临时工作内存并在返回前释放.
  *
- * @see John R. Gilbert and Tim Peierls,
- *      "Sparse Partial Pivoting in Time Proportional to Arithmetic Operations,"
- *      SIAM Journal on Scientific and Statistical Computing 9(5), 1988.
  */
 lmmc_status_t lmmc_sparse_lu_numeric(
     const lmmc_sparse_mat_t* a,
@@ -454,7 +448,7 @@ lmmc_status_t lmmc_sparse_lu_numeric(
 /**
  * @brief 利用已分解的稀疏 LU 因子求解 A*x = b.
  *
- * 求解过程:x = Q * U^{-1} * L^{-1} * P * b,其中 P 为行置换,Q 为 AMD 列置换.
+ * 求解过程:x = Q * U^{-1} * L^{-1} * P * b,其中 P 为行置换,Q 为残余度列置换.
  * lu 必须已完成 symbolic + numeric 两阶段.
  *
  * @param[in]  lu LU 上下文(不被修改).
@@ -483,23 +477,20 @@ void lmmc_sparse_lu_destroy(lmmc_sparse_lu_t* lu);
 /**
  * @brief 稀疏 Cholesky 分解上下文(不透明类型,要求 @c A 对称正定).
  *
- * 符号阶段使用 AMD(近似最小度)填充 @c perm,以降低 Cholesky 因子填充量.
- * 分解按符号分析,数值分解与求解三个阶段执行.
- *
- * @see Patrick R. Amestoy, Timothy A. Davis, and Iain S. Duff,
- *      "An Approximate Minimum Degree Ordering Algorithm,"
- *      SIAM Journal on Matrix Analysis and Applications 17(4), 1996.
+ * 符号阶段在去重对称简单图上执行确定性的贪心残余度排序；
+ * 数值阶段使用稠密列工作区的左看 Cholesky。该排序不建模填充，不是 AMD。
+ * 分解按符号分析、数值分解与求解三个阶段执行。
  */
 typedef struct lmmc_sparse_chol_t lmmc_sparse_chol_t;
 
-/** @brief 稀疏 Cholesky 符号分析. */
+/** @brief 稀疏 Cholesky 符号分析：去重简单图和贪心残余度重排序。 */
 lmmc_status_t lmmc_sparse_chol_symbolic(
     const lmmc_sparse_mat_t* a,
     lmmc_sparse_chol_t** out_chol
 );
 
 /**
- * @brief 稀疏 Cholesky 数值分解.
+ * @brief 使用稠密列工作区的左看稀疏 Cholesky 数值分解.
  *
  * @return 若 @p a 非正定返回 ::LMMC_STATUS_NOT_POSITIVE_DEFINITE .
  */

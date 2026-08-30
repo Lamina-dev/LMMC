@@ -4,6 +4,7 @@
  */
 #include <stdio.h>
 #include <math.h>
+#include <string.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"
 
@@ -310,6 +311,63 @@ static void test_4x4_spd(void)
     lmmc_sparse_destroy(&A);
 }
 
+static void test_disconnected_duplicate_pattern(void)
+{
+    lmmc_sparse_mat_t matrix = {0};
+    lmmc_sparse_chol_t* first = NULL;
+    lmmc_sparse_chol_t* second = NULL;
+    lmmc_vec_t b = {0}, x1 = {0}, x2 = {0};
+    lmmc_status_t st;
+    const size_t col_ptr[5] = {0, 1, 4, 7, 8};
+    const size_t row_idx[8] = {0, 1, 2, 2, 1, 1, 2, 3};
+    const lmmc_real_t values[8] = {4.0, 3.0, 0.5, 0.5, 0.5, 0.5, 3.0, 5.0};
+    const lmmc_real_t rhs[4] = {4.0, 9.0, 11.0, 20.0};
+
+    printf("Test: disconnected graph with duplicate symmetric entries\n");
+    st = lmmc_sparse_create_csc(4, 4, 8, &matrix);
+    TEST_ASSERT(st == LMMC_STATUS_OK, "create duplicate-pattern CSC");
+    if (st != LMMC_STATUS_OK) return;
+    memcpy(matrix.row_ptr, col_ptr, sizeof(col_ptr));
+    memcpy(matrix.col_idx, row_idx, sizeof(row_idx));
+    memcpy(matrix.values, values, sizeof(values));
+
+    st = lmmc_sparse_chol_symbolic(&matrix, &first);
+    TEST_ASSERT(st == LMMC_STATUS_OK, "first residual-degree symbolic analysis");
+    if (st == LMMC_STATUS_OK) st = lmmc_sparse_chol_numeric(&matrix, first);
+    TEST_ASSERT(st == LMMC_STATUS_OK, "first duplicate-pattern factorization");
+
+    st = lmmc_sparse_chol_symbolic(&matrix, &second);
+    TEST_ASSERT(st == LMMC_STATUS_OK, "second residual-degree symbolic analysis");
+    if (st == LMMC_STATUS_OK) st = lmmc_sparse_chol_numeric(&matrix, second);
+    TEST_ASSERT(st == LMMC_STATUS_OK, "second duplicate-pattern factorization");
+
+    if (lmmc_vec_create(4, &b) != LMMC_STATUS_OK ||
+        lmmc_vec_create(4, &x1) != LMMC_STATUS_OK ||
+        lmmc_vec_create(4, &x2) != LMMC_STATUS_OK) {
+        TEST_ASSERT(0, "create duplicate-pattern solve vectors");
+        goto cleanup;
+    }
+    memcpy(b.data, rhs, sizeof(rhs));
+    st = lmmc_sparse_chol_solve(first, &b, &x1);
+    TEST_ASSERT(st == LMMC_STATUS_OK, "first duplicate-pattern solve");
+    st = lmmc_sparse_chol_solve(second, &b, &x2);
+    TEST_ASSERT(st == LMMC_STATUS_OK, "second duplicate-pattern solve");
+    for (size_t i = 0; i < 4; ++i) {
+        TEST_ASSERT(lmmc_test_nearly_equal(x1.data[i], (lmmc_real_t)(i + 1), 1e-10),
+                    "duplicate-pattern solution is exact");
+        TEST_ASSERT(lmmc_test_nearly_equal(x1.data[i], x2.data[i], 1e-12),
+                    "duplicate-pattern ordering is deterministic");
+    }
+
+cleanup:
+    lmmc_vec_destroy(&b);
+    lmmc_vec_destroy(&x1);
+    lmmc_vec_destroy(&x2);
+    lmmc_sparse_chol_destroy(first);
+    lmmc_sparse_chol_destroy(second);
+    lmmc_sparse_destroy(&matrix);
+}
+
 int main(void)
 {
     printf("=== Sparse Cholesky Factorization Tests ===\n\n");
@@ -321,6 +379,7 @@ int main(void)
     test_null_pointers();
     test_dimension_mismatch();
     test_4x4_spd();
+    test_disconnected_duplicate_pattern();
 
     printf("\n=== Results: %d/%d tests passed ===\n", pass_count, test_count);
 

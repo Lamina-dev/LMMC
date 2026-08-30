@@ -1,6 +1,6 @@
 /**
  * @file sparse_direct.c
- * 稀疏 LU / Cholesky 直接分解，含 AMD 重排序与 Gilbert-Peierls 数值分解。
+ * 稀疏 LU / Cholesky 直接分解，含残余度重排序和稠密工作区左看数值分解。
  */
 #include <string.h>
 #include <math.h>
@@ -11,9 +11,8 @@
 
 struct lmmc_sparse_lu_t {
     size_t n;
-    size_t* col_perm;      /* AMD column permutation: new_col -> old_col */
-    size_t* col_perm_inv;  /* inverse: old_col -> new_col */
-    size_t* row_perm;      /* row permutation from partial pivoting */
+    size_t* col_perm;      /* 残余度列置换:新索引 -> 原索引 */
+    size_t* row_perm;      /* 部分主元法产生的行置换 */
     size_t* L_col_ptr;
     size_t* U_col_ptr;
     size_t* L_row_idx;
@@ -24,20 +23,18 @@ struct lmmc_sparse_lu_t {
     size_t U_nnz;
     size_t L_capacity;
     size_t U_capacity;
-    size_t* etree;         /* elimination tree parent[k] */
 };
 
 
 struct lmmc_sparse_chol_t {
     size_t n;
-    size_t* perm;          /* AMD permutation: new -> old */
-    size_t* perm_inv;      /* inverse: old -> new */
+    size_t* perm;          /* 残余度置换:新索引 -> 原索引 */
+    size_t* perm_inv;      /* 逆置换:原索引 -> 新索引 */
     size_t* L_col_ptr;
     size_t* L_row_idx;
     lmmc_real_t* L_values;
     size_t L_nnz;
     size_t L_capacity;
-    size_t* etree;         /* elimination tree */
 };
 /* 确保 CSC 格式                                                            */
 
@@ -78,242 +75,239 @@ static lmmc_status_t sparse_ensure_capacity(size_t** idx, lmmc_real_t** vals,
     *capacity = new_cap;
     return LMMC_STATUS_OK;
 }
-/* AMD (Approximate Minimum Degree) Reordering                              */
+/* 基于桶的贪心残余度重排序                                               */
+
+static void degree_bucket_remove(size_t node, size_t degree,
+                                 size_t* heads, size_t* next, size_t* prev)
+{
+    if (prev[node] != SIZE_MAX) {
+        next[prev[node]] = next[node];
+    } else {
+        heads[degree] = next[node];
+    }
+    if (next[node] != SIZE_MAX) prev[next[node]] = prev[node];
+    next[node] = SIZE_MAX;
+    prev[node] = SIZE_MAX;
+}
+
+static void degree_bucket_insert(size_t node, size_t degree,
+                                 size_t* heads, size_t* next, size_t* prev)
+{
+    next[node] = heads[degree];
+    prev[node] = SIZE_MAX;
+    if (heads[degree] != SIZE_MAX) prev[heads[degree]] = node;
+    heads[degree] = node;
+}
 
 /**
- * @brief Compute AMD column permutation for a symmetric sparsity pattern.
- *
- * Simplified AMD using external degree with bucket sort. For each step,
- * selects the node with minimum degree, eliminates it, and decrements
- * degrees of non-eliminated neighbors (mass elimination approximation).
- *
- * Input: symmetric CSC pattern (col_ptr, row_idx) of dimension n.
- * Output: perm[k] = original column that becomes column k in new ordering.
- *         perm_inv[j] = new position of original column j.
+ * 按当前残余度贪心选择顶点.度数桶支持常数时间更新;扫描桶时以原始索引
+ * 最小者打破平局,保证结果确定.该算法不是近似最小度算法:消去顶点时仅
+ * 删除其残余关联边,不模拟填充边.
  */
-static lmmc_status_t amd_reorder(size_t n,
-                                  const size_t* col_ptr,
-                                  const size_t* row_idx,
-                                  size_t* perm,
-                                  size_t* perm_inv)
+static lmmc_status_t bucketed_greedy_residual_degree_reorder(
+    size_t n,
+    const size_t* col_ptr,
+    const size_t* row_idx,
+    size_t* perm)
 {
-    if (n == 0) return LMMC_STATUS_OK;
-    if (n == 1) {
-        perm[0] = 0;
-        perm_inv[0] = 0;
-        return LMMC_STATUS_OK;
-    }
+    size_t bytes;
+    size_t* degree;
+    size_t* heads;
+    size_t* next;
+    size_t* prev;
+    unsigned char* eliminated;
+    size_t current_min = SIZE_MAX;
 
-    size_t* degree = (size_t*)lmmc_alloc(n * sizeof(size_t));
-    int* eliminated = (int*)lmmc_alloc(n * sizeof(int));
-    if (!degree || !eliminated) {
+    if (n == 0) return LMMC_STATUS_OK;
+    if (!lmmc_safe_mul_size(n, sizeof(size_t), &bytes)) {
+        return LMMC_STATUS_ALLOCATION_FAILED;
+    }
+    degree = (size_t*)lmmc_alloc(bytes);
+    heads = (size_t*)lmmc_alloc(bytes);
+    next = (size_t*)lmmc_alloc(bytes);
+    prev = (size_t*)lmmc_alloc(bytes);
+    eliminated = (unsigned char*)lmmc_alloc(n);
+    if (!degree || !heads || !next || !prev || !eliminated) {
         if (degree) lmmc_free(degree);
+        if (heads) lmmc_free(heads);
+        if (next) lmmc_free(next);
+        if (prev) lmmc_free(prev);
         if (eliminated) lmmc_free(eliminated);
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
-    memset(eliminated, 0, n * sizeof(int));
 
-    /* Compute initial external degrees (exclude self-loops) */
-    for (size_t i = 0; i < n; i++) {
-        size_t deg = 0;
-        for (size_t p = col_ptr[i]; p < col_ptr[i + 1]; p++) {
-            if (row_idx[p] != i) deg++;
+    memset(eliminated, 0, n);
+    for (size_t i = 0; i < n; ++i) {
+        heads[i] = SIZE_MAX;
+        next[i] = SIZE_MAX;
+        prev[i] = SIZE_MAX;
+    }
+    for (size_t i = 0; i < n; ++i) {
+        degree[i] = col_ptr[i + 1] - col_ptr[i];
+        degree_bucket_insert(i, degree[i], heads, next, prev);
+        if (current_min == SIZE_MAX || degree[i] < current_min) {
+            current_min = degree[i];
         }
-        degree[i] = deg;
     }
 
-    /* Main loop: greedily select minimum degree node */
-    for (size_t step = 0; step < n; step++) {
-        /* Find non-eliminated node with minimum degree */
-        size_t min_node = (size_t)-1;
-        size_t min_deg = (size_t)-1;
-        for (size_t i = 0; i < n; i++) {
-            if (!eliminated[i] && degree[i] < min_deg) {
-                min_deg = degree[i];
-                min_node = i;
-            }
+    for (size_t step = 0; step < n; ++step) {
+        size_t node;
+        size_t candidate;
+        while (current_min < n && heads[current_min] == SIZE_MAX) ++current_min;
+        if (current_min == n) {
+            lmmc_free(degree);
+            lmmc_free(heads);
+            lmmc_free(next);
+            lmmc_free(prev);
+            lmmc_free(eliminated);
+            return LMMC_STATUS_INVALID_ARGUMENT;
         }
 
-        perm[step] = min_node;
-        perm_inv[min_node] = step;
-        eliminated[min_node] = 1;
+        node = heads[current_min];
+        for (candidate = next[node]; candidate != SIZE_MAX; candidate = next[candidate]) {
+            if (candidate < node) node = candidate;
+        }
+        degree_bucket_remove(node, degree[node], heads, next, prev);
+        eliminated[node] = 1;
+        perm[step] = node;
 
-        /* Update degrees of non-eliminated neighbors */
-        for (size_t p = col_ptr[min_node]; p < col_ptr[min_node + 1]; p++) {
-            size_t nb = row_idx[p];
-            if (nb == min_node || eliminated[nb]) continue;
-            if (degree[nb] > 0) degree[nb]--;
+        for (size_t p = col_ptr[node]; p < col_ptr[node + 1]; ++p) {
+            const size_t neighbor = row_idx[p];
+            size_t old_degree;
+            if (eliminated[neighbor]) continue;
+            old_degree = degree[neighbor];
+            degree_bucket_remove(neighbor, old_degree, heads, next, prev);
+            degree[neighbor] = old_degree - 1;
+            degree_bucket_insert(neighbor, degree[neighbor], heads, next, prev);
+            if (degree[neighbor] < current_min) current_min = degree[neighbor];
         }
     }
 
     lmmc_free(degree);
+    lmmc_free(heads);
+    lmmc_free(next);
+    lmmc_free(prev);
     lmmc_free(eliminated);
     return LMMC_STATUS_OK;
 }
 
-
 /**
- * @brief Build symmetric pattern (A + A^T) in CSC for AMD input.
- *
- * For unsymmetric A, AMD needs a symmetric pattern. We form A+A^T.
- * Allocates sym_col_ptr (n+1) and sym_row_idx internally.
- * Caller must free sym_row_idx when done.
+ * 以 CSC 形式构造 A + A^T 的去重对称简单图。
+ * 丢弃自环，并用 size_t 标记数组原地压缩重复有向边；
+ * 当 A(i,j) 与 A(j,i) 同时存在时产生的重复边也会被压缩。
  */
-static lmmc_status_t build_symmetric_csc(
+static lmmc_status_t build_symmetric_simple_graph(
     size_t n,
     const size_t* col_ptr,
     const size_t* row_idx,
-    size_t** out_sym_col_ptr,
-    size_t** out_sym_row_idx)
+    size_t** out_graph_col_ptr,
+    size_t** out_graph_row_idx)
 {
-    /* First pass: count entries per column in A+A^T (excluding diagonal) */
-    size_t* sym_col_ptr = (size_t*)lmmc_alloc((n + 1) * sizeof(size_t));
-    int* marker = (int*)lmmc_alloc(n * sizeof(int));
-    if (!sym_col_ptr || !marker) {
-        if (sym_col_ptr) lmmc_free(sym_col_ptr);
-        if (marker) lmmc_free(marker);
+    size_t pointer_count;
+    size_t pointer_bytes;
+    size_t index_bytes;
+    size_t* graph_col_ptr = NULL;
+    size_t* graph_row_idx = NULL;
+    size_t* cursor = NULL;
+    size_t* stamp = NULL;
+    size_t raw_nnz;
+    size_t read_begin = 0;
+    size_t write = 0;
+
+    if (!lmmc_safe_add_size(n, 1, &pointer_count) ||
+        !lmmc_safe_mul_size(pointer_count, sizeof(size_t), &pointer_bytes) ||
+        !lmmc_safe_mul_size(n, sizeof(size_t), &index_bytes)) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
-    memset(sym_col_ptr, 0, (n + 1) * sizeof(size_t));
+    graph_col_ptr = (size_t*)lmmc_alloc(pointer_bytes);
+    cursor = (size_t*)lmmc_alloc(index_bytes);
+    stamp = (size_t*)lmmc_alloc(index_bytes);
+    if (!graph_col_ptr || (n != 0 && (!cursor || !stamp))) {
+        if (graph_col_ptr) lmmc_free(graph_col_ptr);
+        if (cursor) lmmc_free(cursor);
+        if (stamp) lmmc_free(stamp);
+        return LMMC_STATUS_ALLOCATION_FAILED;
+    }
+    memset(graph_col_ptr, 0, pointer_bytes);
 
-    for (size_t i = 0; i < n; i++) marker[i] = -1;
-
-    /* Count: for each entry (i,j) in A with i!=j, ensure both (i,j) and (j,i) */
-    for (size_t j = 0; j < n; j++) {
-        marker[j] = (int)j; /* mark diagonal */
-        for (size_t p = col_ptr[j]; p < col_ptr[j + 1]; p++) {
-            size_t i = row_idx[p];
-            if (i == j) continue;
-            if (marker[i] != (int)j) {
-                marker[i] = (int)j;
-                sym_col_ptr[j + 1]++;  /* (i,j) in column j */
+    for (size_t column = 0; column < n; ++column) {
+        for (size_t p = col_ptr[column]; p < col_ptr[column + 1]; ++p) {
+            const size_t row = row_idx[p];
+            if (row >= n) {
+                lmmc_free(graph_col_ptr);
+                lmmc_free(cursor);
+                lmmc_free(stamp);
+                return LMMC_STATUS_INVALID_ARGUMENT;
             }
+            if (row == column) continue;
+            if (graph_col_ptr[column + 1] == SIZE_MAX ||
+                graph_col_ptr[row + 1] == SIZE_MAX) {
+                lmmc_free(graph_col_ptr);
+                lmmc_free(cursor);
+                lmmc_free(stamp);
+                return LMMC_STATUS_ALLOCATION_FAILED;
+            }
+            ++graph_col_ptr[column + 1];
+            ++graph_col_ptr[row + 1];
         }
     }
-
-    /* Also count transpose entries */
-    for (size_t i = 0; i < n; i++) marker[i] = -1;
-    for (size_t j = 0; j < n; j++) {
-        marker[j] = (int)j;
-        for (size_t p = col_ptr[j]; p < col_ptr[j + 1]; p++) {
-            size_t i = row_idx[p];
-            if (i == j) continue;
-            /* Transpose: entry (j,i) goes into column i */
-            if (marker[j] != (int)i) {
-                /* We need to check if (j,i) already counted in column i */
-            }
+    for (size_t column = 0; column < n; ++column) {
+        if (!lmmc_safe_add_size(graph_col_ptr[column],
+                                graph_col_ptr[column + 1],
+                                &graph_col_ptr[column + 1])) {
+            lmmc_free(graph_col_ptr);
+            lmmc_free(cursor);
+            lmmc_free(stamp);
+            return LMMC_STATUS_ALLOCATION_FAILED;
         }
     }
-
-    /* Simpler: just count all off-diagonal entries in A, then for each (i,j),
-       add to both col j and col i if not already present. */
-    memset(sym_col_ptr, 0, (n + 1) * sizeof(size_t));
-    for (size_t i = 0; i < n; i++) marker[i] = -1;
-
-    for (size_t j = 0; j < n; j++) {
-        marker[j] = (int)j;
-        for (size_t p = col_ptr[j]; p < col_ptr[j + 1]; p++) {
-            size_t i = row_idx[p];
-            if (i == j) continue;
-            if (marker[i] != (int)j) {
-                marker[i] = (int)j;
-                sym_col_ptr[j + 1]++;
-                sym_col_ptr[i + 1]++;
-            }
-        }
+    raw_nnz = graph_col_ptr[n];
+    if (!lmmc_safe_mul_size(raw_nnz, sizeof(size_t), &index_bytes)) {
+        lmmc_free(graph_col_ptr);
+        lmmc_free(cursor);
+        lmmc_free(stamp);
+        return LMMC_STATUS_ALLOCATION_FAILED;
     }
-
-    /* Prefix sum */
-    for (size_t j = 0; j < n; j++) {
-        sym_col_ptr[j + 1] += sym_col_ptr[j];
-    }
-    size_t sym_nnz = sym_col_ptr[n];
-
-    /* Allocate row indices */
-    size_t* sym_row_idx = NULL;
-    if (sym_nnz > 0) {
-        sym_row_idx = (size_t*)lmmc_alloc(sym_nnz * sizeof(size_t));
-        if (!sym_row_idx) {
-            lmmc_free(sym_col_ptr);
-            lmmc_free(marker);
+    if (raw_nnz != 0) {
+        graph_row_idx = (size_t*)lmmc_alloc(index_bytes);
+        if (!graph_row_idx) {
+            lmmc_free(graph_col_ptr);
+            lmmc_free(cursor);
+            lmmc_free(stamp);
             return LMMC_STATUS_ALLOCATION_FAILED;
         }
     }
 
-    /* Second pass: fill row indices */
-    size_t* work = (size_t*)lmmc_alloc(n * sizeof(size_t));
-    if (!work) {
-        if (sym_row_idx) lmmc_free(sym_row_idx);
-        lmmc_free(sym_col_ptr);
-        lmmc_free(marker);
-        return LMMC_STATUS_ALLOCATION_FAILED;
-    }
-    for (size_t j = 0; j < n; j++) work[j] = sym_col_ptr[j];
-    for (size_t i = 0; i < n; i++) marker[i] = -1;
-
-    for (size_t j = 0; j < n; j++) {
-        marker[j] = (int)j;
-        for (size_t p = col_ptr[j]; p < col_ptr[j + 1]; p++) {
-            size_t i = row_idx[p];
-            if (i == j) continue;
-            if (marker[i] != (int)j) {
-                marker[i] = (int)j;
-                sym_row_idx[work[j]++] = i;
-                sym_row_idx[work[i]++] = j;
-            }
+    memcpy(cursor, graph_col_ptr, n * sizeof(size_t));
+    for (size_t column = 0; column < n; ++column) {
+        for (size_t p = col_ptr[column]; p < col_ptr[column + 1]; ++p) {
+            const size_t row = row_idx[p];
+            if (row == column) continue;
+            graph_row_idx[cursor[column]++] = row;
+            graph_row_idx[cursor[row]++] = column;
         }
     }
 
-    lmmc_free(work);
-    lmmc_free(marker);
+    for (size_t i = 0; i < n; ++i) stamp[i] = SIZE_MAX;
+    for (size_t column = 0; column < n; ++column) {
+        const size_t read_end = graph_col_ptr[column + 1];
+        graph_col_ptr[column] = write;
+        for (size_t p = read_begin; p < read_end; ++p) {
+            const size_t row = graph_row_idx[p];
+            if (stamp[row] != column) {
+                stamp[row] = column;
+                graph_row_idx[write++] = row;
+            }
+        }
+        read_begin = read_end;
+    }
+    graph_col_ptr[n] = write;
 
-    *out_sym_col_ptr = sym_col_ptr;
-    *out_sym_row_idx = sym_row_idx;
+    lmmc_free(cursor);
+    lmmc_free(stamp);
+    *out_graph_col_ptr = graph_col_ptr;
+    *out_graph_row_idx = graph_row_idx;
     return LMMC_STATUS_OK;
-}
-/* Elimination Tree                                                          */
-
-/**
- * @brief Build elimination tree from a CSC lower-triangular pattern.
- *
- * For column k, parent[k] = min { i > k : entry (i,k) exists in pattern }.
- * Uses union-find with path compression for efficiency.
- */
-static void build_etree(size_t n,
-                         const size_t* col_ptr,
-                         const size_t* row_idx,
-                         size_t* parent)
-{
-    size_t* ancestor = (size_t*)lmmc_alloc(n * sizeof(size_t));
-    if (!ancestor) {
-        for (size_t i = 0; i < n; i++)
-            parent[i] = (i + 1 < n) ? i + 1 : (size_t)-1;
-        return;
-    }
-
-    for (size_t i = 0; i < n; i++) {
-        parent[i] = (size_t)-1;
-        ancestor[i] = (size_t)-1;
-    }
-
-    for (size_t k = 0; k < n; k++) {
-        for (size_t p = col_ptr[k]; p < col_ptr[k + 1]; p++) {
-            size_t i = row_idx[p];
-            if (i >= k) continue;
-            /* Walk from i to root, set parent */
-            size_t node = i;
-            while (ancestor[node] != (size_t)-1 && ancestor[node] != k) {
-                size_t t = ancestor[node];
-                ancestor[node] = k;
-                node = t;
-            }
-            if (ancestor[node] == (size_t)-1) {
-                parent[node] = k;
-                ancestor[node] = k;
-            }
-        }
-    }
-    lmmc_free(ancestor);
 }
 /* Sparse LU: Symbolic Phase                                                 */
 
@@ -346,16 +340,14 @@ lmmc_status_t lmmc_sparse_lu_symbolic(
     memset(lu, 0, sizeof(lmmc_sparse_lu_t));
     lu->n = n;
 
-    /* Allocate permutation arrays */
+    /* 分配置换与因子索引数组。 */
     lu->col_perm = (size_t*)lmmc_alloc(n * sizeof(size_t));
-    lu->col_perm_inv = (size_t*)lmmc_alloc(n * sizeof(size_t));
     lu->row_perm = (size_t*)lmmc_alloc(n * sizeof(size_t));
-    lu->etree = (size_t*)lmmc_alloc(n * sizeof(size_t));
     lu->L_col_ptr = (size_t*)lmmc_alloc((n + 1) * sizeof(size_t));
     lu->U_col_ptr = (size_t*)lmmc_alloc((n + 1) * sizeof(size_t));
 
-    if (!lu->col_perm || !lu->col_perm_inv || !lu->row_perm ||
-        !lu->etree || !lu->L_col_ptr || !lu->U_col_ptr) {
+    if (!lu->col_perm || !lu->row_perm ||
+        !lu->L_col_ptr || !lu->U_col_ptr) {
         lmmc_sparse_lu_destroy(lu);
         if (csc_needs_free) lmmc_sparse_destroy(&csc);
         return LMMC_STATUS_ALLOCATION_FAILED;
@@ -367,20 +359,20 @@ lmmc_status_t lmmc_sparse_lu_symbolic(
     /* Initialize row_perm to identity (will be modified by partial pivoting) */
     for (size_t i = 0; i < n; i++) lu->row_perm[i] = i;
 
-    /* Compute AMD column permutation on symmetric pattern A+A^T */
+    /* 计算简单图 A+A^T 的残余度列置换. */
     {
         size_t* sym_col_ptr = NULL;
         size_t* sym_row_idx = NULL;
-        status = build_symmetric_csc(n, csc.row_ptr, csc.col_idx,
-                                     &sym_col_ptr, &sym_row_idx);
+        status = build_symmetric_simple_graph(n, csc.row_ptr, csc.col_idx,
+                                              &sym_col_ptr, &sym_row_idx);
         if (status != LMMC_STATUS_OK) {
             lmmc_sparse_lu_destroy(lu);
             if (csc_needs_free) lmmc_sparse_destroy(&csc);
             return status;
         }
 
-        status = amd_reorder(n, sym_col_ptr, sym_row_idx,
-                             lu->col_perm, lu->col_perm_inv);
+        status = bucketed_greedy_residual_degree_reorder(
+            n, sym_col_ptr, sym_row_idx, lu->col_perm);
 
         lmmc_free(sym_col_ptr);
         if (sym_row_idx) lmmc_free(sym_row_idx);
@@ -392,8 +384,6 @@ lmmc_status_t lmmc_sparse_lu_symbolic(
         }
     }
 
-    /* Build elimination tree from permuted structure */
-    build_etree(n, csc.row_ptr, csc.col_idx, lu->etree);
 
     /* Allocate factor arrays with initial capacity */
     {
@@ -424,18 +414,13 @@ lmmc_status_t lmmc_sparse_lu_symbolic(
     *out_lu = lu;
     return LMMC_STATUS_OK;
 }
-/* Sparse LU: Numeric Phase (Gilbert-Peierls)                                */
+/* 稀疏 LU：数值阶段                                                     */
 
 /**
- * @brief Gilbert-Peierls sparse LU factorization with partial pivoting.
+ * @brief 使用稠密列工作区执行左看稀疏 LU 分解.
  *
- * For each column k (in permuted order):
- * 1. Scatter permuted column of A into dense workspace.
- * 2. Use depth-first reach in the partially-built L to find the non-zero
- *    pattern of column k of L and U.
- * 3. Perform numeric update using the symbolic pattern.
- * 4. Apply partial pivoting.
- * 5. Store L and U entries.
+ * 每个置换后的输入列先散布到工作区,再由已存储的 L 列更新、选择主元,
+ * 最后压缩为稀疏 L 和 U.
  */
 lmmc_status_t lmmc_sparse_lu_numeric(
     const lmmc_sparse_mat_t* a,
@@ -446,8 +431,6 @@ lmmc_status_t lmmc_sparse_lu_numeric(
     lmmc_status_t status = LMMC_STATUS_OK;
     size_t n;
     lmmc_real_t* col_dense = NULL;
-    int* nonzero_flag = NULL;
-    size_t* nonzero_list = NULL;
     size_t* piv_inv = NULL;
 
     if (a == NULL || lu == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
@@ -459,13 +442,11 @@ lmmc_status_t lmmc_sparse_lu_numeric(
     status = ensure_csc(a, &csc, &csc_needs_free);
     if (status != LMMC_STATUS_OK) return status;
 
-    /* Allocate workspace */
+    /* 稠密数值工作区与逆行置换. */
     col_dense = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
-    nonzero_flag = (int*)lmmc_alloc(n * sizeof(int));
-    nonzero_list = (size_t*)lmmc_alloc(n * sizeof(size_t));
     piv_inv = (size_t*)lmmc_alloc(n * sizeof(size_t));
 
-    if (!col_dense || !nonzero_flag || !nonzero_list || !piv_inv) {
+    if (!col_dense || !piv_inv) {
         status = LMMC_STATUS_ALLOCATION_FAILED;
         goto cleanup;
     }
@@ -480,9 +461,8 @@ lmmc_status_t lmmc_sparse_lu_numeric(
     /* Reset row_perm to identity */
     for (size_t i = 0; i < n; i++) lu->row_perm[i] = i;
 
-    /* Gilbert-Peierls: process each column in AMD order */
+    /* 按残余度顺序执行左看分解. */
     for (size_t j = 0; j < n; j++) {
-        size_t nz_count = 0;
         size_t orig_col = lu->col_perm[j]; /* original column index */
 
         /* Set L_col_ptr[j] BEFORE the triangular solve so that
@@ -490,9 +470,8 @@ lmmc_status_t lmmc_sparse_lu_numeric(
          * equals the end of column j-1's entries. */
         lu->L_col_ptr[j] = lu->L_nnz;
 
-        /* Clear workspace */
+        /* 清空稠密列工作区。 */
         memset(col_dense, 0, n * sizeof(lmmc_real_t));
-        memset(nonzero_flag, 0, n * sizeof(int));
 
         /* Scatter column orig_col of A into dense workspace (permuted rows) */
         {
@@ -502,16 +481,10 @@ lmmc_status_t lmmc_sparse_lu_numeric(
                 size_t row = csc.col_idx[p];
                 size_t prow = piv_inv[row]; /* permuted row */
                 col_dense[prow] += csc.values[p];
-                if (!nonzero_flag[prow]) {
-                    nonzero_flag[prow] = 1;
-                    nonzero_list[nz_count++] = prow;
-                }
             }
         }
 
-        /* Depth-first reach: solve L_{1:j-1, 1:j-1} * u = a_j for pattern.
-         * For each previously factored column k < j where col_dense[k] != 0,
-         * subtract L(:,k) * u_k from col_dense, discovering new fill-in. */
+        /* 使用每个已分解且主元行非零的 L 列更新。 */
         for (size_t k = 0; k < j; k++) {
             if (col_dense[k] == 0.0) continue;
 
@@ -524,10 +497,6 @@ lmmc_status_t lmmc_sparse_lu_numeric(
                 size_t row = lu->L_row_idx[p];
                 lmmc_real_t old_val = col_dense[row];
                 col_dense[row] = old_val - lu->L_values[p] * ukj;
-                if (!nonzero_flag[row]) {
-                    nonzero_flag[row] = 1;
-                    nonzero_list[nz_count++] = row;
-                }
             }
         }
 
@@ -622,8 +591,6 @@ lmmc_status_t lmmc_sparse_lu_numeric(
 
 cleanup:
     if (col_dense) lmmc_free(col_dense);
-    if (nonzero_flag) lmmc_free(nonzero_flag);
-    if (nonzero_list) lmmc_free(nonzero_list);
     if (piv_inv) lmmc_free(piv_inv);
     if (csc_needs_free) lmmc_sparse_destroy(&csc);
     return status;
@@ -631,15 +598,9 @@ cleanup:
 /* Sparse LU: Solve Phase                                                    */
 
 /**
- * @brief Solve Ax = b using the factored LU with AMD permutation.
+ * @brief 使用残余度排序的 LU 因子求解 A*x = b.
  *
- * The factorization is P*A*Q = L*U where:
- *   P = row permutation (partial pivoting)
- *   Q = column permutation (AMD)
- *
- * Solve: A*x = b  =>  P*A*Q * Q^{-1}*x = P*b
- *        L*U*y = P*b  where y = Q^{-1}*x
- *        x = Q*y
+ * 分解满足 P*A*Q = L*U,其中 P 为部分主元行置换,Q 为残余度列置换.
  */
 lmmc_status_t lmmc_sparse_lu_solve(
     const lmmc_sparse_lu_t* lu,
@@ -719,9 +680,7 @@ void lmmc_sparse_lu_destroy(lmmc_sparse_lu_t* lu)
 {
     if (lu == NULL) return;
     if (lu->col_perm) lmmc_free(lu->col_perm);
-    if (lu->col_perm_inv) lmmc_free(lu->col_perm_inv);
     if (lu->row_perm) lmmc_free(lu->row_perm);
-    if (lu->etree) lmmc_free(lu->etree);
     if (lu->L_col_ptr) lmmc_free(lu->L_col_ptr);
     if (lu->U_col_ptr) lmmc_free(lu->U_col_ptr);
     if (lu->L_row_idx) lmmc_free(lu->L_row_idx);
@@ -760,34 +719,32 @@ lmmc_status_t lmmc_sparse_chol_symbolic(
     memset(chol, 0, sizeof(lmmc_sparse_chol_t));
     chol->n = n;
 
-    /* Allocate permutation and tree arrays */
+    /* 分配置换与因子索引数组. */
     chol->perm = (size_t*)lmmc_alloc(n * sizeof(size_t));
     chol->perm_inv = (size_t*)lmmc_alloc(n * sizeof(size_t));
-    chol->etree = (size_t*)lmmc_alloc(n * sizeof(size_t));
     chol->L_col_ptr = (size_t*)lmmc_alloc((n + 1) * sizeof(size_t));
 
-    if (!chol->perm || !chol->perm_inv || !chol->etree || !chol->L_col_ptr) {
+    if (!chol->perm || !chol->perm_inv || !chol->L_col_ptr) {
         lmmc_sparse_chol_destroy(chol);
         if (csc_needs_free) lmmc_sparse_destroy(&csc);
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
     memset(chol->L_col_ptr, 0, (n + 1) * sizeof(size_t));
 
-    /* Compute AMD permutation on the symmetric pattern */
-    /* For Cholesky, the matrix is already symmetric, so use it directly */
+    /* 计算对称简单图的残余度置换. */
     {
         size_t* sym_col_ptr = NULL;
         size_t* sym_row_idx = NULL;
-        status = build_symmetric_csc(n, csc.row_ptr, csc.col_idx,
-                                     &sym_col_ptr, &sym_row_idx);
+        status = build_symmetric_simple_graph(n, csc.row_ptr, csc.col_idx,
+                                              &sym_col_ptr, &sym_row_idx);
         if (status != LMMC_STATUS_OK) {
             lmmc_sparse_chol_destroy(chol);
             if (csc_needs_free) lmmc_sparse_destroy(&csc);
             return status;
         }
 
-        status = amd_reorder(n, sym_col_ptr, sym_row_idx,
-                             chol->perm, chol->perm_inv);
+        status = bucketed_greedy_residual_degree_reorder(
+            n, sym_col_ptr, sym_row_idx, chol->perm);
 
         lmmc_free(sym_col_ptr);
         if (sym_row_idx) lmmc_free(sym_row_idx);
@@ -798,9 +755,8 @@ lmmc_status_t lmmc_sparse_chol_symbolic(
             return status;
         }
     }
+    for (size_t i = 0; i < n; ++i) chol->perm_inv[chol->perm[i]] = i;
 
-    /* Build elimination tree */
-    build_etree(n, csc.row_ptr, csc.col_idx, chol->etree);
 
     /* Allocate factor arrays with initial capacity */
     {
@@ -851,9 +807,7 @@ lmmc_status_t lmmc_sparse_chol_numeric(
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
 
-    chol->L_nnz = 0;
-
-    /* Left-looking Cholesky with AMD permutation */
+    /* 使用稠密列工作区执行左看 Cholesky 分解。 */
     for (size_t j = 0; j < n; j++) {
         size_t orig_col = chol->perm[j]; /* original column */
 
@@ -946,10 +900,9 @@ chol_cleanup:
 /* Sparse Cholesky: Solve Phase                                              */
 
 /**
- * @brief Solve A*x = b using Cholesky factorization with AMD permutation.
+ * @brief 使用残余度排序的 Cholesky 因子求解 A*x = b.
  *
- * P*A*P^T = L*L^T where P is the AMD permutation.
- * Solve: L*L^T * (P*x) = P*b
+ * P*A*P^T = L*L^T,其中 P 为残余度置换.
  */
 lmmc_status_t lmmc_sparse_chol_solve(
     const lmmc_sparse_chol_t* chol,
@@ -1046,7 +999,6 @@ void lmmc_sparse_chol_destroy(lmmc_sparse_chol_t* chol)
     if (chol == NULL) return;
     if (chol->perm) lmmc_free(chol->perm);
     if (chol->perm_inv) lmmc_free(chol->perm_inv);
-    if (chol->etree) lmmc_free(chol->etree);
     if (chol->L_col_ptr) lmmc_free(chol->L_col_ptr);
     if (chol->L_row_idx) lmmc_free(chol->L_row_idx);
     if (chol->L_values) lmmc_free(chol->L_values);

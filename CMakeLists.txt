@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.26)
 project(LMMC LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
@@ -23,58 +23,66 @@ endif()
 option(LMMC_BUILD_TESTS "Build LMMC tests" ON)
 option(LMMC_BUILD_EXAMPLES "Build LMMC examples" ON)
 option(LMMC_BUILD_SHARED "Build LMMC as a shared library" ON)
+option(LMMC_USE_BLAS "Enable external BLAS/LAPACK acceleration" OFF)
+option(LMMC_USE_LAMMP_ASM "Enable the LAMMP assembly backend" OFF)
+option(LMMC_WARNINGS_AS_ERRORS "Treat LMMC compiler warnings as errors" OFF)
+option(LMMC_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(LMMC_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
+option(LMMC_ENABLE_COVERAGE "Enable compiler coverage instrumentation" OFF)
+option(LMMC_ENABLE_FAST_MATH "Enable aggressive floating point optimizations" OFF)
+option(LMMC_ENABLE_NATIVE_ARCH "Enable native architecture instructions" OFF)
+
+if(LMMC_ENABLE_SANITIZERS AND LMMC_ENABLE_TSAN)
+    message(FATAL_ERROR "LMMC_ENABLE_SANITIZERS and LMMC_ENABLE_TSAN are mutually exclusive")
+endif()
+if(LMMC_ENABLE_COVERAGE AND (LMMC_ENABLE_SANITIZERS OR LMMC_ENABLE_TSAN))
+    message(FATAL_ERROR "LMMC_ENABLE_COVERAGE cannot be combined with sanitizer instrumentation")
+endif()
 
 set(LAMMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/LAMMP" CACHE PATH "Path to LAMMP root")
 set(LAMMP_INCLUDE_DIR "${LAMMP_ROOT}/include" CACHE PATH "Path to LAMMP include directory")
-set(LAMMP_BUILD_DIR_HINT "${CMAKE_CURRENT_SOURCE_DIR}/build/lammp" CACHE PATH "Preferred out-of-source LAMMP build directory")
+set(LAMMP_BUILD_DIR_HINT "${CMAKE_CURRENT_BINARY_DIR}/lammp" CACHE PATH "Preferred out-of-source LAMMP build directory")
 set(LAMMP_STATIC_LIBRARY "" CACHE FILEPATH "Path to prebuilt static LAMMP library")
 
-if(NOT EXISTS "${LAMMP_INCLUDE_DIR}/lammp/lmmp.h")
-    message(FATAL_ERROR "LAMMP include headers not found in ${LAMMP_INCLUDE_DIR}")
+set(_lmmc_lammp_root "${LAMMP_ROOT}")
+cmake_path(ABSOLUTE_PATH _lmmc_lammp_root
+    BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE)
+set(_lmmc_lammp_include "${LAMMP_INCLUDE_DIR}")
+cmake_path(ABSOLUTE_PATH _lmmc_lammp_include
+    BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE)
+set(_lmmc_lammp_build_hint "${LAMMP_BUILD_DIR_HINT}")
+cmake_path(ABSOLUTE_PATH _lmmc_lammp_build_hint
+    BASE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" NORMALIZE)
+
+if(NOT EXISTS "${_lmmc_lammp_include}/lammp/lmmp.h")
+    message(FATAL_ERROR "LAMMP include headers not found in ${_lmmc_lammp_include}")
 endif()
 
-set(_LAMMP_SEARCH_PATHS
-    "${LAMMP_BUILD_DIR_HINT}/dist/lammp/lib/Release"
-    "${LAMMP_BUILD_DIR_HINT}/dist/lammp/lib/Debug"
-    "${LAMMP_BUILD_DIR_HINT}/dist/lammp/lib/RelWithDebInfo"
-    "${LAMMP_BUILD_DIR_HINT}/dist/lammp/lib/MinSizeRel"
-    "${LAMMP_ROOT}/dist/lammp/lib/Release"
-    "${LAMMP_ROOT}/dist/lammp/lib/Debug"
-    "${LAMMP_ROOT}/dist/lammp/lib/RelWithDebInfo"
-    "${LAMMP_ROOT}/dist/lammp/lib/MinSizeRel"
+set(_lmmc_lammp_search_paths
+    "${_lmmc_lammp_build_hint}/dist/lammp/lib/Release"
+    "${_lmmc_lammp_build_hint}/dist/lammp/lib/Debug"
+    "${_lmmc_lammp_build_hint}/dist/lammp/lib/RelWithDebInfo"
+    "${_lmmc_lammp_build_hint}/dist/lammp/lib/MinSizeRel"
+    "${_lmmc_lammp_root}/dist/lammp/lib/Release"
+    "${_lmmc_lammp_root}/dist/lammp/lib/Debug"
+    "${_lmmc_lammp_root}/dist/lammp/lib/RelWithDebInfo"
+    "${_lmmc_lammp_root}/dist/lammp/lib/MinSizeRel"
 )
-
-find_library(_LAMMP_STATIC_LIBRARY_HINT
+unset(_lmmc_lammp_discovered_library CACHE)
+find_library(_lmmc_lammp_discovered_library
     NAMES LammpCore libLammpCore
-    PATHS
-        "${LAMMP_BUILD_DIR_HINT}/dist/lammp/lib/Release"
-        "${LAMMP_BUILD_DIR_HINT}/dist/lammp/lib/Debug"
-        "${LAMMP_BUILD_DIR_HINT}/dist/lammp/lib/RelWithDebInfo"
-        "${LAMMP_BUILD_DIR_HINT}/dist/lammp/lib/MinSizeRel"
+    PATHS ${_lmmc_lammp_search_paths}
     NO_DEFAULT_PATH
 )
-
-if(_LAMMP_STATIC_LIBRARY_HINT)
-    string(REPLACE "\\" "/" _lammp_static_norm "${LAMMP_STATIC_LIBRARY}")
-    string(REPLACE "\\" "/" _lammp_root_norm "${LAMMP_ROOT}")
-    string(FIND "${_lammp_static_norm}" "${_lammp_root_norm}/dist/lammp/lib/" _lammp_legacy_pos)
-    if(NOT LAMMP_STATIC_LIBRARY OR _lammp_legacy_pos EQUAL 0)
-        set(LAMMP_STATIC_LIBRARY "${_LAMMP_STATIC_LIBRARY_HINT}" CACHE FILEPATH "Path to prebuilt static LAMMP library" FORCE)
-    endif()
-endif()
-
-if(NOT LAMMP_STATIC_LIBRARY)
-    # find_library will not search when a cache entry exists with an empty string.
-    unset(LAMMP_STATIC_LIBRARY CACHE)
-    find_library(LAMMP_STATIC_LIBRARY
-        NAMES LammpCore libLammpCore
-        PATHS ${_LAMMP_SEARCH_PATHS}
-        NO_DEFAULT_PATH
-    )
+if(LAMMP_STATIC_LIBRARY)
+    set(_lmmc_lammp_static_library "${LAMMP_STATIC_LIBRARY}")
+    cmake_path(ABSOLUTE_PATH _lmmc_lammp_static_library
+        BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE)
+else()
+    set(_lmmc_lammp_static_library "${_lmmc_lammp_discovered_library}")
 endif()
 
 set(LMMC_SOURCES
-    src/blas_backend.c
     src/complex.c
     src/diagnostic.c
     src/dense_arithmetic.c
@@ -129,6 +137,31 @@ set(LMMC_SOURCES
     src/tensor.c
 )
 
+function(lmmc_apply_instrumentation target_name)
+    if(LMMC_ENABLE_SANITIZERS OR LMMC_ENABLE_TSAN)
+        if(WIN32 OR NOT CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+            message(FATAL_ERROR "The configured LMMC sanitizer requires GCC or Clang on a non-Windows platform")
+        endif()
+        if(LMMC_ENABLE_SANITIZERS)
+            set(_lmmc_instrumentation_flags
+                -fsanitize=address,undefined -fno-omit-frame-pointer)
+        else()
+            set(_lmmc_instrumentation_flags
+                -fsanitize=thread -fno-omit-frame-pointer)
+        endif()
+        target_compile_options(${target_name} PRIVATE
+            ${_lmmc_instrumentation_flags})
+        target_link_options(${target_name} PRIVATE
+            ${_lmmc_instrumentation_flags})
+    elseif(LMMC_ENABLE_COVERAGE)
+        if(WIN32 OR NOT CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+            message(FATAL_ERROR "LMMC coverage requires GCC or Clang on a non-Windows platform")
+        endif()
+        target_compile_options(${target_name} PRIVATE --coverage -O0 -g)
+        target_link_options(${target_name} PRIVATE --coverage)
+    endif()
+endfunction()
+
 if(LMMC_BUILD_SHARED)
     add_library(lmmc SHARED ${LMMC_SOURCES})
     set_target_properties(lmmc PROPERTIES
@@ -144,9 +177,12 @@ endif()
 target_include_directories(lmmc
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<BUILD_INTERFACE:${LAMMP_INCLUDE_DIR}>
+        $<BUILD_INTERFACE:${_lmmc_lammp_include}>
         $<INSTALL_INTERFACE:include>
 )
+if(UNIX)
+    target_link_libraries(lmmc PUBLIC m)
+endif()
 
 # LAMMP selects MSVC import declarations through this platform define.
 if(MSVC)
@@ -154,8 +190,8 @@ if(MSVC)
 endif()
 
 # Optional BLAS/LAPACK acceleration
-option(LMMC_USE_BLAS "Enable external BLAS/LAPACK acceleration" OFF)
 if(LMMC_USE_BLAS)
+    target_sources(lmmc PRIVATE src/blas_backend.c)
     find_package(BLAS REQUIRED)
     find_package(LAPACK REQUIRED)
     target_compile_definitions(lmmc PRIVATE LMMC_USE_BLAS=1)
@@ -163,57 +199,98 @@ if(LMMC_USE_BLAS)
 endif()
 
 if(TARGET LammpCore)
-    # LammpCore is already a CMake target (e.g. built via add_subdirectory
-    # from the parent project).  Link directly against it.
     target_link_libraries(lmmc PUBLIC LammpCore)
     target_compile_definitions(lmmc PRIVATE LMMC_USE_LAMMP_ALLOC=1)
     if(WIN32)
         set_target_properties(LammpCore PROPERTIES PREFIX "")
     endif()
     message(STATUS "LMMC: linking against LammpCore CMake target")
-elseif(LAMMP_STATIC_LIBRARY)
-    if(NOT EXISTS "${LAMMP_STATIC_LIBRARY}")
-        message(FATAL_ERROR "LAMMP_STATIC_LIBRARY does not exist: ${LAMMP_STATIC_LIBRARY}")
+elseif(_lmmc_lammp_static_library)
+    if(NOT EXISTS "${_lmmc_lammp_static_library}")
+        message(FATAL_ERROR "LAMMP_STATIC_LIBRARY does not exist: ${_lmmc_lammp_static_library}")
     endif()
     add_library(lammp_static UNKNOWN IMPORTED GLOBAL)
     set_target_properties(lammp_static PROPERTIES
-        IMPORTED_LOCATION "${LAMMP_STATIC_LIBRARY}"
-        INTERFACE_INCLUDE_DIRECTORIES "${LAMMP_INCLUDE_DIR}"
+        IMPORTED_LOCATION "${_lmmc_lammp_static_library}"
+        INTERFACE_INCLUDE_DIRECTORIES "${_lmmc_lammp_include}"
     )
     target_link_libraries(lmmc PUBLIC lammp_static)
     target_compile_definitions(lmmc PRIVATE LMMC_USE_LAMMP_ALLOC=1)
-    message(STATUS "LMMC: linking static LAMMP library: ${LAMMP_STATIC_LIBRARY}")
-elseif(EXISTS "${LAMMP_ROOT}/CMakeLists.txt")
-    set(LAMMP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(LAMMP_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(LAMMP_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
-    add_subdirectory("${LAMMP_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/lammp" EXCLUDE_FROM_ALL)
+    message(STATUS "LMMC: linking static LAMMP library: ${_lmmc_lammp_static_library}")
+elseif(EXISTS "${_lmmc_lammp_root}/CMakeLists.txt")
+    if(NOT DEFINED LAMMP_BUILD_TESTS)
+        set(LAMMP_BUILD_TESTS OFF)
+    endif()
+    if(NOT DEFINED LAMMP_BUILD_EXAMPLES)
+        set(LAMMP_BUILD_EXAMPLES OFF)
+    endif()
+    if(NOT DEFINED LAMMP_BUILD_BENCHMARKS)
+        set(LAMMP_BUILD_BENCHMARKS OFF)
+    endif()
+    if(NOT DEFINED USE_ASM)
+        set(USE_ASM "${LMMC_USE_LAMMP_ASM}")
+    endif()
+    add_subdirectory("${_lmmc_lammp_root}"
+        "${CMAKE_CURRENT_BINARY_DIR}/lammp" EXCLUDE_FROM_ALL)
+    set_target_properties(LammpCore PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY
+            "${CMAKE_CURRENT_BINARY_DIR}/lammp/dist/lammp/bin"
+        LIBRARY_OUTPUT_DIRECTORY
+            "${CMAKE_CURRENT_BINARY_DIR}/lammp/dist/lammp/lib"
+        ARCHIVE_OUTPUT_DIRECTORY
+            "${CMAKE_CURRENT_BINARY_DIR}/lammp/dist/lammp/lib"
+    )
+    foreach(_lmmc_config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+        set_target_properties(LammpCore PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY_${_lmmc_config}
+                "${CMAKE_CURRENT_BINARY_DIR}/lammp/dist/lammp/bin"
+            LIBRARY_OUTPUT_DIRECTORY_${_lmmc_config}
+                "${CMAKE_CURRENT_BINARY_DIR}/lammp/dist/lammp/lib"
+            ARCHIVE_OUTPUT_DIRECTORY_${_lmmc_config}
+                "${CMAKE_CURRENT_BINARY_DIR}/lammp/dist/lammp/lib"
+        )
+    endforeach()
     if(WIN32)
         set_target_properties(LammpCore PROPERTIES PREFIX "")
     endif()
     target_link_libraries(lmmc PUBLIC LammpCore)
     target_compile_definitions(lmmc PRIVATE LMMC_USE_LAMMP_ALLOC=1)
-    message(STATUS "LMMC: building the LammpCore dependency from ${LAMMP_ROOT}")
+    message(STATUS "LMMC: building the LammpCore dependency from ${_lmmc_lammp_root}")
 else()
     message(FATAL_ERROR
-        "LAMMP core was not found. "
-        "Build LAMMP first (e.g. cmake -S LAMMP -B build/lammp; cmake --build build/lammp --config Release), "
-        "or set -DLAMMP_STATIC_LIBRARY=<path> explicitly."
+        "LAMMP core was not found. Set LAMMP_STATIC_LIBRARY or provide LAMMP_ROOT.")
+endif()
+
+lmmc_apply_instrumentation(lmmc)
+if(TARGET LammpCore)
+    lmmc_apply_instrumentation(LammpCore)
+endif()
+
+set(_lmmc_warning_options
+    $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:-Wall>
+    $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:-Wextra>
+    $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:-Wpedantic>
+    $<$<COMPILE_LANG_AND_ID:C,MSVC>:/W4>
+)
+if(LMMC_WARNINGS_AS_ERRORS)
+    list(APPEND _lmmc_warning_options
+        $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:-Werror>
+        $<$<COMPILE_LANG_AND_ID:C,MSVC>:/WX>
     )
 endif()
-
-option(LMMC_ENABLE_FAST_MATH "Enable aggressive floating point optimizations (-ffast-math, /fp:fast)" OFF)
-option(LMMC_ENABLE_NATIVE_ARCH "Enable native architecture instructions (-march=native, /arch:AVX2)" OFF)
-
-set(_gcc_opts "$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall;-Wextra;-Wpedantic>")
 if(LMMC_ENABLE_FAST_MATH)
-    list(APPEND _gcc_opts "$<$<CONFIG:Release>:$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-ffast-math>$<$<CXX_COMPILER_ID:MSVC>:/fp:fast>>")
+    list(APPEND _lmmc_warning_options
+        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>>:-ffast-math>
+        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,MSVC>>:/fp:fast>
+    )
 endif()
 if(LMMC_ENABLE_NATIVE_ARCH)
-    list(APPEND _gcc_opts "$<$<CONFIG:Release>:$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-march=native>$<$<CXX_COMPILER_ID:MSVC>:/arch:AVX2>>")
+    list(APPEND _lmmc_warning_options
+        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>>:-march=native>
+        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,MSVC>>:/arch:AVX2>
+    )
 endif()
-list(APPEND _gcc_opts "$<$<CONFIG:Release>:$<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O3>$<$<CXX_COMPILER_ID:MSVC>:/O2>>")
-target_compile_options(lmmc PRIVATE ${_gcc_opts})
+target_compile_options(lmmc PRIVATE ${_lmmc_warning_options})
 
 function(lmmc_prepare_runtime target_name)
     if(WIN32 AND LMMC_BUILD_SHARED)

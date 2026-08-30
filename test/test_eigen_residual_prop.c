@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <time.h>
 
 #include "lmmc/lmmc.h"
 #include "test_common.h"
@@ -190,13 +189,14 @@ int main(void) {
     printf("=== Property Test: Eigenpair Residual ===\n");
     printf("||A*v - lambda*v||_2 <= 1e-8 * (1 + ||A||_F) * ||v||_2\n");
 
-    /* Create RNG with time-based seed for randomness */
+    /* 固定种子保证属性测试可复现。 */
+    const uint64_t seed = UINT64_C(0x45524553);
     st = lmmc_rng_create(&rng);
     if (st != LMMC_STATUS_OK) {
         printf("FATAL: Failed to create RNG\n");
         return 1;
     }
-    lmmc_rng_seed(rng, (uint64_t)time(NULL));
+    lmmc_rng_seed(rng, seed);
 
     /* Test various matrix sizes from 3x3 to 20x20 for speed */
     size_t sizes[] = {3, 4, 5, 6, 7, 8, 10, 12, 15, 18, 20};

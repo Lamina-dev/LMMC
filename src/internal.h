@@ -48,6 +48,53 @@ static inline int lmmc_safe_add_size(size_t a, size_t b, size_t *result)
     return 1;
 }
 
+typedef struct lmmc_storage_envelope {
+    uintptr_t begin;
+    uintptr_t end;
+} lmmc_storage_envelope_t;
+
+/**
+ * @internal
+ * @brief 计算覆盖带步长矩形存储的半开字节包络.
+ *
+ * 包络包含首尾可达元素之间的步长填充;零尺寸矩形的包络为空.
+ */
+static inline int lmmc_storage_envelope_checked(
+    const void *data,
+    size_t rows,
+    size_t cols,
+    size_t stride,
+    size_t element_size,
+    lmmc_storage_envelope_t *out)
+{
+    size_t last_row;
+    size_t elements;
+    size_t bytes;
+    uintptr_t begin;
+
+    if (data == NULL || out == NULL) return 0;
+    begin = (uintptr_t)data;
+    out->begin = begin;
+    out->end = begin;
+    if (rows == 0 || cols == 0) return 1;
+    if (!lmmc_safe_mul_size(rows - 1, stride, &last_row) ||
+        !lmmc_safe_add_size(last_row, cols, &elements) ||
+        !lmmc_safe_mul_size(elements, element_size, &bytes) ||
+        (uintptr_t)bytes > UINTPTR_MAX - begin) {
+        return 0;
+    }
+    out->end = begin + (uintptr_t)bytes;
+    return 1;
+}
+
+/** @internal @brief 检查两个已验证半开包络是否重叠. */
+static inline int lmmc_storage_envelopes_overlap(
+    const lmmc_storage_envelope_t *left,
+    const lmmc_storage_envelope_t *right)
+{
+    return left->begin < right->end && right->begin < left->end;
+}
+
 /** @internal @brief 判断 @c *x 是否为有限数. */
 static inline int lmmc_is_finite(const lmmc_real_t *x)
 {

@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <time.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"
 
@@ -201,13 +200,14 @@ int main(void) {
     printf("GEMM result matches naive triple-loop within tolerance\n");
     printf("Tolerance: 1e-10 * (1 + |alpha| * ||A||_F * ||B||_F + |beta| * ||C0||_F)\n");
 
-    /* Create RNG with time-based seed */
+    /* 固定种子保证属性测试可复现。 */
+    const uint64_t seed = UINT64_C(0x47454D4D);
     st = lmmc_rng_create(&rng);
     if (st != LMMC_STATUS_OK) {
         printf("FATAL: Failed to create RNG\n");
         return 1;
     }
-    lmmc_rng_seed(rng, (uint64_t)time(NULL));
+    lmmc_rng_seed(rng, seed);
 
     /* Test various matrix sizes */
     typedef struct { size_t M; size_t K; size_t N; } dim_triple_t;

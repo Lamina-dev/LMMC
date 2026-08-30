@@ -167,7 +167,7 @@ lmmc_status_t lmmc_ode_implicit_euler_solve(
     }
 
     lmmc_free(x_vec.data);
-    return LMMC_STATUS_OK;
+    return out_result->converged ? LMMC_STATUS_OK : LMMC_STATUS_CONVERGENCE_FAILED;
 }
 
 typedef struct {
@@ -339,5 +339,5 @@ lmmc_status_t lmmc_ode_trapezoidal_solve(
 
     lmmc_free(f_n);
     lmmc_free(x_vec.data);
-    return LMMC_STATUS_OK;
+    return out_result->converged ? LMMC_STATUS_OK : LMMC_STATUS_CONVERGENCE_FAILED;
 }

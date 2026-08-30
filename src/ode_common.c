@@ -88,5 +88,6 @@ lmmc_status_t lmmc_ode_default_config(
     out_cfg->adaptive_step_beta = 0.9;
     out_cfg->diagnostics = (lmmc_diagnostic_sink_t){0};
     out_cfg->jacobian = NULL;
+    out_cfg->time_derivative = NULL;
     return LMMC_STATUS_OK;
 }

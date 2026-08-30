@@ -103,7 +103,6 @@ lmmc_status_t lmmc_sparse_add(
     {
         lmmc_real_t tmp_a; LMMC_REAL_INIT(&tmp_a);
         lmmc_real_t tmp_b; LMMC_REAL_INIT(&tmp_b);
-        lmmc_real_t tmp_sum; LMMC_REAL_INIT(&tmp_sum);
         size_t c_idx = 0;
 
         for (i = 0; i < pa->rows; ++i) {
@@ -156,7 +155,6 @@ lmmc_status_t lmmc_sparse_add(
 
         LMMC_REAL_CLEAR(&tmp_a);
         LMMC_REAL_CLEAR(&tmp_b);
-        LMMC_REAL_CLEAR(&tmp_sum);
     }
 
 

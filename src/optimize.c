@@ -458,7 +458,7 @@ lmmc_status_t lmmc_minimize_lbfgs(
 {
     size_t n, m;
     size_t iter;
-    size_t k, bound, i, j;
+    size_t k, bound, i;
     lmmc_real_t* s_store = NULL;  /* m*n: s_i = x_{i+1} - x_i */
     lmmc_real_t* y_store = NULL;  /* m*n: y_i = g_{i+1} - g_i */
     lmmc_real_t* alpha = NULL;    /* m */
@@ -814,7 +814,7 @@ lmmc_status_t lmmc_minimize_levenberg_marquardt(
             int lm_tries;
 
             for (lm_tries = 0; lm_tries < 20 && !accepted; ++lm_tries) {
-                size_t i, j2;
+                size_t i;
                 lmmc_mat_t A_aug;
 
                 /* Copy JtJ and add lambda*I */

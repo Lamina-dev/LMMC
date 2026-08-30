@@ -79,7 +79,8 @@ static inline lmmc_status_t lmmc_ode_load_and_validate_config(
     }
 
     if (!lmmc_is_finite(&out_cfg->abs_tol) || !lmmc_is_finite(&out_cfg->rel_tol) ||
-        out_cfg->abs_tol < 0.0 || out_cfg->rel_tol < 0.0) {
+        out_cfg->abs_tol < 0.0 || out_cfg->rel_tol < 0.0 ||
+        (out_cfg->abs_tol == 0.0 && out_cfg->rel_tol == 0.0)) {
         if (out_result != NULL) {
             out_result->failure_reason = LMMC_ODE_FAILURE_TOLERANCE_INCONSISTENT;
         }
@@ -118,13 +119,12 @@ static inline lmmc_status_t lmmc_ode_rhs_eval(
     }
 
     *out_callback_failed = 0;
+    *io_eval_count += 1;
     st = rhs(t, y, y_prime, dim, user_data);
     if (st != LMMC_STATUS_OK) {
         *out_callback_failed = 1;
         return st;
     }
-
-    *io_eval_count += 1;
     for (i = 0; i < dim; ++i) {
         if (!lmmc_is_finite(&y_prime[i])) {
             return LMMC_STATUS_NUMERICAL_FAILURE;
@@ -160,12 +160,11 @@ static inline lmmc_status_t validate_and_init_ode_config(
     lmmc_ode_result_t* out_result,
     size_t* out_work_bytes
 ) {
-    if (rhs == NULL || y == NULL || out_result == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
     lmmc_ode_reset_result(out_result, t_start);
 
+    if (rhs == NULL || y == NULL || out_result == NULL || out_cfg == NULL || out_work_bytes == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
     if (lmmc_ode_load_and_validate_config(dim, t_start, t_end, cfg, out_cfg, out_result) != LMMC_STATUS_OK) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
@@ -181,6 +180,49 @@ static inline lmmc_status_t validate_and_init_ode_config(
     }
 
     return LMMC_STATUS_OK;
+}
+
+static inline lmmc_status_t lmmc_ode_weighted_rms(
+    const lmmc_real_t* error,
+    const lmmc_real_t* y_old,
+    const lmmc_real_t* y_new,
+    size_t dim,
+    lmmc_real_t abs_tol,
+    lmmc_real_t rel_tol,
+    lmmc_real_t* out_norm
+) {
+    lmmc_real_t sum = 0.0;
+    size_t i;
+    if (error == NULL || y_old == NULL || y_new == NULL || out_norm == NULL || dim == 0) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    for (i = 0; i < dim; ++i) {
+        lmmc_real_t scale = abs_tol + rel_tol * fmax(fabs(y_old[i]), fabs(y_new[i]));
+        lmmc_real_t ratio;
+        if (!isfinite(scale) || scale <= 0.0 || !isfinite(error[i])) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+        ratio = error[i] / scale;
+        sum += ratio * ratio;
+        if (!isfinite(sum)) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+    }
+    *out_norm = sqrt(sum / (lmmc_real_t)dim);
+    return isfinite(*out_norm) ? LMMC_STATUS_OK : LMMC_STATUS_NUMERICAL_FAILURE;
+}
+
+static inline lmmc_real_t lmmc_ode_next_step(
+    lmmc_real_t h,
+    lmmc_real_t error_norm,
+    const lmmc_ode_config_t* cfg
+) {
+    lmmc_real_t factor = 5.0;
+    if (error_norm > 0.0 && isfinite(error_norm)) {
+        factor = cfg->adaptive_step_beta * pow(error_norm, -0.25);
+    }
+    factor = lmmc_clamp(factor, 0.2, 5.0);
+    return lmmc_clamp(h * factor, cfg->min_step, cfg->max_step);
 }
 
 /**

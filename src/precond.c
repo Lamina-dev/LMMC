@@ -1081,11 +1081,6 @@ void lmmc_precond_destroy(lmmc_precond_t* precond) {
 
     if (precond->owns_data && precond->impl != NULL) {
         if (precond->type == LMMC_PRECOND_JACOBI) {
-            lmmc_real_t* arr = (lmmc_real_t*)precond->impl;
-            size_t k;
-            for (k = 0; k < precond->size; ++k) {
-                LMMC_REAL_CLEAR(&arr[k]);
-            }
             lmmc_free(precond->impl);
         } else if (precond->type == LMMC_PRECOND_ILU0 || precond->type == LMMC_PRECOND_ILUT) {
             lmmc_ilu_impl_destroy((lmmc_precond_ilu_impl_t*)precond->impl);

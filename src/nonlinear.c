@@ -15,25 +15,6 @@ static void lmmc_nonlinear_do_log(const lmmc_nonlinear_config_t* cfg, size_t ite
     lmmc_diagnostic_emit(&cfg->diagnostics, &diagnostic);
 }
 
-static void lmmc_abs_inplace(lmmc_real_t* res, const lmmc_real_t* x) {
-    lmmc_real_t zero;
-    LMMC_REAL_INIT(&zero);
-    LMMC_REAL_SET_D(&zero, 0.0);
-    if (LMMC_REAL_CMP(x, &zero) < 0) {
-        LMMC_REAL_NEG(res, x);
-    } else {
-        LMMC_REAL_SET(res, x);
-    }
-    LMMC_REAL_CLEAR(&zero);
-}
-
-static void lmmc_max_inplace(lmmc_real_t* res, const lmmc_real_t* a, const lmmc_real_t* b) {
-    if (LMMC_REAL_CMP(a, b) > 0) {
-        LMMC_REAL_SET(res, a);
-    } else {
-        LMMC_REAL_SET(res, b);
-    }
-}
 
 static lmmc_status_t lmmc_nonlinear_load_and_validate_config(
     const lmmc_nonlinear_config_t* cfg,

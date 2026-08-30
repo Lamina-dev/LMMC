@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-#include <time.h>
 
 #include "lmmc/config.h"
 #include "../src/internal.h"
@@ -425,7 +424,8 @@ int main(void)
 {
     int rc = 0;
 
-    srand((unsigned int)time(NULL));
+    const unsigned int seed = 0x494E544Cu;
+    srand(seed);
 
     printf("=== Integer overflow detection correctness ===\n");
 

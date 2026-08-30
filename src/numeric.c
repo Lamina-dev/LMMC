@@ -21,17 +21,6 @@ static void lmmc_max_inplace(lmmc_real_t* res, const lmmc_real_t* a, const lmmc_
     }
 }
 
-static int lmmc_mul_overflow_size(size_t a, size_t b, size_t* out) {
-    if (a == 0 || b == 0) {
-        *out = 0;
-        return 0;
-    }
-    if (a > ((size_t)-1) / b) {
-        return 1;
-    }
-    *out = a * b;
-    return 0;
-}
 
 static void lmmc_swapd(lmmc_real_t* a, lmmc_real_t* b) {
     lmmc_real_t tmp;
@@ -292,12 +281,10 @@ static lmmc_status_t lmmc_fft_radix4_core(lmmc_real_t* real, lmmc_real_t* imag, 
         size_t group = len;
         size_t quarter = group / 4;
 
-        lmmc_real_t angle_step, tmp1, tmp2, tmp3, tmp4;
+        lmmc_real_t angle_step, tmp1, tmp2;
         LMMC_REAL_INIT(&angle_step);
         LMMC_REAL_INIT(&tmp1);
         LMMC_REAL_INIT(&tmp2);
-        LMMC_REAL_INIT(&tmp3);
-        LMMC_REAL_INIT(&tmp4);
 
         LMMC_REAL_SET_D(&tmp1, (inverse ? 2.0 : -2.0) * LMMC_PI);
         LMMC_REAL_SET_D(&tmp2, (double)group);
@@ -381,8 +368,6 @@ static lmmc_status_t lmmc_fft_radix4_core(lmmc_real_t* real, lmmc_real_t* imag, 
         LMMC_REAL_CLEAR(&angle_step);
         LMMC_REAL_CLEAR(&tmp1);
         LMMC_REAL_CLEAR(&tmp2);
-        LMMC_REAL_CLEAR(&tmp3);
-        LMMC_REAL_CLEAR(&tmp4);
 
         if (len == n) {
             break;

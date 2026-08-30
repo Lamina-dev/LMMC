@@ -244,7 +244,7 @@ int main(void) {
     {
         double y[1] = {1.0};
         st = lmmc_ode_euler_solve(rhs_fail, NULL, 1, 0.0, 1.0, y, &cfg, &result);
-        if (st != LMMC_STATUS_NUMERICAL_FAILURE || result.failure_reason != LMMC_ODE_FAILURE_RHS_EVAL_FAILED) {
+        if (st != LMMC_STATUS_INVALID_ARGUMENT || result.failure_reason != LMMC_ODE_FAILURE_RHS_EVAL_FAILED) {
             rc = 1;
             goto done;
         }
@@ -276,7 +276,8 @@ int main(void) {
         hard_cfg.max_step = 1e-4;
         hard_cfg.max_steps = 1;
         st = lmmc_ode_euler_solve(rhs_exp, NULL, 1, 0.0, 1.0, y, &hard_cfg, &result);
-        if (st != LMMC_STATUS_OK || result.converged != 0 || result.failure_reason != LMMC_ODE_FAILURE_MAX_STEPS) {
+        if (st != LMMC_STATUS_CONVERGENCE_FAILED || result.converged != 0 ||
+            result.failure_reason != LMMC_ODE_FAILURE_MAX_STEPS) {
             rc = 1;
             goto done;
         }
@@ -292,7 +293,8 @@ int main(void) {
         hard_cfg.rel_tol = 0.0;
         hard_cfg.max_steps = 100;
         st = lmmc_ode_rk45_solve(rhs_exp, NULL, 1, 0.0, 1.0, y, &hard_cfg, &result);
-        if (st != LMMC_STATUS_NUMERICAL_FAILURE || result.failure_reason != LMMC_ODE_FAILURE_INVALID_STEP) {
+        if (st != LMMC_STATUS_INVALID_ARGUMENT ||
+            result.failure_reason != LMMC_ODE_FAILURE_TOLERANCE_INCONSISTENT) {
             rc = 1;
             goto done;
         }

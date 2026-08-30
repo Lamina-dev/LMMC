@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <time.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"
 
@@ -192,13 +191,14 @@ int main(void) {
     printf("=== Property Test: Cholesky Reconstruction ===\n");
     printf("Property: ||L*L^T - A||_F <= 1e-10 * ||A||_F for random SPD inputs\n");
 
-    /* Create RNG with a seed based on time for randomness */
+    /* 固定种子保证属性测试可复现。 */
+    const uint64_t seed = UINT64_C(0x43484F4C);
     st = lmmc_rng_create(&rng);
     if (st != LMMC_STATUS_OK) {
         printf("FATAL: Failed to create RNG\n");
         return 1;
     }
-    lmmc_rng_seed(rng, (uint64_t)time(NULL));
+    lmmc_rng_seed(rng, seed);
 
     /* Test various matrix sizes from 2x2 to 20x20 */
     size_t sizes[] = {2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 18, 20};

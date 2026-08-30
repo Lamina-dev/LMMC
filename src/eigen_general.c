@@ -13,25 +13,6 @@
 #include "lmmc/eigen.h"
 #include "lmmc/linear_algebra.h"
 
-/** @brief 求解 x^2 + p*x + q = 0,并以实部/虚部对返回两个根. */
-static void quad_solve(lmmc_real_t p, lmmc_real_t q,
-                       lmmc_real_t *re1, lmmc_real_t *im1,
-                       lmmc_real_t *re2, lmmc_real_t *im2) {
-    lmmc_real_t disc = p * p - 4.0 * q;
-    if (disc >= 0.0) {
-        lmmc_real_t sq = sqrt(disc);
-        *re1 = (-p + sq) * 0.5;
-        *im1 = 0.0;
-        *re2 = (-p - sq) * 0.5;
-        *im2 = 0.0;
-    } else {
-        lmmc_real_t sq = sqrt(-disc) * 0.5;
-        *re1 = -p * 0.5;
-        *im1 = sq;
-        *re2 = -p * 0.5;
-        *im2 = -sq;
-    }
-}
 
 /**
  * @brief 使用 Householder 反射将一般方阵约化为上 Hessenberg 形.
@@ -109,7 +90,7 @@ static lmmc_status_t francis_qr_iteration(lmmc_mat_t *H, lmmc_mat_t *Q, size_t n
     size_t total_iter = 0;
     int n = (int)nn;
     int i, j, k, l, its, en;
-    lmmc_real_t p, q, r, s, t, w, x, y, z, norm;
+    lmmc_real_t p, q, r, s, t, w, x, y, norm;
     int notlast;
     lmmc_real_t v[3];
 
@@ -351,30 +332,12 @@ lmmc_status_t lmmc_eigen_general(const lmmc_mat_t *a, lmmc_eigen_gen_result_t *o
     return LMMC_STATUS_OK;
 }
 
-static void hqr_eig2(lmmc_real_t a, lmmc_real_t b,
-                     lmmc_real_t c, lmmc_real_t d,
-                     lmmc_real_t *re_p, lmmc_real_t *im_p,
-                     lmmc_real_t *re_q, lmmc_real_t *im_q)
+
+void lmmc_eigen_gen_result_destroy(lmmc_eigen_gen_result_t *result)
 {
-    lmmc_real_t tr = a + d;
-    lmmc_real_t det = a * d - b * c;
-    lmmc_real_t disc = tr * tr - 4.0 * det;
-    if (disc >= 0.0) {
-        lmmc_real_t s = sqrt(disc);
-
-        lmmc_real_t lam1 = (tr >= 0.0) ? (tr + s) * 0.5 : (tr - s) * 0.5;
-        lmmc_real_t lam2 = (lam1 != 0.0) ? (det / lam1) : ((tr - s) * 0.5);
-        *re_p = lam1; *im_p = 0.0;
-        *re_q = lam2; *im_q = 0.0;
-    } else {
-        lmmc_real_t s = sqrt(-disc) * 0.5;
-        *re_p = tr * 0.5; *im_p =  s;
-        *re_q = tr * 0.5; *im_q = -s;
-    }
-}
-
-void lmmc_eigen_gen_result_destroy(lmmc_eigen_gen_result_t *result) {
-    if (!result) return; lmmc_vec_destroy(&result->real_parts); lmmc_vec_destroy(&result->imag_parts);
+    if (!result) return;
+    lmmc_vec_destroy(&result->real_parts);
+    lmmc_vec_destroy(&result->imag_parts);
 }
 
 /**
@@ -513,7 +476,7 @@ static lmmc_status_t inverse_iteration_complex(
     lmmc_real_t *vec_real_out, lmmc_real_t *vec_imag_out)
 {
     lmmc_status_t status;
-    size_t i, j, k, iter;
+    size_t i, j, iter;
     const size_t max_iter = 20;
     const lmmc_real_t eps = 2.2204460492503131e-16;
 

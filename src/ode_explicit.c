@@ -67,7 +67,7 @@ lmmc_status_t lmmc_ode_euler_solve(
         if (st != LMMC_STATUS_OK) {
             out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
             lmmc_free(y_prime);
-            return LMMC_STATUS_NUMERICAL_FAILURE;
+            return st;
         }
 
         for (i = 0; i < dim; ++i) {
@@ -103,7 +103,7 @@ lmmc_status_t lmmc_ode_euler_solve(
     }
 
     lmmc_free(y_prime);
-    return LMMC_STATUS_OK;
+    return out_result->converged ? LMMC_STATUS_OK : LMMC_STATUS_CONVERGENCE_FAILED;
 }
 
 /*
@@ -145,15 +145,6 @@ static const lmmc_real_t ck_a63 = 575.0 / 13824.0;
 static const lmmc_real_t ck_a64 = 44275.0 / 110592.0;
 static const lmmc_real_t ck_a65 = 253.0 / 4096.0;
 
-/* 4th-order weights (for the stepping solution) */
-static const lmmc_real_t ck_b4[6] = {
-    2825.0 / 27648.0,
-    0.0,
-    18575.0 / 48384.0,
-    13525.0 / 55296.0,
-    277.0 / 14336.0,
-    1.0 / 4.0
-};
 
 /* 5th-order weights (for the error estimation solution) */
 static const lmmc_real_t ck_b5[6] = {
@@ -197,6 +188,8 @@ lmmc_status_t lmmc_ode_rk45_solve(
     lmmc_real_t t = t_start;
     lmmc_real_t h = 0.0;
     lmmc_status_t init_st;
+    size_t attempts = 0;
+    lmmc_status_t failure_status = LMMC_STATUS_NUMERICAL_FAILURE;
 
     /* Pre-flight validation */
     init_st = validate_and_init_ode_config(rhs, dim, t_start, t_end, y, cfg, &local_cfg, out_result, &work_bytes);
@@ -239,7 +232,7 @@ lmmc_status_t lmmc_ode_rk45_solve(
     lmmc_ode_do_log(&local_cfg, 0, t, y, dim);
 
     /* Main integration loop */
-    while (t < t_end && out_result->num_steps < local_cfg.max_steps) {
+    while (t < t_end && attempts < local_cfg.max_steps) {
         size_t i = 0;
         lmmc_real_t rem;
         int callback_failed = 0;
@@ -247,6 +240,7 @@ lmmc_status_t lmmc_ode_rk45_solve(
         lmmc_real_t err_norm = 0.0;
         lmmc_real_t h_new = 0.0;
         int step_accepted = 0;
+        ++attempts;
 
         LMMC_REAL_SUB(&rem, &t_end, &t);
         if (rem <= 0.0 || !lmmc_is_finite(&rem)) {
@@ -263,6 +257,7 @@ lmmc_status_t lmmc_ode_rk45_solve(
         if (st != LMMC_STATUS_OK) {
             out_result->failure_reason = callback_failed ?
                 LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            failure_status = st;
             goto rk45_fail;
         }
 
@@ -275,6 +270,7 @@ lmmc_status_t lmmc_ode_rk45_solve(
         if (st != LMMC_STATUS_OK) {
             out_result->failure_reason = callback_failed ?
                 LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            failure_status = st;
             goto rk45_fail;
         }
 
@@ -287,6 +283,7 @@ lmmc_status_t lmmc_ode_rk45_solve(
         if (st != LMMC_STATUS_OK) {
             out_result->failure_reason = callback_failed ?
                 LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            failure_status = st;
             goto rk45_fail;
         }
 
@@ -299,6 +296,7 @@ lmmc_status_t lmmc_ode_rk45_solve(
         if (st != LMMC_STATUS_OK) {
             out_result->failure_reason = callback_failed ?
                 LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            failure_status = st;
             goto rk45_fail;
         }
 
@@ -312,6 +310,7 @@ lmmc_status_t lmmc_ode_rk45_solve(
         if (st != LMMC_STATUS_OK) {
             out_result->failure_reason = callback_failed ?
                 LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            failure_status = st;
             goto rk45_fail;
         }
 
@@ -326,31 +325,31 @@ lmmc_status_t lmmc_ode_rk45_solve(
         if (st != LMMC_STATUS_OK) {
             out_result->failure_reason = callback_failed ?
                 LMMC_ODE_FAILURE_RHS_EVAL_FAILED : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            failure_status = st;
             goto rk45_fail;
         }
 
-        /* --- Compute error estimate --- */
-        /* err_i = h * sum_j(e_j * k_j[i]) is the difference between 5th and 4th order */
+        /* 先构造候选解, 再用新旧状态共同缩放嵌入误差. */
         err_norm = 0.0;
         for (i = 0; i < dim; ++i) {
             lmmc_real_t err_i = h * (ck_e[0] * k1[i] + ck_e[2] * k3[i] +
                                      ck_e[3] * k4[i] + ck_e[4] * k5[i] +
                                      ck_e[5] * k6[i]);
-            /* Scale by tolerance: sc_i = abs_tol + rel_tol * |y[i]| */
-            lmmc_real_t sc_i = local_cfg.abs_tol + local_cfg.rel_tol * fabs(y[i]);
-            lmmc_real_t ratio = err_i / sc_i;
+            lmmc_real_t scale;
+            lmmc_real_t ratio;
+            y_tmp[i] = y[i] + h * (ck_b5[0] * k1[i] + ck_b5[2] * k3[i] +
+                                   ck_b5[3] * k4[i] + ck_b5[5] * k6[i]);
+            scale = local_cfg.abs_tol +
+                    local_cfg.rel_tol * fmax(fabs(y[i]), fabs(y_tmp[i]));
+            ratio = err_i / scale;
             err_norm += ratio * ratio;
         }
         err_norm = sqrt(err_norm / (lmmc_real_t)dim);
 
         /* --- Step acceptance / rejection --- */
         if (err_norm <= 1.0) {
-            /* Step accepted: advance using 5th-order solution for local extrapolation */
             step_accepted = 1;
-            for (i = 0; i < dim; ++i) {
-                y[i] = y[i] + h * (ck_b5[0] * k1[i] + ck_b5[2] * k3[i] +
-                                   ck_b5[3] * k4[i] + ck_b5[5] * k6[i]);
-            }
+            memcpy(y, y_tmp, work_bytes);
 
             /* Check for non-finite state */
             if (!lmmc_ode_state_is_finite(y, dim)) {
@@ -370,23 +369,20 @@ lmmc_status_t lmmc_ode_rk45_solve(
             lmmc_ode_do_log(&local_cfg, out_result->num_steps, t, y, dim);
         }
 
-        /** 计算下一候选步长. */
-        if (err_norm > 0.0) {
-            /** 五阶方法使用 beta * (1/err_norm)^(1/5) 计算候选步长. */
-            h_new = h * local_cfg.adaptive_step_beta * pow(1.0 / err_norm, 0.2);
+        if (err_norm > 0.0 && isfinite(err_norm)) {
+            lmmc_real_t factor = local_cfg.adaptive_step_beta * pow(err_norm, -0.2);
+            factor = lmmc_clamp(factor, 0.2, 5.0);
+            h_new = lmmc_clamp(h * factor, local_cfg.min_step, local_cfg.max_step);
         } else {
-            /** 嵌入误差接近零时采用最大增长因子. */
-            h_new = h * 5.0;
+            h_new = lmmc_clamp(h * 5.0, local_cfg.min_step, local_cfg.max_step);
         }
-
-        /** 将候选步长约束到配置区间. */
-        h_new = lmmc_clamp(h_new, local_cfg.min_step, local_cfg.max_step);
 
         if (!step_accepted) {
             /** min_step 生效后,持续超出容差即报告步长失败. */
             if (h_new <= local_cfg.min_step && err_norm > 1.0) {
                 if (h <= local_cfg.min_step) {
                     out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_STEP;
+                    failure_status = LMMC_STATUS_CONVERGENCE_FAILED;
                     goto rk45_fail;
                 }
             }
@@ -395,7 +391,6 @@ lmmc_status_t lmmc_ode_rk45_solve(
         h = h_new;
     }
 
-    /* Check termination condition */
     if (t >= t_end) {
         out_result->converged = 1;
         out_result->failure_reason = LMMC_ODE_FAILURE_NONE;
@@ -409,7 +404,7 @@ lmmc_status_t lmmc_ode_rk45_solve(
         lmmc_free(k3);
         lmmc_free(k2);
         lmmc_free(k1);
-        return LMMC_STATUS_OK;
+        return LMMC_STATUS_CONVERGENCE_FAILED;
     }
 
     lmmc_free(y_tmp);
@@ -429,7 +424,7 @@ rk45_fail:
     lmmc_free(k3);
     lmmc_free(k2);
     lmmc_free(k1);
-    return LMMC_STATUS_NUMERICAL_FAILURE;
+    return failure_status;
 }
 
 lmmc_status_t lmmc_ode_rk4_solve(
@@ -494,7 +489,6 @@ lmmc_status_t lmmc_ode_rk4_solve(
         lmmc_real_t t_mid;
         lmmc_real_t t_next;
         lmmc_real_t half = 0.5;
-        lmmc_real_t sixth;
         lmmc_real_t two = 2.0;
         lmmc_real_t six = 6.0;
         lmmc_real_t h_over_6;
@@ -602,7 +596,7 @@ lmmc_status_t lmmc_ode_rk4_solve(
     lmmc_free(k3);
     lmmc_free(k2);
     lmmc_free(k1);
-    return LMMC_STATUS_OK;
+    return out_result->converged ? LMMC_STATUS_OK : LMMC_STATUS_CONVERGENCE_FAILED;
 
 rk4_fail:
     lmmc_free(y_tmp);

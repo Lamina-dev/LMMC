@@ -532,6 +532,7 @@ int main(void)
         fprintf(stderr, "set<bool> subset mismatch\n");
         return 1;
     }
+    lmmc_lsr_bool_set_destroy(&bool_set_xor);
     if (lmmc_lsr_bool_set_make(NULL, 1, &bool_set_xor) !=
             LMMC_STATUS_INVALID_ARGUMENT ||
         lmmc_lsr_bool_set_make(bool_set_bad_values, 2, &bool_set_xor) !=
@@ -660,6 +661,7 @@ int main(void)
         fprintf(stderr, "set<text> subset mismatch\n");
         return 1;
     }
+    lmmc_lsr_text_set_destroy(&text_set_xor);
     if (lmmc_lsr_text_set_make(NULL, 1, &text_set_xor) !=
             LMMC_STATUS_INVALID_ARGUMENT ||
         lmmc_lsr_text_set_make(text_set_bad_values, 2, &text_set_xor) !=
@@ -875,6 +877,7 @@ int main(void)
         fprintf(stderr, "set<complex> subset mismatch\n");
         return 1;
     }
+    lmmc_lsr_complex_set_destroy(&complex_set_xor);
     if (lmmc_lsr_complex_set_make(NULL, 1, &complex_set_xor) !=
             LMMC_STATUS_INVALID_ARGUMENT ||
         lmmc_lsr_complex_set_make(complex_set_bad_values,

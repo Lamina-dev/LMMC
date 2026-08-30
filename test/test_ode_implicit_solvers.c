@@ -315,6 +315,183 @@ static int test_trapezoidal_second_order(void) {
     return 0;
 }
 
+typedef lmmc_status_t (*implicit_solver_t)(
+    lmmc_ode_rhs_t, void*, size_t, lmmc_real_t, lmmc_real_t,
+    lmmc_real_t*, const lmmc_ode_config_t*, lmmc_ode_result_t*
+);
+
+static lmmc_status_t dfdt_zero(double t, const double* y, double* dfdt,
+                                size_t dim, void* ud) {
+    size_t i;
+    (void)t;
+    (void)y;
+    (void)ud;
+    for (i = 0; i < dim; ++i) dfdt[i] = 0.0;
+    return LMMC_STATUS_OK;
+}
+
+static int run_fourth_order_check(const char* name, implicit_solver_t solver) {
+    const double steps[2] = {0.1, 0.05};
+    double errors[2];
+    linear_ctx_t ctx = {1.0};
+    size_t run;
+
+    for (run = 0; run < 2; ++run) {
+        lmmc_ode_config_t cfg;
+        lmmc_ode_result_t result;
+        double y[1] = {1.0};
+        lmmc_status_t st;
+        if (lmmc_ode_default_config(0.0, 1.0, 1, &cfg) != LMMC_STATUS_OK) return 1;
+        cfg.initial_step = steps[run];
+        cfg.min_step = steps[run];
+        cfg.max_step = steps[run];
+        cfg.abs_tol = 1.0e6;
+        cfg.rel_tol = 0.0;
+        cfg.max_steps = 100;
+        cfg.jacobian = jac_linear_decay;
+        cfg.time_derivative = dfdt_zero;
+        st = solver(rhs_linear_decay, &ctx, 1, 0.0, 1.0, y, &cfg, &result);
+        if (st != LMMC_STATUS_OK || !result.converged) {
+            fprintf(stderr, "%s failed for h=%.17g with status %d\n", name, steps[run], (int)st);
+            return 1;
+        }
+        errors[run] = fabs(y[0] - exp(1.0));
+    }
+
+    {
+        double ratio = errors[0] / errors[1];
+        if (ratio < 12.0 || ratio > 20.0) {
+            fprintf(stderr, "%s fourth-order ratio %.17g outside [12,20]\n", name, ratio);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int test_advertised_fourth_order(void) {
+    int failures = 0;
+    failures += run_fourth_order_check("SDIRK4", lmmc_ode_sdirk4_solve);
+    failures += run_fourth_order_check("GRK4T", lmmc_ode_rosenbrock_grk4t_solve);
+    return failures;
+}
+
+static lmmc_status_t rhs_stiff_tracking(double t, const double* y, double* yp,
+                                         size_t dim, void* ud) {
+    (void)ud;
+    if (dim != 1) return LMMC_STATUS_INVALID_ARGUMENT;
+    yp[0] = -1000.0 * (y[0] - cos(t)) - sin(t);
+    return LMMC_STATUS_OK;
+}
+
+static lmmc_status_t jac_stiff_tracking(double t, const double* y, double* jac,
+                                         size_t dim, void* ud) {
+    (void)t;
+    (void)y;
+    (void)ud;
+    if (dim != 1) return LMMC_STATUS_INVALID_ARGUMENT;
+    jac[0] = -1000.0;
+    return LMMC_STATUS_OK;
+}
+
+static lmmc_status_t dfdt_stiff_tracking(double t, const double* y, double* dfdt,
+                                          size_t dim, void* ud) {
+    (void)y;
+    (void)ud;
+    if (dim != 1) return LMMC_STATUS_INVALID_ARGUMENT;
+    dfdt[0] = -1000.0 * sin(t) - cos(t);
+    return LMMC_STATUS_OK;
+}
+
+static int solve_stiff_tracking(implicit_solver_t solver, int analytic,
+                                double tolerance, double* value, size_t* evals) {
+    lmmc_ode_config_t cfg;
+    lmmc_ode_result_t result;
+    double y[1] = {1.0};
+    lmmc_status_t st;
+    if (lmmc_ode_default_config(0.0, 1.0, 1, &cfg) != LMMC_STATUS_OK) return 1;
+    cfg.initial_step = 0.01;
+    cfg.min_step = 1.0e-10;
+    cfg.max_step = 0.1;
+    cfg.abs_tol = tolerance;
+    cfg.rel_tol = tolerance;
+    cfg.max_steps = 100000;
+    cfg.jacobian = analytic ? jac_stiff_tracking : NULL;
+    cfg.time_derivative = analytic ? dfdt_stiff_tracking : NULL;
+    st = solver(rhs_stiff_tracking, NULL, 1, 0.0, 1.0, y, &cfg, &result);
+    if (st != LMMC_STATUS_OK || !result.converged) {
+        fprintf(stderr, "stiff solve status=%d reason=%d tol=%.1e analytic=%d evals=%zu\n",
+                (int)st, (int)result.failure_reason, tolerance, analytic,
+                result.num_rhs_evals);
+        return 1;
+    }
+    *value = y[0];
+    *evals = result.num_rhs_evals;
+    return 0;
+}
+
+static int run_stiff_tracking_check(const char* name, implicit_solver_t solver) {
+    double analytic, finite_difference, coarse, fine;
+    size_t analytic_evals, fd_evals, coarse_evals, fine_evals;
+    if (solve_stiff_tracking(solver, 1, 1e-6, &analytic, &analytic_evals) ||
+        solve_stiff_tracking(solver, 0, 1e-6, &finite_difference, &fd_evals) ||
+        solve_stiff_tracking(solver, 1, 1e-4, &coarse, &coarse_evals) ||
+        solve_stiff_tracking(solver, 1, 1e-7, &fine, &fine_evals)) {
+        fprintf(stderr, "%s stiff tracking solve failed\n", name);
+        return 1;
+    }
+    if (fabs(analytic - cos(1.0)) > 1e-5 ||
+        fabs(finite_difference - analytic) > 1e-5) {
+        fprintf(stderr, "%s stiff tracking accuracy failed\n", name);
+        return 1;
+    }
+    if (!(fabs(fine - cos(1.0)) < fabs(coarse - cos(1.0))) ||
+        fine_evals < coarse_evals || fd_evals <= analytic_evals) {
+        fprintf(stderr, "%s tolerance or callback work ordering failed\n", name);
+        return 1;
+    }
+    return 0;
+}
+
+static int test_stiff_tracking(void) {
+    int failures = 0;
+    failures += run_stiff_tracking_check("SDIRK4", lmmc_ode_sdirk4_solve);
+    failures += run_stiff_tracking_check("GRK4T", lmmc_ode_rosenbrock_grk4t_solve);
+    return failures;
+}
+
+static int test_shared_validation(void) {
+    implicit_solver_t solvers[] = {
+        lmmc_ode_sdirk4_solve,
+        lmmc_ode_rosenbrock_grk4t_solve
+    };
+    size_t i;
+    for (i = 0; i < sizeof(solvers) / sizeof(solvers[0]); ++i) {
+        lmmc_ode_config_t cfg;
+        lmmc_ode_result_t result = {1, 9, 9, 9.0, LMMC_ODE_FAILURE_MAX_STEPS};
+        double y[1] = {1.0};
+        lmmc_status_t st;
+        if (lmmc_ode_default_config(0.0, 1.0, 1, &cfg) != LMMC_STATUS_OK) return 1;
+        cfg.abs_tol = 0.0;
+        cfg.rel_tol = 0.0;
+        st = solvers[i](rhs_simple_decay, NULL, 1, 0.0, 1.0, y, &cfg, &result);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT ||
+            result.failure_reason != LMMC_ODE_FAILURE_TOLERANCE_INCONSISTENT ||
+            result.converged != 0 || result.num_steps != 0 ||
+            result.num_rhs_evals != 0 || result.final_t != 0.0) {
+            return 1;
+        }
+        result = (lmmc_ode_result_t){1, 9, 9, 9.0, LMMC_ODE_FAILURE_MAX_STEPS};
+        st = solvers[i](NULL, NULL, 1, 0.0, 1.0, y, &cfg, &result);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT || result.converged != 0 ||
+            result.num_steps != 0 || result.num_rhs_evals != 0 ||
+            result.final_t != 0.0 || result.failure_reason != LMMC_ODE_FAILURE_NONE) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
 /* ========================================================================
  * Main
  * ======================================================================== */
@@ -326,7 +503,10 @@ int main(void) {
     failures += test_sdirk4_vanderpol();
     failures += test_rosenbrock_vanderpol();
     failures += test_implicit_euler_a_stability();
+    failures += test_stiff_tracking();
+    failures += test_shared_validation();
     failures += test_trapezoidal_second_order();
+    failures += test_advertised_fourth_order();
 
     lmmc_deinit();
 

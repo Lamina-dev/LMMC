@@ -408,7 +408,7 @@ lmmc_status_t lmmc_lsr_random_choice(lmmc_rng_t* rng,
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (count == 0) return LMMC_STATUS_EMPTY_INPUT;
-    if (count > (size_t)INT64_MAX + 1u) return LMMC_STATUS_OUT_OF_RANGE;
+    if (count > (size_t)INT64_MAX) return LMMC_STATUS_OUT_OF_RANGE;
     if (!lmmc_lsr_real_array_is_finite(values, count)) {
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }

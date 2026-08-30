@@ -7,7 +7,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <time.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"
 
@@ -393,13 +392,14 @@ int main(void)
     printf("=== Property Test: Sparse Solve Residual ===\n");
     printf("Property: ||Ax - b||_2 <= 1e-8 * (||A||_F * ||x||_2 + ||b||_2)\n");
 
-    /* Create RNG with time-based seed */
+    /* 固定种子保证属性测试可复现。 */
+    const uint64_t seed = UINT64_C(0x53505253);
     st = lmmc_rng_create(&rng);
     if (st != LMMC_STATUS_OK) {
         printf("FATAL: Failed to create RNG\n");
         return 1;
     }
-    lmmc_rng_seed(rng, (uint64_t)time(NULL));
+    lmmc_rng_seed(rng, seed);
 
     /* Test sizes from 5x5 to 30x30 */
     size_t sizes[] = {5, 7, 10, 12, 15, 18, 20, 25, 30};

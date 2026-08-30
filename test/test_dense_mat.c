@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <time.h>
 
 #include "lmmc/config.h"
 #include "lmmc/dense.h"
@@ -268,7 +267,8 @@ int main(void)
 {
     int rc = 0;
 
-    srand((unsigned int)time(NULL));
+    const unsigned int seed = 0x444D4154u;
+    srand(seed);
 
     printf("=== 矩阵加减法互逆性 ===\n");
 

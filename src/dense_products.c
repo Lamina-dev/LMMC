@@ -175,6 +175,25 @@ lmmc_status_t lmmc_mat_gemv(lmmc_real_t alpha, const lmmc_mat_t* A, int transA,
         return LMMC_STATUS_DIMENSION_MISMATCH;
     }
 
+    {
+        lmmc_storage_envelope_t a_envelope;
+        lmmc_storage_envelope_t x_envelope;
+        lmmc_storage_envelope_t y_envelope;
+        if (!lmmc_storage_envelope_checked(A->data, A->rows, A->cols,
+                                           A->stride, sizeof(lmmc_real_t),
+                                           &a_envelope) ||
+            !lmmc_storage_envelope_checked(x->data, 1, x->size, x->size,
+                                           sizeof(lmmc_real_t), &x_envelope) ||
+            !lmmc_storage_envelope_checked(y->data, 1, y->size, y->size,
+                                           sizeof(lmmc_real_t), &y_envelope)) {
+            return LMMC_STATUS_INVALID_ARGUMENT;
+        }
+        if (lmmc_storage_envelopes_overlap(&y_envelope, &a_envelope) ||
+            lmmc_storage_envelopes_overlap(&y_envelope, &x_envelope)) {
+            return LMMC_STATUS_INVALID_ARGUMENT;
+        }
+    }
+
     const lmmc_real_t* restrict a_data = A->data;
     size_t a_stride = A->stride;
 

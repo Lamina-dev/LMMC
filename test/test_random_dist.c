@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <time.h>
 #include <string.h>
 
 #include "lmmc/config.h"
@@ -440,7 +439,8 @@ int main(void)
 {
     int rc = 0;
 
-    srand((unsigned int)time(NULL));
+    const unsigned int seed = 0x52444953u;
+    srand(seed);
 
     printf("=== 均匀分布范围约束 ===\n");
 

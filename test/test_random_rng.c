@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <time.h>
 
 #include "lmmc/random.h"
 #include "lmmc/status.h"
@@ -259,7 +258,8 @@ int main(void)
 {
     int rc = 0;
 
-    srand((unsigned int)time(NULL));
+    const unsigned int seed = 0x52524E47u;
+    srand(seed);
 
     printf("=== RNG Reproducibility ===\n");
 

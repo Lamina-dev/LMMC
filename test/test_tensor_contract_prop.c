@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
-#include <time.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"
 
@@ -297,14 +296,15 @@ int main(void) {
     printf("output matches unrolled nested-loop reference\n");
     printf("Tolerance: 1e-10 * (1 + ||a||_F * ||b||_F)\n");
 
-    /* Create RNG */
+    /* 固定种子保证属性测试可复现。 */
+    const uint64_t seed = UINT64_C(0x54434F4E);
     st = lmmc_rng_create(&rng);
     if (st != LMMC_STATUS_OK) {
         printf("FATAL: Failed to create RNG\n");
         lmmc_deinit();
         return 1;
     }
-    lmmc_rng_seed(rng, (uint64_t)time(NULL));
+    lmmc_rng_seed(rng, seed);
 
     /* Define test cases covering 2-D, 3-D, and 4-D tensors */
     contraction_case_t cases[] = {

@@ -121,6 +121,21 @@ lmmc_status_t lmmc_mat_transpose_to(const lmmc_mat_t* src, lmmc_mat_t* dst) {
     if (dst->rows != src->cols || dst->cols != src->rows) {
         return LMMC_STATUS_DIMENSION_MISMATCH;
     }
+    {
+        lmmc_storage_envelope_t src_envelope;
+        lmmc_storage_envelope_t dst_envelope;
+        if (!lmmc_storage_envelope_checked(src->data, src->rows, src->cols,
+                                           src->stride, sizeof(lmmc_real_t),
+                                           &src_envelope) ||
+            !lmmc_storage_envelope_checked(dst->data, dst->rows, dst->cols,
+                                           dst->stride, sizeof(lmmc_real_t),
+                                           &dst_envelope)) {
+            return LMMC_STATUS_INVALID_ARGUMENT;
+        }
+        if (lmmc_storage_envelopes_overlap(&src_envelope, &dst_envelope)) {
+            return LMMC_STATUS_INVALID_ARGUMENT;
+        }
+    }
     for (i = 0; i < src->rows; ++i) {
         for (j = 0; j < src->cols; ++j) {
             LMMC_REAL_SET(&dst->data[j * dst->stride + i], &src->data[i * src->stride + j]);

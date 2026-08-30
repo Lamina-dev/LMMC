@@ -1,8 +1,12 @@
+find_package(Threads REQUIRED)
+
 function(add_lmmc_test target_name source_file)
 	add_executable(${target_name} ${source_file})
 	target_link_libraries(${target_name} PRIVATE lmmc)
+	lmmc_apply_instrumentation(${target_name})
 	lmmc_prepare_runtime(${target_name})
 	add_test(NAME ${target_name} COMMAND ${target_name})
+	set_tests_properties(${target_name} PROPERTIES LABELS "lmmc")
 endfunction()
 
 add_lmmc_test(lmmc_test_dense test_dense.c)
@@ -26,7 +30,8 @@ add_lmmc_test(lmmc_test_logging_ext test_logging_ext.c)
 add_lmmc_test(lmmc_test_sparse_builder test_sparse_builder.c)
 add_lmmc_test(lmmc_test_lammp_stats test_lammp_stats.c)
 add_lmmc_test(lmmc_test_internal test_internal.c)
-target_include_directories(lmmc_test_internal PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(lmmc_test_internal PRIVATE
+	"${CMAKE_CURRENT_SOURCE_DIR}/../src")
 add_lmmc_test(lmmc_test_dense_vec test_dense_vec.c)
 
 add_lmmc_test(lmmc_test_dense_mat test_dense_mat.c)
@@ -69,6 +74,7 @@ add_lmmc_test(lmmc_test_interp_linear test_interp_linear.c)
 add_lmmc_test(lmmc_test_precond test_precond.c)
 
 add_lmmc_test(lmmc_test_init test_init.c)
+target_link_libraries(lmmc_test_init PRIVATE Threads::Threads)
 
 add_lmmc_test(lmmc_test_linalg_extended test_linalg_extended.c)
 
@@ -163,3 +169,4 @@ add_lmmc_test(lmmc_test_scalar_math test_scalar_math.c)
 add_lmmc_test(lmmc_test_complex_transcendental test_complex_transcendental.c)
 
 add_lmmc_test(lmmc_test_lsr_stdlib test_lsr_stdlib.c)
+add_lmmc_test(lmmc_test_lammp_ext test_lammp_ext.c)

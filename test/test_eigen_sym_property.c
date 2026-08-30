@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <time.h>
 
 #include "lmmc/config.h"
 #include "lmmc/dense.h"
@@ -195,7 +194,8 @@ int main(void)
     int rc = 0;
 
 
-    srand((unsigned int)time(NULL));
+    const unsigned int seed = 0x4553594Du;
+    srand(seed);
 
     printf("=== 对称特征值分解重构 ===\n");
 

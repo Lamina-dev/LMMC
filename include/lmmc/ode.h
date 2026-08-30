@@ -68,6 +68,24 @@ typedef lmmc_status_t (*lmmc_ode_jac_t)(
     size_t dim,
     void* user_data
 );
+/**
+ * @brief ODE 对时间偏导回调签名 @f$\partial f / \partial t@f$.
+ *
+ * @param[in]  t          当前时间.
+ * @param[in]  y          当前状态向量, 长度 @p dim.
+ * @param[out] dfdt       输出时间偏导向量, 长度 @p dim.
+ * @param[in]  dim        状态维度.
+ * @param[in]  user_data  用户上下文.
+ * @return ::LMMC_STATUS_OK 表示求值成功.
+ */
+typedef lmmc_status_t (*lmmc_ode_dfdt_t)(
+    lmmc_real_t t,
+    const lmmc_real_t* y,
+    lmmc_real_t* dfdt,
+    size_t dim,
+    void* user_data
+);
+
 
 /** @brief ODE 求解配置。 */
 typedef struct {
@@ -80,6 +98,7 @@ typedef struct {
     lmmc_real_t adaptive_step_beta;            /**< 自适应步长安全系数（典型 0.8~0.9）。 */
     lmmc_diagnostic_sink_t diagnostics;        /**< 统一诊断出口。 */
     lmmc_ode_jac_t jacobian;                   /**< 可选 Jacobian 回调（隐式方法使用，NULL 时用有限差分）。 */
+    lmmc_ode_dfdt_t time_derivative;             /**< 可选时间偏导回调, NULL 时用固定状态有限差分. */
 } lmmc_ode_config_t;
 
 /** @brief 获取失败原因对应的可读字符串。 */

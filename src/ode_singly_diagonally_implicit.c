@@ -1,6 +1,9 @@
 /**
  * @file ode_singly_diagonally_implicit.c
- * @brief 单对角隐式 RK（SDIRK，Alexander 3 级 3 阶 L-稳定）求解器。
+ * @brief Hairer-Wanner SDIRK4(3) 五级嵌入式求解器.
+ *
+ * 系数和缺陷平滑对应 https://www.unige.ch/~hairer/prog/stiff/Oldies/sdirk4.f
+ * 的 METH=1 路径. 阶段向量采用导数归一化.
  */
 #include <math.h>
 #include <string.h>
@@ -9,135 +12,89 @@
 #include "internal.h"
 #include "ode_internal.h"
 #include "lmmc/ode.h"
-#include "lmmc/optimize.h"
 #include "lmmc/dense.h"
 #include "lmmc/linear_algebra.h"
 
-/*
- * 4-stage SDIRK method with embedded error estimate for adaptive stepping.
- * Uses the TR-BDF2 inspired approach: gamma = 1-sqrt(2)/2 ≈ 0.2929.
- *
- * Actually, we use a simple and robust 3-stage, 2nd-order L-stable SDIRK
- * with embedded 1st-order for error estimation (SDIRK2(1)3L).
- * gamma = 1 - sqrt(2)/2 ≈ 0.29289321881
- *
- * For the "SDIRK4" label, we implement a 4-stage method that is
- * effectively 3rd-order with a 2nd-order embedded pair.
- * This uses gamma = 0.4358665215 (Alexander's gamma).
- */
-#define SDIRK4_STAGES 3
-static const lmmc_real_t sdirk_gamma = 0.43586652150845899942;
+#define SDIRK_STAGES 5
+#define SDIRK_VECTORS 16
+#define SDIRK_NEWTON_MAX 12
 
-/* Alexander's 3-stage, 3rd-order L-stable SDIRK */
-static const lmmc_real_t sdirk_c[SDIRK4_STAGES] = {
-    0.43586652150845899942,
-    0.71793326075422949971,
-    1.0
+static const lmmc_real_t sdirk_gamma = 0.25;
+static const lmmc_real_t sdirk_c[SDIRK_STAGES] = {0.25, 0.75, 0.55, 0.5, 1.0};
+static const lmmc_real_t sdirk_a[SDIRK_STAGES][SDIRK_STAGES] = {
+    {0.25, 0.0, 0.0, 0.0, 0.0},
+    {0.5, 0.25, 0.0, 0.0, 0.0},
+    {0.34, -0.04, 0.25, 0.0, 0.0},
+    {371.0 / 1360.0, -137.0 / 2720.0, 15.0 / 544.0, 0.25, 0.0},
+    {25.0 / 24.0, -49.0 / 48.0, 125.0 / 16.0, -85.0 / 12.0, 0.25}
 };
-static const lmmc_real_t sdirk_a[SDIRK4_STAGES][SDIRK4_STAGES] = {
-    {0.43586652150845899942, 0.0, 0.0},
-    {0.28206673924577050029, 0.43586652150845899942, 0.0},
-    {1.20849664917601007033, -0.64436317068446906976, 0.43586652150845899942}
+static const lmmc_real_t sdirk_b[SDIRK_STAGES] = {
+    25.0 / 24.0, -49.0 / 48.0, 125.0 / 16.0, -85.0 / 12.0, 0.25
 };
-/* 3rd-order weights (stiffly accurate: b = last row) */
-static const lmmc_real_t sdirk_b[SDIRK4_STAGES] = {
-    1.20849664917601007033, -0.64436317068446906976, 0.43586652150845899942
-};
-/* Embedded 2nd-order weights for error estimation.
- * For stiff problems, we use bhat = b to effectively disable
- * error-based step rejection. The method is L-stable and will
- * produce accurate results with the fixed step from the config.
- * True adaptive stepping requires a stiff error estimator.
- */
-static const lmmc_real_t sdirk_bhat[SDIRK4_STAGES] = {
-    1.20849664917601007033, -0.64436317068446906976, 0.43586652150845899942
+static const lmmc_real_t sdirk_bhat[SDIRK_STAGES] = {
+    59.0 / 48.0, -17.0 / 96.0, 225.0 / 32.0, -85.0 / 12.0, 0.0
 };
 
-typedef struct {
-    lmmc_ode_rhs_t rhs;
-    void* user_data;
-    lmmc_ode_jac_t jac_cb;
-    lmmc_real_t t_stage;
-    lmmc_real_t h;
-    lmmc_real_t gamma;
-    const lmmc_real_t* y_n;
-    lmmc_real_t* rhs_sum; /* sum of a[s][j]*k_j for j < s */
-    size_t dim;
-} ode_sdirk_stage_ctx_t;
-
-/* Stage equation: k_s - f(t_n + c_s*h, y_n + h*sum_{j<s} a[s][j]*k_j + h*gamma*k_s) = 0
- * Let z = k_s, then G(z) = z - f(t_stage, y_n + h*rhs_sum + h*gamma*z) = 0
- */
-static lmmc_status_t sdirk_stage_F(
-    const lmmc_vec_t* x, lmmc_vec_t* F, void* ud
-) {
-    ode_sdirk_stage_ctx_t* ctx = (ode_sdirk_stage_ctx_t*)ud;
-    size_t i, n = ctx->dim;
-    lmmc_real_t* y_stage;
-    lmmc_status_t st;
-
-    y_stage = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
-    if (!y_stage) return LMMC_STATUS_ALLOCATION_FAILED;
-
-    for (i = 0; i < n; ++i) {
-        y_stage[i] = ctx->y_n[i] + ctx->h * (ctx->rhs_sum[i]
-                     + ctx->gamma * x->data[i]);
-    }
-
-    st = ctx->rhs(ctx->t_stage, y_stage, F->data, n, ctx->user_data);
-    lmmc_free(y_stage);
-    if (st != LMMC_STATUS_OK) return st;
-
-    /* G(z) = z - f(...) */
-    for (i = 0; i < n; ++i) {
-        F->data[i] = x->data[i] - F->data[i];
+static lmmc_status_t sdirk_check_finite(const lmmc_real_t* values, size_t count) {
+    size_t i;
+    for (i = 0; i < count; ++i) {
+        if (!isfinite(values[i])) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
     }
     return LMMC_STATUS_OK;
 }
 
-static lmmc_status_t sdirk_stage_J(
-    const lmmc_vec_t* x, lmmc_mat_t* J, void* ud
+static lmmc_status_t sdirk_jacobian(
+    lmmc_ode_rhs_t rhs,
+    lmmc_ode_jac_t jacobian,
+    void* user_data,
+    lmmc_real_t t,
+    const lmmc_real_t* y,
+    const lmmc_real_t* f0,
+    size_t dim,
+    lmmc_real_t* jac,
+    lmmc_real_t* y_pert,
+    lmmc_real_t* f_pert,
+    lmmc_ode_result_t* result
 ) {
-    ode_sdirk_stage_ctx_t* ctx = (ode_sdirk_stage_ctx_t*)ud;
-    size_t i, j, n = ctx->dim;
-    lmmc_real_t* jac_data = J->data;
-    lmmc_real_t* y_stage;
+    size_t i, j;
     lmmc_status_t st;
-
-    y_stage = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
-    if (!y_stage) return LMMC_STATUS_ALLOCATION_FAILED;
-
-    for (i = 0; i < n; ++i) {
-        y_stage[i] = ctx->y_n[i] + ctx->h * (ctx->rhs_sum[i]
-                     + ctx->gamma * x->data[i]);
+    int callback_failed = 0;
+    if (jacobian != NULL) {
+        st = jacobian(t, y, jac, dim, user_data);
+        if (st != LMMC_STATUS_OK) return st;
+        return sdirk_check_finite(jac, dim * dim);
     }
-
-    if (ctx->jac_cb != NULL) {
-        st = ctx->jac_cb(ctx->t_stage, y_stage, jac_data, n, ctx->user_data);
-    } else {
-        lmmc_real_t* f0 = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
-        lmmc_real_t* y_p = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
-        lmmc_real_t* fp = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
-        if (!f0 || !y_p || !fp) {
-            lmmc_free(fp); lmmc_free(y_p); lmmc_free(f0);
-            lmmc_free(y_stage);
-            return LMMC_STATUS_ALLOCATION_FAILED;
+    for (j = 0; j < dim; ++j) {
+        lmmc_real_t delta = sqrt(2.2204460492503131e-16) * fmax(1.0, fabs(y[j]));
+        memcpy(y_pert, y, dim * sizeof(*y));
+        y_pert[j] += delta;
+        st = lmmc_ode_rhs_eval(rhs, t, y_pert, f_pert, dim, user_data,
+                               &result->num_rhs_evals, &callback_failed);
+        if (st != LMMC_STATUS_OK) return st;
+        for (i = 0; i < dim; ++i) {
+            jac[i * dim + j] = (f_pert[i] - f0[i]) / delta;
         }
-        st = ode_fd_jacobian(ctx->rhs, ctx->user_data, ctx->t_stage,
-                             y_stage, n, jac_data, f0, y_p, fp);
-        lmmc_free(fp); lmmc_free(y_p); lmmc_free(f0);
     }
-    lmmc_free(y_stage);
+    return sdirk_check_finite(jac, dim * dim);
+}
+
+static lmmc_status_t sdirk_linear_solve(
+    lmmc_mat_t* matrix,
+    size_t* pivots,
+    lmmc_real_t* rhs,
+    lmmc_real_t* solution,
+    size_t dim
+) {
+    size_t swaps = 0;
+    const lmmc_vec_t rhs_vec = {dim, rhs, 0};
+    lmmc_vec_t solution_vec = {dim, solution, 0};
+    lmmc_status_t st = lmmc_lu_decompose_inplace(matrix, pivots, &swaps);
     if (st != LMMC_STATUS_OK) return st;
-
-    /* J_G = I - h*gamma * J_f (chain rule: dG/dz = I - h*gamma*df/dy) */
-    for (i = 0; i < n; ++i) {
-        for (j = 0; j < n; ++j) {
-            jac_data[i * J->stride + j] *= -ctx->h * ctx->gamma;
-        }
-        jac_data[i * J->stride + i] += 1.0;
-    }
-    return LMMC_STATUS_OK;
+    st = lmmc_lu_solve(matrix, pivots, &rhs_vec, &solution_vec);
+    if (st != LMMC_STATUS_OK) return st;
+    return sdirk_check_finite(solution, dim);
 }
 
 lmmc_status_t lmmc_ode_sdirk4_solve(
@@ -151,167 +108,187 @@ lmmc_status_t lmmc_ode_sdirk4_solve(
     lmmc_ode_result_t* out_result
 ) {
     lmmc_ode_config_t local_cfg = {0};
-    size_t work_bytes = 0;
-    lmmc_real_t t = t_start;
-    lmmc_real_t h = 0.0;
-    lmmc_status_t init_st;
-    lmmc_vec_t z_vec = {0};
-    lmmc_real_t* k[SDIRK4_STAGES];
-    lmmc_real_t* rhs_sum = NULL;
-    lmmc_optimize_config_t opt_cfg;
-    lmmc_optimize_result_t opt_res;
-    ode_sdirk_stage_ctx_t ctx;
-    int s;
-    size_t i;
+    size_t work_bytes = 0, vectors_bytes = 0, matrix_count = 0, matrix_bytes = 0, pivot_bytes = 0;
+    lmmc_real_t* work = NULL;
+    lmmc_real_t* matrix_data = NULL;
+    size_t* pivots = NULL;
+    lmmc_real_t* k[SDIRK_STAGES];
+    lmmc_real_t *rhs_sum, *y_stage, *f_stage, *y_pert, *f_pert;
+    lmmc_real_t *residual, *delta, *y_new, *y_hat, *error, *smoothed;
+    lmmc_mat_t matrix = {0};
+    lmmc_real_t t = t_start, h;
+    size_t attempts = 0, i, j, stage;
+    lmmc_status_t st;
 
-    for (s = 0; s < SDIRK4_STAGES; ++s) k[s] = NULL;
+    st = validate_and_init_ode_config(rhs, dim, t_start, t_end, y, cfg,
+                                      &local_cfg, out_result, &work_bytes);
+    if (st != LMMC_STATUS_OK) return st;
+    if (!lmmc_safe_mul_size(work_bytes, SDIRK_VECTORS, &vectors_bytes) ||
+        !lmmc_safe_mul_size(dim, dim, &matrix_count) ||
+        !lmmc_safe_mul_size(matrix_count, sizeof(lmmc_real_t), &matrix_bytes) ||
+        !lmmc_safe_mul_size(dim, sizeof(size_t), &pivot_bytes)) {
+        out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_DIMENSION;
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
 
-    init_st = validate_and_init_ode_config(rhs, dim, t_start, t_end, y,
-                                            cfg, &local_cfg, out_result, &work_bytes);
-    if (init_st != LMMC_STATUS_OK) return init_st;
+    work = (lmmc_real_t*)lmmc_alloc(vectors_bytes);
+    matrix_data = (lmmc_real_t*)lmmc_alloc(matrix_bytes);
+    pivots = (size_t*)lmmc_alloc(pivot_bytes);
+    if (work == NULL || matrix_data == NULL || pivots == NULL) {
+        st = LMMC_STATUS_ALLOCATION_FAILED;
+        goto cleanup;
+    }
+    for (stage = 0; stage < SDIRK_STAGES; ++stage) k[stage] = work + stage * dim;
+    rhs_sum = work + 5 * dim;
+    y_stage = work + 6 * dim;
+    f_stage = work + 7 * dim;
+    y_pert = work + 8 * dim;
+    f_pert = work + 9 * dim;
+    residual = work + 10 * dim;
+    delta = work + 11 * dim;
+    y_new = work + 12 * dim;
+    y_hat = work + 13 * dim;
+    error = work + 14 * dim;
+    smoothed = work + 15 * dim;
+    matrix = (lmmc_mat_t){dim, dim, dim, matrix_data, 0};
 
     h = lmmc_clamp(local_cfg.initial_step, local_cfg.min_step, local_cfg.max_step);
-    { lmmc_real_t span = t_end - t_start; if (h > span) h = span; }
-
-    lmmc_optimize_default_config(&opt_cfg);
-    opt_cfg.abs_tol = local_cfg.abs_tol;
-    opt_cfg.rel_tol = local_cfg.rel_tol;
-    opt_cfg.max_iter = 100;
-
-    /* Allocate stage vectors */
-    for (s = 0; s < SDIRK4_STAGES; ++s) {
-        k[s] = (lmmc_real_t*)lmmc_alloc(work_bytes);
-        if (k[s] == NULL) goto sdirk4_alloc_fail;
-    }
-    rhs_sum = (lmmc_real_t*)lmmc_alloc(work_bytes);
-    z_vec.size = dim;
-    z_vec.data = (lmmc_real_t*)lmmc_alloc(work_bytes);
-    z_vec.owns_data = 1;
-    if (rhs_sum == NULL || z_vec.data == NULL) goto sdirk4_alloc_fail;
-
-    ctx.rhs = rhs;
-    ctx.user_data = user_data;
-    ctx.jac_cb = local_cfg.jacobian;
-    ctx.dim = dim;
-    ctx.gamma = sdirk_gamma;
-
+    if (h > t_end - t_start) h = t_end - t_start;
     lmmc_ode_do_log(&local_cfg, 0, t, y, dim);
 
-    while (t < t_end && out_result->num_steps < local_cfg.max_steps) {
-        lmmc_real_t rem = t_end - t;
-        lmmc_real_t err_norm = 0.0;
-        lmmc_real_t h_new;
-        int step_accepted;
+    while (t < t_end && attempts < local_cfg.max_steps) {
+        lmmc_real_t error_norm = 0.0;
+        int callback_failed = 0;
+        ++attempts;
+        if (h > t_end - t) h = t_end - t;
 
-        if (rem <= 0.0) break;
-        if (h > rem) h = rem;
-
-        /* Solve each stage */
-        for (s = 0; s < SDIRK4_STAGES; ++s) {
-            int j2;
-            lmmc_status_t st;
-            /* Compute rhs_sum = sum_{j<s} a[s][j] * k[j] */
+        for (stage = 0; stage < SDIRK_STAGES; ++stage) {
+            size_t iteration;
+            int converged = 0;
             memset(rhs_sum, 0, work_bytes);
-            for (j2 = 0; j2 < s; ++j2) {
-                if (sdirk_a[s][j2] != 0.0) {
-                    for (i = 0; i < dim; ++i) {
-                        rhs_sum[i] += sdirk_a[s][j2] * k[j2][i];
+            for (j = 0; j < stage; ++j) {
+                for (i = 0; i < dim; ++i) {
+                    rhs_sum[i] += sdirk_a[stage][j] * k[j][i];
+                }
+            }
+            if (stage == 0) memset(k[stage], 0, work_bytes);
+            else memcpy(k[stage], k[stage - 1], work_bytes);
+
+            for (iteration = 0; iteration < SDIRK_NEWTON_MAX; ++iteration) {
+                lmmc_real_t residual_max = 0.0;
+                lmmc_real_t state_scale = 0.0;
+                for (i = 0; i < dim; ++i) {
+                    y_stage[i] = y[i] + h * (rhs_sum[i] + sdirk_gamma * k[stage][i]);
+                    state_scale = fmax(state_scale, fabs(k[stage][i]));
+                }
+                st = lmmc_ode_rhs_eval(rhs, t + sdirk_c[stage] * h, y_stage, f_stage,
+                                       dim, user_data, &out_result->num_rhs_evals,
+                                       &callback_failed);
+                if (st != LMMC_STATUS_OK) {
+                    out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
+                                                                 : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+                    goto cleanup;
+                }
+                for (i = 0; i < dim; ++i) {
+                    residual[i] = k[stage][i] - f_stage[i];
+                    residual_max = fmax(residual_max, fabs(residual[i]));
+                }
+                if (residual_max <= 1.0e-12 * fmax(1.0, state_scale)) {
+                    converged = 1;
+                    break;
+                }
+
+                st = sdirk_jacobian(rhs, local_cfg.jacobian, user_data,
+                                    t + sdirk_c[stage] * h, y_stage, f_stage, dim,
+                                    matrix_data, y_pert, f_pert, out_result);
+                if (st != LMMC_STATUS_OK) {
+                    out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+                    goto cleanup;
+                }
+                for (i = 0; i < dim; ++i) {
+                    for (j = 0; j < dim; ++j) {
+                        matrix.data[i * dim + j] = -h * sdirk_gamma * matrix_data[i * dim + j];
                     }
+                    matrix.data[i * dim + i] += 1.0;
+                    residual[i] = -residual[i];
                 }
+                st = sdirk_linear_solve(&matrix, pivots, residual, delta, dim);
+                if (st != LMMC_STATUS_OK) goto cleanup;
+                for (i = 0; i < dim; ++i) k[stage][i] += delta[i];
             }
-
-            ctx.t_stage = t + sdirk_c[s] * h;
-            ctx.h = h;
-            ctx.y_n = y;
-            ctx.rhs_sum = rhs_sum;
-
-            /* Initial guess for k_s: 0 or previous stage */
-            if (s == 0) {
-                memset(z_vec.data, 0, work_bytes);
-            } else {
-                memcpy(z_vec.data, k[s-1], work_bytes);
-            }
-
-            st = lmmc_nleq_newton(sdirk_stage_F, sdirk_stage_J,
-                                   &ctx, &z_vec, &opt_cfg, &opt_res);
-            if (st != LMMC_STATUS_OK || !opt_res.converged) {
+            if (!converged) {
+                st = LMMC_STATUS_CONVERGENCE_FAILED;
                 out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-                goto sdirk4_fail;
+                goto cleanup;
             }
-            memcpy(k[s], z_vec.data, work_bytes);
         }
 
-        /* Compute 4th-order solution and error estimate */
-        err_norm = 0.0;
         for (i = 0; i < dim; ++i) {
-            lmmc_real_t y_new = y[i];
-            lmmc_real_t y_hat = y[i];
-            lmmc_real_t sc_i, err_i;
-            for (s = 0; s < SDIRK4_STAGES; ++s) {
-                y_new += h * sdirk_b[s] * k[s][i];
-                y_hat += h * sdirk_bhat[s] * k[s][i];
+            y_new[i] = y[i];
+            y_hat[i] = y[i];
+            for (stage = 0; stage < SDIRK_STAGES; ++stage) {
+                y_new[i] += h * sdirk_b[stage] * k[stage][i];
+                y_hat[i] += h * sdirk_bhat[stage] * k[stage][i];
             }
-            err_i = y_new - y_hat;
-            sc_i = local_cfg.abs_tol + local_cfg.rel_tol * fabs(y[i]);
-            err_norm += (err_i / sc_i) * (err_i / sc_i);
+            error[i] = y_new[i] - y_hat[i];
         }
-        err_norm = sqrt(err_norm / (lmmc_real_t)dim);
+        if (sdirk_check_finite(y_new, dim) != LMMC_STATUS_OK) {
+            st = LMMC_STATUS_NUMERICAL_FAILURE;
+            goto cleanup;
+        }
 
-        step_accepted = (err_norm <= 1.0);
-        if (step_accepted) {
-            /* Accept step: update y with 4th-order solution */
-            for (i = 0; i < dim; ++i) {
-                lmmc_real_t y_new = y[i];
-                for (s = 0; s < SDIRK4_STAGES; ++s) {
-                    y_new += h * sdirk_b[s] * k[s][i];
-                }
-                y[i] = y_new;
+        st = lmmc_ode_rhs_eval(rhs, t + h, y_new, f_stage, dim, user_data,
+                               &out_result->num_rhs_evals, &callback_failed);
+        if (st != LMMC_STATUS_OK) {
+            out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
+                                                         : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            goto cleanup;
+        }
+        st = sdirk_jacobian(rhs, local_cfg.jacobian, user_data, t + h, y_new,
+                            f_stage, dim, matrix_data, y_pert, f_pert, out_result);
+        if (st != LMMC_STATUS_OK) goto cleanup;
+        for (i = 0; i < dim; ++i) {
+            for (j = 0; j < dim; ++j) {
+                matrix.data[i * dim + j] = -h * sdirk_gamma * matrix_data[i * dim + j];
             }
+            matrix.data[i * dim + i] += 1.0;
+        }
+        st = sdirk_linear_solve(&matrix, pivots, error, smoothed, dim);
+        if (st != LMMC_STATUS_OK) goto cleanup;
+        st = lmmc_ode_weighted_rms(smoothed, y, y_new, dim, local_cfg.abs_tol,
+                                    local_cfg.rel_tol, &error_norm);
+        if (st != LMMC_STATUS_OK) goto cleanup;
 
-            if (!lmmc_ode_state_is_finite(y, dim)) {
-                out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-                goto sdirk4_fail;
-            }
-
+        if (error_norm <= 1.0) {
+            memcpy(y, y_new, work_bytes);
             t += h;
             out_result->num_steps += 1;
             out_result->final_t = t;
             lmmc_ode_do_log(&local_cfg, out_result->num_steps, t, y, dim);
-        }
-
-        /* Adaptive step size */
-        if (err_norm > 0.0) {
-            h_new = h * local_cfg.adaptive_step_beta * pow(1.0 / err_norm, 0.25);
-        } else {
-            h_new = h * 5.0;
-        }
-        h_new = lmmc_clamp(h_new, local_cfg.min_step, local_cfg.max_step);
-
-        if (!step_accepted && h <= local_cfg.min_step) {
+        } else if (h <= local_cfg.min_step) {
+            st = LMMC_STATUS_CONVERGENCE_FAILED;
             out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_STEP;
-            goto sdirk4_fail;
+            goto cleanup;
         }
-        h = h_new;
+        h = lmmc_ode_next_step(h, error_norm, &local_cfg);
     }
 
     if (t >= t_end) {
         out_result->converged = 1;
         out_result->failure_reason = LMMC_ODE_FAILURE_NONE;
+        st = LMMC_STATUS_OK;
     } else {
-        out_result->converged = 0;
         out_result->failure_reason = LMMC_ODE_FAILURE_MAX_STEPS;
+        st = LMMC_STATUS_CONVERGENCE_FAILED;
     }
 
-    lmmc_free(z_vec.data);
-    lmmc_free(rhs_sum);
-    for (s = SDIRK4_STAGES - 1; s >= 0; --s) lmmc_free(k[s]);
-    return LMMC_STATUS_OK;
-
-sdirk4_alloc_fail:
-    out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-sdirk4_fail:
-    lmmc_free(z_vec.data);
-    lmmc_free(rhs_sum);
-    for (s = SDIRK4_STAGES - 1; s >= 0; --s) lmmc_free(k[s]);
-    return LMMC_STATUS_NUMERICAL_FAILURE;
+cleanup:
+    if (st != LMMC_STATUS_OK && out_result != NULL &&
+        out_result->failure_reason == LMMC_ODE_FAILURE_NONE) {
+        out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+    }
+    lmmc_free(pivots);
+    lmmc_free(matrix_data);
+    lmmc_free(work);
+    return st;
 }

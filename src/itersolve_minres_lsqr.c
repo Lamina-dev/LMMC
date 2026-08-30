@@ -137,7 +137,7 @@ lmmc_status_t lmmc_minres_solve(
 
     /* MINRES scalars */
     double alpha_k, beta_k, beta_kp1;
-    double cs_prev, sn_prev, cs_curr, sn_curr;
+    double sn_prev, cs_curr, sn_curr;
     double phi_bar, epsilon_curr, delta_bar, gamma_val, phi_val;
 
     /* Validate inputs */
@@ -246,7 +246,7 @@ lmmc_status_t lmmc_minres_solve(
     }
 
     /* Initialize Givens rotation state */
-    cs_prev = 1.0; sn_prev = 0.0;
+    sn_prev = 0.0;
     cs_curr = 1.0; sn_curr = 0.0;
     epsilon_curr = 0.0;
 
@@ -323,7 +323,6 @@ lmmc_status_t lmmc_minres_solve(
 
             /* Update rotations */
             sn_prev = sn_curr;
-            cs_prev = cs_curr;
             sn_curr = sn_new;
             cs_curr = cs_new;
 

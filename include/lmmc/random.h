@@ -138,6 +138,7 @@ lmmc_status_t lmmc_rng_fill_uniform(
 
 /**
  * @brief Fisher-Yates 洗牌：就地随机重排 @p array 中的 @p count 个元素。
+ * 每次 Fisher-Yates 选择均使用无偏的拒绝采样。
  *
  * @param[in]     rng       已初始化的 RNG。
  * @param[in,out] array     待洗牌的数组，就地重排。
@@ -266,11 +267,15 @@ lmmc_status_t lmmc_rng_poisson(
 /**
  * @brief 生成二项分布样本 Binomial(n, p)。
  *
+ * 小均值参数使用精确逆 CDF，其余参数使用 BTPE 接受-拒绝算法；
+ * 超过 IEEE-754 精确整数范围的 n 会拆分为独立精确子问题。
+ *
  * @param[in]  rng  已初始化的 RNG。
  * @param[in]  n    试验次数。
- * @param[in]  p    成功概率（0 <= p <= 1）。
- * @param[out] out  输出样本值。
- * @return LMMC_STATUS_OK 成功。
+ * @param[in]  p    有限成功概率（0 <= p <= 1）。
+ * @param[out] out  输出样本值；参数无效时保持不变。
+ * @return LMMC_STATUS_OK 成功；参数或指针无效时返回
+ *         LMMC_STATUS_INVALID_ARGUMENT。
  */
 lmmc_status_t lmmc_rng_binomial(
     lmmc_rng_t* rng,
@@ -280,7 +285,9 @@ lmmc_status_t lmmc_rng_binomial(
 );
 
 /**
- * @brief 在 [lo, hi] 闭区间内生成均匀整数分布样本。
+ * @brief 在 [lo, hi] 闭区间内生成无偏均匀整数分布样本。
+ *
+ * 支持完整的 int64_t 定义域且不执行有符号溢出；lo == hi 时不消耗 RNG 状态。
  *
  * @param[in]  rng  已初始化的 RNG。
  * @param[in]  lo   下界（含）。

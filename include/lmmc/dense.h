@@ -143,15 +143,15 @@ lmmc_status_t lmmc_mat_copy(const lmmc_mat_t* src, lmmc_mat_t* dst);
 /**
  * @brief 计算矩阵转置:dst = src^T.
  *
- * dst 的维度必须为 (src->cols x src->rows),并使用独立矩阵承载转置结果.
+ * dst 的维度必须为 (src->cols x src->rows)，且其半开存储包络不得与 src 重叠。
  *
  * @param[in]  src 源矩阵 (mxn).
  * @param[out] dst 目标矩阵,必须已创建为 (nxm).
  *
  * @return
  * - ::LMMC_STATUS_OK - 成功.
- * - ::LMMC_STATUS_INVALID_ARGUMENT - 指针为 NULL.
- * - ::LMMC_STATUS_DIMENSION_MISMATCH - dst 维度与 (src->cols x src->rows) 不匹配.
+ * - ::LMMC_STATUS_INVALID_ARGUMENT - 指针为 NULL、存储包络溢出或 src/dst 重叠.
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH - dst 维度与 (src->cols x src->rows) 不匹配（优先于重叠检查）.
  *
  * @par 副作用
  * - 覆写 dst->data.src 不被修改.无内存分配.
@@ -187,7 +187,8 @@ lmmc_status_t lmmc_mat_gemm(lmmc_real_t alpha, const lmmc_mat_t* A, int transA,
 /**
  * @brief 通用矩阵-向量乘法(GEMV):@f$y \leftarrow \alpha \cdot \mathrm{op}(A) \cdot x + \beta \cdot y@f$.
  *
- * op(A) 为 MxN 时,要求 x->size==N,y->size==M.
+ * op(A) 为 MxN 时,要求 x->size==N,y->size==M。
+ * y 的半开存储包络不得与 A 或 x 的存储包络重叠。
  * 当 LMMC_USE_BLAS 编译时路由到外部 BLAS dgemv.
  *
  * @param[in]     alpha  标量乘子 alpha.
@@ -195,12 +196,12 @@ lmmc_status_t lmmc_mat_gemm(lmmc_real_t alpha, const lmmc_mat_t* A, int transA,
  * @param[in]     transA 非零表示对 A 取转置.
  * @param[in]     x      输入向量 x(不被修改).
  * @param[in]     beta   标量乘子 beta.beta==0 时 y 的旧值被忽略.
- * @param[in,out] y      输出向量,长度须为 op(A) 的行数.
+ * @param[in,out] y      输出向量,长度须为 op(A) 的行数，且不得与 A 或 x 重叠.
  *
  * @return
  * - ::LMMC_STATUS_OK - 成功.
- * - ::LMMC_STATUS_INVALID_ARGUMENT - 指针为 NULL.
- * - ::LMMC_STATUS_DIMENSION_MISMATCH - 向量长度与矩阵维度不匹配.
+ * - ::LMMC_STATUS_INVALID_ARGUMENT - 指针为 NULL、存储包络溢出或输出重叠.
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH - 向量长度与矩阵维度不匹配（优先于重叠检查）.
  *
  * @par 副作用
  * - 就地修改 y->data.A,x 不被修改.无内存分配.
@@ -325,7 +326,7 @@ lmmc_status_t lmmc_vec_dot(const lmmc_vec_t* a, const lmmc_vec_t* b, lmmc_real_t
  * @brief 简化矩阵-向量乘法:y = A * x.
  *
  * 等价于 lmmc_mat_gemv(1.0, a, 0, x, 0.0, y).
- * a 为 mxn,x->size==n,y->size==m.y 的旧内容被完全覆写.
+ * a 为 mxn,x->size==n,y->size==m.y 的旧内容被完全覆写，且 y 不得与 a 或 x 重叠.
  *
  * @param[in]  a 输入矩阵(不被修改).
  * @param[in]  x 输入向量(不被修改).

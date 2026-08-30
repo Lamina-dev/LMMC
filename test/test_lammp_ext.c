@@ -91,15 +91,13 @@ int main(void) {
     mp_size_t rn = 0;
     mp_size_t strong_actual = 0;
     mp_ptr limbs = NULL;
-    mp_ptr product = NULL;
     lmmp_strong_rng_t* strong_rng = NULL;
     char* factorial_text = NULL;
     char* npr_text = NULL;
     char* ncr_text = NULL;
-    char* limb_mul_text = NULL;
     int rc = 0;
 
-    lmmp_stack_init();
+    lmmp_global_init();
 
     CHECK_OR_FAIL("gcd", lmmp_gcd_11_(48, 18) == 6);
 
@@ -129,7 +127,9 @@ int main(void) {
     h1 = lmmp_siphash24_(words, 4, sip_key);
     CHECK_OR_FAIL("siphash", h0 == h1);
 
-    CHECK_OR_FAIL("version", LAMMP_VERSION[0] != '\0' && LAMMP_COMPILER[0] != '\0');
+    CHECK_OR_FAIL("version",
+                  lmmp_get_version()[0] != '\0' &&
+                  lmmp_get_build_type()[0] != '\0');
 
     mp_bitcnt_t fac_bits = 0;
     rn = lmmp_factorial_size_(10, &fac_bits);
@@ -160,8 +160,6 @@ int main(void) {
     lmmp_free(limbs);
     limbs = NULL;
 
-    an = lmmp_limb_elem_mul_(&product, words, 4);
-    CHECK_OR_FAIL("limb_elem_mul", lmmp_bigint_to_text(product, an, 10, &limb_mul_text) == 0 && strcmp(limb_mul_text, "351384") == 0);
 
     strong_rng = lmmp_strong_rng_init_(4, 2026);
     CHECK_OR_FAIL("strong_rng_init", strong_rng != NULL);
@@ -172,13 +170,9 @@ cleanup:
     if (strong_rng != NULL) {
         lmmp_strong_rng_free_(strong_rng);
     }
-    if (product != NULL) {
-        lmmp_free(product);
-    }
     if (limbs != NULL) {
         lmmp_free(limbs);
     }
-    lmmp_free(limb_mul_text);
     lmmp_free(ncr_text);
     lmmp_free(npr_text);
     lmmp_free(factorial_text);
