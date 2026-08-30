@@ -1,6 +1,6 @@
 /**
  * @file test_minres_lsqr.c
- * MINRES / LSQR 迭代求解器单元测试。
+ * MINRES / LSQR 迭代求解器单元测试.
  */
 #include <math.h>
 #include <stdio.h>
@@ -120,17 +120,17 @@ static lmmc_status_t matvec_callback(const lmmc_vec_t* x, lmmc_vec_t* y, void* u
     return lmmc_sparse_mat_vec_mul(ctx->mat, x, y);
 }
 
-/** @brief 验证 MINRES 对称正定与对称不定系统求解路径。
+/** @brief 验证 MINRES 对称正定与对称不定系统求解路径.
  *
- * 正定三对角用例验证收敛性，不定用例验证跨正负特征值的有限数值输出。
+ * 正定三对角用例验证收敛性,不定用例验证跨正负特征值的有限数值输出.
  *
- * @see C. C. Paige and M. A. Saunders, “Solution of Sparse Indefinite Systems
- *      of Linear Equations,” SIAM J. Numer. Anal. 12(4), 1975.
+ * @see C. C. Paige and M. A. Saunders, "Solution of Sparse Indefinite Systems
+ *      of Linear Equations," SIAM J. Numer. Anal. 12(4), 1975.
  */
 static int test_minres_symmetric_indefinite(void) {
     int rc = 0;
 
-    /** A 部分覆盖对称正定路径。 */
+    /** A 部分覆盖对称正定路径. */
     {
         const size_t n = 20;
         lmmc_sparse_mat_t A = {0};
@@ -156,7 +156,7 @@ static int test_minres_symmetric_indefinite(void) {
         lmmc_vec_create(n, &b);
         lmmc_vec_create(n, &x);
 
-        /** 由全一已知解构造右端向量 b。 */
+        /** 由全一已知解构造右端向量 b. */
         lmmc_vec_t ones = {0};
         lmmc_vec_create(n, &ones);
         lmmc_vec_fill(&ones, 1.0);
@@ -178,7 +178,7 @@ static int test_minres_symmetric_indefinite(void) {
             double norm_b;
             lmmc_vec_norm2(&b, &norm_b);
 
-            /** 收敛后验证解向量各分量均为有限值。 */
+            /** 收敛后验证解向量各分量均为有限值. */
             int all_finite = 1;
             for (size_t i = 0; i < n; i++) {
                 if (!isfinite(x.data[i])) { all_finite = 0; break; }
@@ -198,7 +198,7 @@ static int test_minres_symmetric_indefinite(void) {
         if (rc) return rc;
     }
 
-    /** B 部分覆盖同时具有正负特征值的对称不定矩阵，并验证有限输出。 */
+    /** B 部分覆盖同时具有正负特征值的对称不定矩阵,并验证有限输出. */
     {
         const size_t n = 10;
         lmmc_sparse_mat_t A = {0};
@@ -457,7 +457,7 @@ static int test_error_both_a_and_apply_op(void) {
     cfg.apply_op = matvec_callback;
     cfg.op_user_data = &ctx;
 
-    /* MINRES: both a and apply_op → LMMC_STATUS_INVALID_ARGUMENT */
+    /* MINRES: both a and apply_op -> LMMC_STATUS_INVALID_ARGUMENT */
     st = lmmc_minres_solve(&A, &b, NULL, &cfg, &x, &result);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
         printf("FAIL test_error_both_a_and_apply_op: MINRES expected INVALID_ARGUMENT, got %d\n", st);
@@ -465,7 +465,7 @@ static int test_error_both_a_and_apply_op(void) {
         return 1;
     }
 
-    /* LSQR: both a and apply_op → LMMC_STATUS_INVALID_ARGUMENT */
+    /* LSQR: both a and apply_op -> LMMC_STATUS_INVALID_ARGUMENT */
     lmmc_vec_fill(&x, 0.0);
     memset(&result, 0, sizeof(result));
     st = lmmc_lsqr_solve(&A, &b, &cfg, &x, &result);

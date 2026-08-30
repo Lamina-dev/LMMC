@@ -1,6 +1,6 @@
 /**
  * @file eigen_general.c
- * @brief 一般矩阵特征值分解（Hessenberg + Francis QR 与逆迭代）实现。
+ * @brief 一般矩阵特征值分解(Hessenberg + Francis QR 与逆迭代)实现.
  */
 
 #include <math.h>
@@ -13,7 +13,7 @@
 #include "lmmc/eigen.h"
 #include "lmmc/linear_algebra.h"
 
-/** @brief 求解 x² + p*x + q = 0，并以实部/虚部对返回两个根。 */
+/** @brief 求解 x^2 + p*x + q = 0,并以实部/虚部对返回两个根. */
 static void quad_solve(lmmc_real_t p, lmmc_real_t q,
                        lmmc_real_t *re1, lmmc_real_t *im1,
                        lmmc_real_t *re2, lmmc_real_t *im2) {
@@ -34,17 +34,17 @@ static void quad_solve(lmmc_real_t p, lmmc_real_t q,
 }
 
 /**
- * @brief 使用 Householder 反射将一般方阵约化为上 Hessenberg 形。
+ * @brief 使用 Householder 反射将一般方阵约化为上 Hessenberg 形.
  *
- * 输入时 H 保存 A；返回时 H 保存上 Hessenberg 形，Q 累积正交相似变换，
- * 满足 A = Q * H * Q^T。
+ * 输入时 H 保存 A;返回时 H 保存上 Hessenberg 形,Q 累积正交相似变换,
+ * 满足 A = Q * H * Q^T.
  */
 static lmmc_status_t hessenberg_reduce(lmmc_mat_t *H, lmmc_mat_t *Q) {
     size_t n = H->rows;
     size_t k, i, j;
     lmmc_real_t *vbuf;
 
-    /** 初始化 Q = I。 */
+    /** 初始化 Q = I. */
     for (i = 0; i < n; i++)
         for (j = 0; j < n; j++)
             MAT_ELEM(Q, i, j) = (i == j) ? 1.0 : 0.0;
@@ -58,24 +58,24 @@ static lmmc_status_t hessenberg_reduce(lmmc_mat_t *H, lmmc_mat_t *Q) {
         size_t len = n - k - 1;
         lmmc_real_t tau, beta;
 
-        /** 提取对角线下方的列段。 */
+        /** 提取对角线下方的列段. */
         for (i = 0; i < len; i++)
             vbuf[i] = MAT_ELEM(H, k + 1 + i, k);
 
         householder_make(vbuf, len, &tau, &beta);
 
-        /** 写入次对角元素。 */
+        /** 写入次对角元素. */
         MAT_ELEM(H, k + 1, k) = beta;
         for (i = 1; i < len; i++)
             MAT_ELEM(H, k + 1 + i, k) = 0.0;
 
-        /** 从左侧应用 H <- (I - tau*v*v^T) * H。 */
+        /** 从左侧应用 H <- (I - tau*v*v^T) * H. */
         householder_apply_left(H, k + 1, len, k + 1, n, vbuf, tau);
 
-        /** 从右侧应用 H <- H * (I - tau*v*v^T)。 */
+        /** 从右侧应用 H <- H * (I - tau*v*v^T). */
         householder_apply_right(H, 0, n, k + 1, len, vbuf, tau);
 
-        /** 累积 Q <- Q * (I - tau*v*v^T)。 */
+        /** 累积 Q <- Q * (I - tau*v*v^T). */
         householder_apply_right(Q, 0, n, k + 1, len, vbuf, tau);
     }
 
@@ -84,25 +84,25 @@ static lmmc_status_t hessenberg_reduce(lmmc_mat_t *H, lmmc_mat_t *Q) {
 }
 
 /**
- * @brief 对上 Hessenberg 矩阵执行隐式 Francis 双位移 QR 迭代。
+ * @brief 对上 Hessenberg 矩阵执行隐式 Francis 双位移 QR 迭代.
  *
- * 输入 H 为上 Hessenberg 形；返回时 H 为实 Schur 形，包含 1×1 与 2×2
- * 对角块，Q 累积全部相似变换。
+ * 输入 H 为上 Hessenberg 形;返回时 H 为实 Schur 形,包含 1x1 与 2x2
+ * 对角块,Q 累积全部相似变换.
  *
- * @param H 原地变换为实 Schur 形的上 Hessenberg 矩阵。
- * @param Q 累积变换的正交矩阵。
- * @param nn 矩阵阶数。
- * @return 收敛时返回 LMMC_STATUS_OK；超过迭代上限时返回
- *         LMMC_STATUS_CONVERGENCE_FAILED。
+ * @param H 原地变换为实 Schur 形的上 Hessenberg 矩阵.
+ * @param Q 累积变换的正交矩阵.
+ * @param nn 矩阵阶数.
+ * @return 收敛时返回 LMMC_STATUS_OK;超过迭代上限时返回
+ *         LMMC_STATUS_CONVERGENCE_FAILED.
  *
- * @see J. G. F. Francis, “The QR Transformation: A Unitary Analogue
- *      to the LR Transformation,” The Computer Journal 4, 1961–1962.
- * @see B. T. Smith et al., Matrix Eigensystem Routines—EISPACK Guide, 1976.
+ * @see J. G. F. Francis, "The QR Transformation: A Unitary Analogue
+ *      to the LR Transformation," The Computer Journal 4, 1961-1962.
+ * @see B. T. Smith et al., Matrix Eigensystem Routines-EISPACK Guide, 1976.
  */
 static lmmc_status_t francis_qr_iteration(lmmc_mat_t *H, lmmc_mat_t *Q, size_t nn) {
     /**
-     * 基于 EISPACK hqr2 的 Francis 隐式双位移 QR，
-     * 将上 Hessenberg 矩阵约化为实 Schur 形。
+     * 基于 EISPACK hqr2 的 Francis 隐式双位移 QR,
+     * 将上 Hessenberg 矩阵约化为实 Schur 形.
      */
     const lmmc_real_t eps = 2.2204460492503131e-16;
     const size_t max_iter = 30 * nn;
@@ -216,21 +216,21 @@ static lmmc_status_t francis_qr_iteration(lmmc_mat_t *H, lmmc_mat_t *Q, size_t n
 }
 
 /**
- * @brief 从实 Schur 形提取特征值。
+ * @brief 从实 Schur 形提取特征值.
  *
- * 1×1 对角块产生实特征值，2×2 对角块产生共轭复特征值对。
+ * 1x1 对角块产生实特征值,2x2 对角块产生共轭复特征值对.
  */
 static void extract_eigenvalues_from_schur(const lmmc_mat_t *H, size_t n,
                                            lmmc_real_t *re, lmmc_real_t *im) {
     size_t i = 0;
     while (i < n) {
         if (i + 1 == n || MAT_ELEM(H, i + 1, i) == 0.0) {
-            /** 1×1 块产生实特征值。 */
+            /** 1x1 块产生实特征值. */
             re[i] = MAT_ELEM(H, i, i);
             im[i] = 0.0;
             i++;
         } else {
-            /** 2×2 块产生共轭复特征值对。 */
+            /** 2x2 块产生共轭复特征值对. */
             lmmc_real_t a11 = MAT_ELEM(H, i, i);
             lmmc_real_t a12 = MAT_ELEM(H, i, i + 1);
             lmmc_real_t a21 = MAT_ELEM(H, i + 1, i);
@@ -378,7 +378,7 @@ void lmmc_eigen_gen_result_destroy(lmmc_eigen_gen_result_t *result) {
 }
 
 /**
- * @brief 释放通用特征分解结果持有的向量与矩阵缓冲区。
+ * @brief 释放通用特征分解结果持有的向量与矩阵缓冲区.
  */
 
 void lmmc_eigen_gen_full_result_destroy(lmmc_eigen_gen_full_result_t *result) {
@@ -390,10 +390,10 @@ void lmmc_eigen_gen_full_result_destroy(lmmc_eigen_gen_full_result_t *result) {
 }
 
 /**
- * @brief 对实特征值执行逆迭代。
+ * @brief 对实特征值执行逆迭代.
  *
- * 重复求解 (A - mu*I)x = b 并归一化，使向量收敛到对应特征向量。
- * 带部分主元的 LU 分解处理位移系统，小扰动使位移矩阵保持可分解。
+ * 重复求解 (A - mu*I)x = b 并归一化,使向量收敛到对应特征向量.
+ * 带部分主元的 LU 分解处理位移系统,小扰动使位移矩阵保持可分解.
  *
  * @see J. H. Wilkinson, The Algebraic Eigenvalue Problem, 1965.
  */
@@ -406,7 +406,7 @@ static lmmc_status_t inverse_iteration_real(
     const size_t max_iter = 20;
     const lmmc_real_t eps = 2.2204460492503131e-16;
 
-    /** 分配位移矩阵与工作区。 */
+    /** 分配位移矩阵与工作区. */
     lmmc_mat_t shifted;
     status = lmmc_mat_create(n, n, &shifted);
     if (status != LMMC_STATUS_OK) return status;
@@ -420,7 +420,7 @@ static lmmc_status_t inverse_iteration_real(
     status = lmmc_vec_create(n, &x_vec);
     if (status != LMMC_STATUS_OK) { lmmc_vec_destroy(&b_vec); lmmc_free(pivots); lmmc_mat_destroy(&shifted); return status; }
 
-    /** 计算 ||A||_F 作为扰动尺度。 */
+    /** 计算 ||A||_F 作为扰动尺度. */
     lmmc_real_t norm_A = 0.0;
     for (i = 0; i < n; i++)
         for (j = 0; j < n; j++)
@@ -428,19 +428,19 @@ static lmmc_status_t inverse_iteration_real(
     norm_A = sqrt(norm_A);
     if (norm_A < 1.0) norm_A = 1.0;
 
-    /** Wilkinson 风格扰动按 eps*||A||_F*n 设置，使位移矩阵保持可分解。 */
+    /** Wilkinson 风格扰动按 eps*||A||_F*n 设置,使位移矩阵保持可分解. */
     lmmc_real_t perturb = eps * norm_A * (lmmc_real_t)n;
     lmmc_real_t shift = mu + perturb;
 
-    /** 构造 A - shift*I。 */
+    /** 构造 A - shift*I. */
     for (i = 0; i < n; i++)
         for (j = 0; j < n; j++)
             MAT_ELEM(&shifted, i, j) = MAT_ELEM(A, i, j) - ((i == j) ? shift : 0.0);
 
-    /** 对位移矩阵执行 LU 分解。 */
+    /** 对位移矩阵执行 LU 分解. */
     status = lmmc_lu_decompose_inplace(&shifted, pivots, NULL);
     if (status == LMMC_STATUS_SINGULAR_MATRIX) {
-        /** 首次分解奇异时使用 sqrt(eps)*||A||_F 的扩大扰动。 */
+        /** 首次分解奇异时使用 sqrt(eps)*||A||_F 的扩大扰动. */
         perturb = sqrt(eps) * norm_A;
         shift = mu + perturb;
         for (i = 0; i < n; i++)
@@ -456,11 +456,11 @@ static lmmc_status_t inverse_iteration_real(
         return status;
     }
 
-    /** 初始向量使用交替符号分量，以覆盖各坐标方向。 */
+    /** 初始向量使用交替符号分量,以覆盖各坐标方向. */
     for (i = 0; i < n; i++)
         b_vec.data[i] = ((i % 2 == 0) ? 1.0 : -1.0) / (lmmc_real_t)(i + 1);
 
-    /** 归一化初始向量。 */
+    /** 归一化初始向量. */
     {
         lmmc_real_t nrm = 0.0;
         for (i = 0; i < n; i++) nrm += b_vec.data[i] * b_vec.data[i];
@@ -468,7 +468,7 @@ static lmmc_status_t inverse_iteration_real(
         if (nrm > 0.0) for (i = 0; i < n; i++) b_vec.data[i] /= nrm;
     }
 
-    /** 执行逆迭代。 */
+    /** 执行逆迭代. */
     for (iter = 0; iter < max_iter; iter++) {
         status = lmmc_lu_solve(&shifted, pivots, &b_vec, &x_vec);
         if (status != LMMC_STATUS_OK) {
@@ -479,18 +479,18 @@ static lmmc_status_t inverse_iteration_real(
             return status;
         }
 
-        /** 归一化当前向量。 */
+        /** 归一化当前向量. */
         lmmc_real_t nrm = 0.0;
         for (i = 0; i < n; i++) nrm += x_vec.data[i] * x_vec.data[i];
         nrm = sqrt(nrm);
         if (nrm == 0.0) nrm = 1.0;
         for (i = 0; i < n; i++) x_vec.data[i] /= nrm;
 
-        /** 将当前向量作为下一轮右端。 */
+        /** 将当前向量作为下一轮右端. */
         for (i = 0; i < n; i++) b_vec.data[i] = x_vec.data[i];
     }
 
-    /** 复制收敛后的特征向量。 */
+    /** 复制收敛后的特征向量. */
     for (i = 0; i < n; i++) vec_out[i] = x_vec.data[i];
 
     lmmc_vec_destroy(&x_vec);
@@ -501,12 +501,12 @@ static lmmc_status_t inverse_iteration_real(
 }
 
 /**
- * @brief 对共轭复特征值对执行逆迭代。
+ * @brief 对共轭复特征值对执行逆迭代.
  *
- * 对 mu = alpha + i*beta 求解实数 2n×2n 系统：
+ * 对 mu = alpha + i*beta 求解实数 2nx2n 系统:
  *   [A - alpha*I,  beta*I ] [x_re]   [b_re]
  *   [-beta*I,  A - alpha*I] [x_im] = [b_im]
- * 得到特征向量的实部与虚部。
+ * 得到特征向量的实部与虚部.
  */
 static lmmc_status_t inverse_iteration_complex(
     const lmmc_mat_t *A, size_t n, lmmc_real_t alpha, lmmc_real_t beta,

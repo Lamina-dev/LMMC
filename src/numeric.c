@@ -1,6 +1,6 @@
 /**
  * @file numeric.c
- * @brief 数值常量、特殊值、近似比较、FFT 与 LambertW 实现。
+ * @brief 数值常量,特殊值,近似比较,FFT 与 LambertW 实现.
  */
 #include <math.h>
 #include <string.h>
@@ -436,10 +436,10 @@ lmmc_status_t lmmc_fft_radix4_inverse(lmmc_real_t* real, lmmc_real_t* imag, size
 }
 
 /**
- * @brief 误差函数 erf(x) — 使用 C 标准库 erf() 并包装为 LMMC 接口。
+ * @brief 误差函数 erf(x) - 使用 C 标准库 erf() 并包装为 LMMC 接口.
  *
- * C99 标准库提供了高精度的 erf 实现（通常 < 1 ULP 误差），
- * 直接使用以确保最佳精度。
+ * C99 标准库提供了高精度的 erf 实现(通常 < 1 ULP 误差),
+ * 直接使用以确保最佳精度.
  */
 lmmc_status_t lmmc_erf(lmmc_real_t x, lmmc_real_t* out) {
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
@@ -448,9 +448,9 @@ lmmc_status_t lmmc_erf(lmmc_real_t x, lmmc_real_t* out) {
 }
 
 /**
- * @brief 互补误差函数 erfc(x) = 1 - erf(x) — 使用 C 标准库 erfc()。
+ * @brief 互补误差函数 erfc(x) = 1 - erf(x) - 使用 C 标准库 erfc().
  *
- * 对大 |x| 直接计算以保持尾部概率的有效精度。
+ * 对大 |x| 直接计算以保持尾部概率的有效精度.
  */
 lmmc_status_t lmmc_erfc(lmmc_real_t x, lmmc_real_t* out) {
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
@@ -459,17 +459,17 @@ lmmc_status_t lmmc_erfc(lmmc_real_t x, lmmc_real_t* out) {
 }
 
 /**
- * @brief 对数伽马函数 lgamma(x) — Lanczos 近似 (g=7, n=9)。
+ * @brief 对数伽马函数 lgamma(x) - Lanczos 近似 (g=7, n=9).
  *
- * 使用 Lanczos 近似：
+ * 使用 Lanczos 近似:
  * ln(Gamma(x)) = (x - 0.5) * ln(x + g - 0.5) - (x + g - 0.5) + 0.5*ln(2*pi) + ln(Ag(x))
- * 其中 Ag(x) 是 Lanczos 级数和。
+ * 其中 Ag(x) 是 Lanczos 级数和.
  */
 lmmc_status_t lmmc_lgamma(lmmc_real_t x, lmmc_real_t* out) {
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
     if (x <= 0.0) return LMMC_STATUS_INVALID_ARGUMENT;
 
-    /* Lanczos 系数 (g=7, n=9) — 来自 Numerical Recipes / Cephes */
+    /* Lanczos 系数 (g=7, n=9) - 来自 Numerical Recipes / Cephes */
     static const double coeff[9] = {
          0.99999999999980993,
        676.5203681218851,
@@ -510,7 +510,7 @@ lmmc_status_t lmmc_lgamma(lmmc_real_t x, lmmc_real_t* out) {
 }
 
 /**
- * @brief 伽马函数 tgamma(x) = exp(lgamma(x))，要求 x > 0。
+ * @brief 伽马函数 tgamma(x) = exp(lgamma(x)),要求 x > 0.
  */
 lmmc_status_t lmmc_tgamma(lmmc_real_t x, lmmc_real_t* out) {
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
@@ -530,9 +530,9 @@ lmmc_status_t lmmc_tgamma(lmmc_real_t x, lmmc_real_t* out) {
 }
 
 /**
- * @brief 贝塔函数 B(a,b) = Gamma(a)*Gamma(b)/Gamma(a+b)。
+ * @brief 贝塔函数 B(a,b) = Gamma(a)*Gamma(b)/Gamma(a+b).
  *
- * 使用对数伽马控制中间结果幅值：B(a,b) = exp(lgamma(a) + lgamma(b) - lgamma(a+b))。
+ * 使用对数伽马控制中间结果幅值:B(a,b) = exp(lgamma(a) + lgamma(b) - lgamma(a+b)).
  */
 lmmc_status_t lmmc_beta(lmmc_real_t a, lmmc_real_t b, lmmc_real_t* out) {
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
@@ -560,13 +560,13 @@ lmmc_status_t lmmc_beta(lmmc_real_t a, lmmc_real_t b, lmmc_real_t* out) {
 }
 
 /**
- * @brief 双伽马函数 psi(x) = d/dx ln(Gamma(x))。
+ * @brief 双伽马函数 psi(x) = d/dx ln(Gamma(x)).
  *
- * 算法：
- * 1. 对 x < 6 使用递推关系 psi(x+1) = psi(x) + 1/x 将 x 提升到 >= 6。
- * 2. 对 x >= 6 使用渐近展开：
+ * 算法:
+ * 1. 对 x < 6 使用递推关系 psi(x+1) = psi(x) + 1/x 将 x 提升到 >= 6.
+ * 2. 对 x >= 6 使用渐近展开:
  *    psi(x) ~ ln(x) - 1/(2x) - sum_{k=1}^{N} B_{2k}/(2k * x^{2k})
- *    其中 B_{2k} 是 Bernoulli 数。
+ *    其中 B_{2k} 是 Bernoulli 数.
  */
 lmmc_status_t lmmc_digamma(lmmc_real_t x, lmmc_real_t* out) {
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
@@ -574,7 +574,7 @@ lmmc_status_t lmmc_digamma(lmmc_real_t x, lmmc_real_t* out) {
 
     double result = 0.0;
 
-    /* 递推：将 x 提升到 >= 7 以确保渐近展开精度 */
+    /* 递推:将 x 提升到 >= 7 以确保渐近展开精度 */
     while (x < 7.0) {
         result -= 1.0 / x;
         x += 1.0;
@@ -675,7 +675,7 @@ lmmc_status_t lmmc_lambertw_wm1(lmmc_real_t z, lmmc_real_t* out_res) {
     /* Domain: z in [-1/e, 0) */
     if (z < -LMMC_INV_E || z >= 0.0) return LMMC_STATUS_INVALID_ARGUMENT;
 
-    /* Special case: z == -1/e => W₋₁(-1/e) = -1 */
+    /* Special case: z == -1/e => W_-_1(-1/e) = -1 */
     if (fabs(z + LMMC_INV_E) < 1e-300) {
         *out_res = -1.0;
         return LMMC_STATUS_OK;

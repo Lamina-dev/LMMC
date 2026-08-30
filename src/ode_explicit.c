@@ -1,6 +1,6 @@
 /**
  * @file ode_explicit.c
- * @brief 显式 ODE 求解器：Euler、RK45（Cash-Karp 嵌入对）与 RK4。
+ * @brief 显式 ODE 求解器:Euler,RK45(Cash-Karp 嵌入对)与 RK4.
  */
 #include <math.h>
 
@@ -370,20 +370,20 @@ lmmc_status_t lmmc_ode_rk45_solve(
             lmmc_ode_do_log(&local_cfg, out_result->num_steps, t, y, dim);
         }
 
-        /** 计算下一候选步长。 */
+        /** 计算下一候选步长. */
         if (err_norm > 0.0) {
-            /** 五阶方法使用 beta * (1/err_norm)^(1/5) 计算候选步长。 */
+            /** 五阶方法使用 beta * (1/err_norm)^(1/5) 计算候选步长. */
             h_new = h * local_cfg.adaptive_step_beta * pow(1.0 / err_norm, 0.2);
         } else {
-            /** 嵌入误差接近零时采用最大增长因子。 */
+            /** 嵌入误差接近零时采用最大增长因子. */
             h_new = h * 5.0;
         }
 
-        /** 将候选步长约束到配置区间。 */
+        /** 将候选步长约束到配置区间. */
         h_new = lmmc_clamp(h_new, local_cfg.min_step, local_cfg.max_step);
 
         if (!step_accepted) {
-            /** min_step 生效后，持续超出容差即报告步长失败。 */
+            /** min_step 生效后,持续超出容差即报告步长失败. */
             if (h_new <= local_cfg.min_step && err_norm > 1.0) {
                 if (h <= local_cfg.min_step) {
                     out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_STEP;

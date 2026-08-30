@@ -1,6 +1,6 @@
 /**
  * @file complex.c
- * @brief 复数类型构造、算术运算与复数向量/矩阵生命周期管理。
+ * @brief 复数类型构造,算术运算与复数向量/矩阵生命周期管理.
  */
 #include <math.h>
 #include <string.h>
@@ -91,43 +91,43 @@ lmmc_status_t lmmc_complex_div(const lmmc_complex_t* a, const lmmc_complex_t* b,
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    /** 除数实部与虚部同时为零时返回数值失败。 */
+    /** 除数实部与虚部同时为零时返回数值失败. */
     LMMC_REAL_SET_D(&zero, 0.0);
     if (LMMC_REAL_CMP(&b->real, &zero) == 0 && LMMC_REAL_CMP(&b->imag, &zero) == 0) {
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }
 
-    /** Smith 复数除法令除数 b = c + di，并按主导分量缩放。 */
+    /** Smith 复数除法令除数 b = c + di,并按主导分量缩放. */
     LMMC_REAL_ABS(&abs_c, &b->real);
     LMMC_REAL_ABS(&abs_d, &b->imag);
 
     if (LMMC_REAL_CMP(&abs_d, &abs_c) <= 0) {
-        /** |d| <= |c| 时取 r = d/c，denom = c + d*r。 */
+        /** |d| <= |c| 时取 r = d/c,denom = c + d*r. */
         LMMC_REAL_DIV(&r, &b->imag, &b->real);
         LMMC_REAL_MUL(&tmp1, &b->imag, &r);
         LMMC_REAL_ADD(&denom, &b->real, &tmp1);
 
-        /** out.real = (a.real + a.imag * r) / denom。 */
+        /** out.real = (a.real + a.imag * r) / denom. */
         LMMC_REAL_MUL(&tmp1, &a->imag, &r);
         LMMC_REAL_ADD(&tmp2, &a->real, &tmp1);
         LMMC_REAL_DIV(&out->real, &tmp2, &denom);
 
-        /** out.imag = (a.imag - a.real * r) / denom。 */
+        /** out.imag = (a.imag - a.real * r) / denom. */
         LMMC_REAL_MUL(&tmp1, &a->real, &r);
         LMMC_REAL_SUB(&tmp2, &a->imag, &tmp1);
         LMMC_REAL_DIV(&out->imag, &tmp2, &denom);
     } else {
-        /** |d| > |c| 时取 r = c/d，denom = d + c*r。 */
+        /** |d| > |c| 时取 r = c/d,denom = d + c*r. */
         LMMC_REAL_DIV(&r, &b->real, &b->imag);
         LMMC_REAL_MUL(&tmp1, &b->real, &r);
         LMMC_REAL_ADD(&denom, &b->imag, &tmp1);
 
-        /** out.real = (a.real * r + a.imag) / denom。 */
+        /** out.real = (a.real * r + a.imag) / denom. */
         LMMC_REAL_MUL(&tmp1, &a->real, &r);
         LMMC_REAL_ADD(&tmp2, &tmp1, &a->imag);
         LMMC_REAL_DIV(&out->real, &tmp2, &denom);
 
-        /** out.imag = (a.imag * r - a.real) / denom。 */
+        /** out.imag = (a.imag * r - a.real) / denom. */
         LMMC_REAL_MUL(&tmp1, &a->imag, &r);
         LMMC_REAL_SUB(&tmp2, &tmp1, &a->real);
         LMMC_REAL_DIV(&out->imag, &tmp2, &denom);
@@ -178,7 +178,7 @@ lmmc_status_t lmmc_complex_exp(const lmmc_complex_t* z, lmmc_complex_t* out)
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    /** z = x + iy 时，e^z = e^x * (cos(y) + i*sin(y))。 */
+    /** z = x + iy 时,e^z = e^x * (cos(y) + i*sin(y)). */
     LMMC_REAL_EXP(&ex, &z->real);
     LMMC_REAL_COS(&cos_y, &z->imag);
     LMMC_REAL_SIN(&sin_y, &z->imag);
@@ -195,22 +195,22 @@ lmmc_status_t lmmc_complex_log(const lmmc_complex_t* z, lmmc_complex_t* out)
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    /** z = 0+0i 时对数位于定义域之外。 */
+    /** z = 0+0i 时对数位于定义域之外. */
     LMMC_REAL_SET_D(&zero, 0.0);
     if (LMMC_REAL_CMP(&z->real, &zero) == 0 && LMMC_REAL_CMP(&z->imag, &zero) == 0) {
         return LMMC_STATUS_OUT_OF_RANGE;
     }
 
-    /** 使用 ln(z) = ln|z| + i*arg(z)，先计算 |z|。 */
+    /** 使用 ln(z) = ln|z| + i*arg(z),先计算 |z|. */
     LMMC_REAL_MUL(&r2, &z->real, &z->real);
     LMMC_REAL_MUL(&i2, &z->imag, &z->imag);
     LMMC_REAL_ADD(&sum, &r2, &i2);
     LMMC_REAL_SQRT(&modulus, &sum);
 
-    /** 实部为 ln|z|。 */
+    /** 实部为 ln|z|. */
     LMMC_REAL_LOG(&out->real, &modulus);
 
-    /** 虚部为 arg(z) = atan2(imag, real)。 */
+    /** 虚部为 arg(z) = atan2(imag, real). */
     LMMC_REAL_ATAN2(&out->imag, &z->imag, &z->real);
 
     return LMMC_STATUS_OK;
@@ -225,27 +225,27 @@ lmmc_status_t lmmc_complex_sqrt(const lmmc_complex_t* z, lmmc_complex_t* out)
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    /** 使用 sqrt(z) = sqrt(|z|) * (cos(arg(z)/2) + i*sin(arg(z)/2))，
-     * 先计算 |z|。
+    /** 使用 sqrt(z) = sqrt(|z|) * (cos(arg(z)/2) + i*sin(arg(z)/2)),
+     * 先计算 |z|.
      */
     LMMC_REAL_MUL(&r2, &z->real, &z->real);
     LMMC_REAL_MUL(&i2, &z->imag, &z->imag);
     LMMC_REAL_ADD(&sum, &r2, &i2);
     LMMC_REAL_SQRT(&modulus, &sum);
 
-    /** 计算 sqrt(|z|)。 */
+    /** 计算 sqrt(|z|). */
     LMMC_REAL_SQRT(&sqrt_mod, &modulus);
 
-    /** 计算 arg(z) / 2。 */
+    /** 计算 arg(z) / 2. */
     LMMC_REAL_ATAN2(&arg_z, &z->imag, &z->real);
     LMMC_REAL_SET_D(&two, 2.0);
     LMMC_REAL_DIV(&half_arg, &arg_z, &two);
 
-    /** 计算 cos(arg/2) 与 sin(arg/2)。 */
+    /** 计算 cos(arg/2) 与 sin(arg/2). */
     LMMC_REAL_COS(&cos_ha, &half_arg);
     LMMC_REAL_SIN(&sin_ha, &half_arg);
 
-    /** 合成 sqrt(|z|) * (cos(arg/2) + i*sin(arg/2))。 */
+    /** 合成 sqrt(|z|) * (cos(arg/2) + i*sin(arg/2)). */
     LMMC_REAL_MUL(&out->real, &sqrt_mod, &cos_ha);
     LMMC_REAL_MUL(&out->imag, &sqrt_mod, &sin_ha);
     return LMMC_STATUS_OK;
@@ -259,7 +259,7 @@ lmmc_status_t lmmc_complex_sin(const lmmc_complex_t* z, lmmc_complex_t* out)
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    /** z = x + iy 时，sin(z) = sin(x)*cosh(y) + i*cos(x)*sinh(y)。 */
+    /** z = x + iy 时,sin(z) = sin(x)*cosh(y) + i*cos(x)*sinh(y). */
     LMMC_REAL_SIN(&sin_x, &z->real);
     LMMC_REAL_COS(&cos_x, &z->real);
     LMMC_REAL_COSH(&cosh_y, &z->imag);
@@ -278,7 +278,7 @@ lmmc_status_t lmmc_complex_cos(const lmmc_complex_t* z, lmmc_complex_t* out)
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    /** z = x + iy 时，cos(z) = cos(x)*cosh(y) - i*sin(x)*sinh(y)。 */
+    /** z = x + iy 时,cos(z) = cos(x)*cosh(y) - i*sin(x)*sinh(y). */
     LMMC_REAL_COS(&cos_x, &z->real);
     LMMC_REAL_SIN(&sin_x, &z->real);
     LMMC_REAL_COSH(&cosh_y, &z->imag);
