@@ -1,10 +1,9 @@
 /**
  * @file lsr_stdlib.h
- * @brief LSR-facing numeric standard library adapters.
+ * @brief 面向 LSR 的数值标准库适配器。
  *
- * These functions provide a stable C ABI shape for Lamina std.math bindings.
- * They wrap existing LMMC numeric and complex primitives without adding
- * symbolic semantics; Expr handling belongs to LMCAS.
+ * 这些函数为 Lamina std.math 绑定提供稳定的 C ABI。
+ * 数值与复数原语由 LMMC 提供，Expr 处理与符号语义由 LMCAS 提供。
  */
 #ifndef LMMC_LSR_STDLIB_H
 #define LMMC_LSR_STDLIB_H
@@ -23,10 +22,10 @@
 extern "C" {
 #endif
 
-/** @brief Map an LMMC status code to a stable LSR diagnostic name. */
+/** @brief 将 LMMC 状态码映射为稳定的 LSR 诊断名称。 */
 const char* lmmc_lsr_error_name(lmmc_status_t status);
 
-/** @brief LSR table<text, matrix> view for std.linalg.eig. */
+/** @brief std.linalg.eig 使用的 LSR table<text, matrix> 视图。 */
 typedef struct {
     lmmc_mat_t values_real;
     lmmc_mat_t values_imag;
@@ -34,7 +33,7 @@ typedef struct {
     lmmc_mat_t vectors_imag;
 } lmmc_lsr_eig_table_t;
 
-/** @brief LSR table<text, matrix> view for std.linalg.svd. */
+/** @brief std.linalg.svd 使用的 LSR table<text, matrix> 视图。 */
 typedef struct {
     lmmc_mat_t U;
     lmmc_mat_t S;
@@ -88,35 +87,35 @@ typedef struct {
     int owns_data;
 } lmmc_lsr_text_set_t;
 
-/** @brief Return the LSR std.math constant pi. */
+/** @brief 返回 LSR std.math 常量 pi。 */
 lmmc_status_t lmmc_lsr_math_pi(lmmc_real_t* out);
-/** @brief Return the LSR std.math constant e. */
+/** @brief 返回 LSR std.math 常量 e。 */
 lmmc_status_t lmmc_lsr_math_e(lmmc_real_t* out);
-/** @brief Return the LSR std.math constant phi. */
+/** @brief 返回 LSR std.math 常量 phi。 */
 lmmc_status_t lmmc_lsr_math_phi(lmmc_real_t* out);
 
-/** @brief Return the number of LSR std.constants entries. */
+/** @brief 返回 LSR std.constants 条目数。 */
 size_t lmmc_lsr_constants_count(void);
-/** @brief Return the name of an LSR std.constants entry by index, or NULL. */
+/** @brief 按索引返回 LSR std.constants 条目名；越界索引映射为 NULL。 */
 const char* lmmc_lsr_constants_name(size_t index);
-/** @brief Return an LSR std.constants numeric value by name. */
+/** @brief 按名称返回 LSR std.constants 数值。 */
 lmmc_status_t lmmc_lsr_constants_get(const char* name, lmmc_real_t* out);
-/** @brief Return an LSR std.constants unit string by name, or NULL. */
+/** @brief 按名称返回 LSR std.constants 单位字符串；无单位条目映射为 NULL。 */
 const char* lmmc_lsr_constants_unit(const char* name);
-/** @brief Return a complete LSR std.constants entry by index. */
+/** @brief 按索引返回完整的 LSR std.constants 条目。 */
 lmmc_status_t lmmc_lsr_constants_entry(size_t index,
                                        const char** out_name,
                                        lmmc_real_t* out_value,
                                        const char** out_unit);
 
-/** @brief Return std.math.I, the imaginary unit. */
+/** @brief 返回虚数单位 std.math.I。 */
 lmmc_status_t lmmc_lsr_math_I(lmmc_complex_t* out);
 
-/** @brief Compare finite numeric values for LSR structural key equality. */
+/** @brief 按 LSR 结构键语义比较有限数值。 */
 lmmc_status_t lmmc_lsr_num_equal(lmmc_real_t lhs, lmmc_real_t rhs, int* out);
-/** @brief Hash a finite numeric value for LSR table keys. */
+/** @brief 为 LSR 表键计算有限数值哈希。 */
 lmmc_status_t lmmc_lsr_num_hash(lmmc_real_t value, uint64_t* out);
-/** @brief Construct a finite numeric set with duplicate values removed. */
+/** @brief 构造有限数值集合，并合并重复值。 */
 lmmc_status_t lmmc_lsr_num_set_make(const lmmc_real_t* values,
                                     size_t count,
                                     lmmc_lsr_num_set_t* out);
@@ -140,11 +139,11 @@ lmmc_status_t lmmc_lsr_num_set_symmetric_difference(
     const lmmc_lsr_num_set_t* lhs,
     const lmmc_lsr_num_set_t* rhs,
     lmmc_lsr_num_set_t* out);
-/** @brief Compare LSR bool values for table key equality. */
+/** @brief 按 LSR 表键语义比较 bool 值。 */
 lmmc_status_t lmmc_lsr_bool_equal(int lhs, int rhs, int* out);
-/** @brief Hash an LSR bool value for table keys. */
+/** @brief 为 LSR 表键计算 bool 哈希。 */
 lmmc_status_t lmmc_lsr_bool_hash(int value, uint64_t* out);
-/** @brief Construct a bool set with duplicate values removed. */
+/** @brief 构造 bool 集合，并合并重复值。 */
 lmmc_status_t lmmc_lsr_bool_set_make(const int* values,
                                      size_t count,
                                      lmmc_lsr_bool_set_t* out);
@@ -168,11 +167,11 @@ lmmc_status_t lmmc_lsr_bool_set_symmetric_difference(
     const lmmc_lsr_bool_set_t* lhs,
     const lmmc_lsr_bool_set_t* rhs,
     lmmc_lsr_bool_set_t* out);
-/** @brief Compare UTF-8 text values for LSR table key equality. */
+/** @brief 按 LSR 表键语义比较 UTF-8 文本值。 */
 lmmc_status_t lmmc_lsr_text_equal(const char* lhs, const char* rhs, int* out);
-/** @brief Hash a UTF-8 text value for LSR table keys. */
+/** @brief 为 LSR 表键计算 UTF-8 文本哈希。 */
 lmmc_status_t lmmc_lsr_text_hash(const char* value, uint64_t* out);
-/** @brief Construct a text set with duplicate values removed. */
+/** @brief 构造文本集合，并合并重复值。 */
 lmmc_status_t lmmc_lsr_text_set_make(const char* const* values,
                                      size_t count,
                                      lmmc_lsr_text_set_t* out);
@@ -197,27 +196,27 @@ lmmc_status_t lmmc_lsr_text_set_symmetric_difference(
     const lmmc_lsr_text_set_t* rhs,
     lmmc_lsr_text_set_t* out);
 
-/** @brief Construct an LSR complex value from real and imaginary parts. */
+/** @brief 由实部与虚部构造 LSR 复数值。 */
 lmmc_status_t lmmc_lsr_math_complex(lmmc_real_t real,
                                     lmmc_real_t imag,
                                     lmmc_complex_t* out);
-/** @brief Extract the real part of an LSR complex value. */
+/** @brief 提取 LSR 复数值的实部。 */
 lmmc_status_t lmmc_lsr_math_real(const lmmc_complex_t* z, lmmc_real_t* out);
-/** @brief Extract the imaginary part of an LSR complex value. */
+/** @brief 提取 LSR 复数值的虚部。 */
 lmmc_status_t lmmc_lsr_math_imag(const lmmc_complex_t* z, lmmc_real_t* out);
-/** @brief Compute the complex conjugate for std.math.conj. */
+/** @brief 为 std.math.conj 计算复共轭。 */
 lmmc_status_t lmmc_lsr_math_conj(const lmmc_complex_t* z, lmmc_complex_t* out);
-/** @brief Compute the complex absolute value for std.math.abs. */
+/** @brief 为 std.math.abs 计算复数模。 */
 lmmc_status_t lmmc_lsr_math_complex_abs(const lmmc_complex_t* z,
                                         lmmc_real_t* out);
-/** @brief Compare complex values for LSR structural key equality. */
+/** @brief 按 LSR 结构键语义比较复数值。 */
 lmmc_status_t lmmc_lsr_math_complex_equal(const lmmc_complex_t* lhs,
                                           const lmmc_complex_t* rhs,
                                           int* out);
-/** @brief Hash a finite complex value for LSR table keys. */
+/** @brief 为 LSR 表键计算有限复数哈希。 */
 lmmc_status_t lmmc_lsr_math_complex_hash(const lmmc_complex_t* z,
                                          uint64_t* out);
-/** @brief Construct a finite complex set with duplicate values removed. */
+/** @brief 构造有限复数集合，并合并重复值。 */
 lmmc_status_t lmmc_lsr_complex_set_make(const lmmc_complex_t* values,
                                         size_t count,
                                         lmmc_lsr_complex_set_t* out);

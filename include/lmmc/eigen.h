@@ -139,7 +139,7 @@ lmmc_status_t lmmc_svd(
  * @return
  * - ::LMMC_STATUS_OK — 成功。
  * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL。
- * - ::LMMC_STATUS_DIMENSION_MISMATCH — out_pinv 维度不是 n×m。
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH — out_pinv 维度与 n×m 不匹配。
  * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
  *
  * @par 副作用

@@ -69,9 +69,9 @@ lmmc_status_t lmmc_tensor_set_nd(lmmc_tensor_nd_t* t, const size_t* idx, lmmc_re
  * @param[in]  perm 置换数组，长度 in->ndim，为 [0, ndim) 的排列。
  * @param[out] out  输出张量结构体（调用方提供存储）。
  *
- * @return ::LMMC_STATUS_OK 成功；
- *         ::LMMC_STATUS_INVALID_ARGUMENT 若 perm 不是有效排列或指针为 NULL；
- *         ::LMMC_STATUS_ALLOC_FAILED 若内存分配失败。
+ * @return ::LMMC_STATUS_OK 表示成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 表示 perm 位于排列集合之外或指针为 NULL；
+ *         ::LMMC_STATUS_ALLOC_FAILED 表示内存分配失败。
  *
  * @par 副作用
  * - 分配堆内存用于输出数据缓冲区，调用方必须调用 ::lmmc_tensor_nd_destroy 释放。

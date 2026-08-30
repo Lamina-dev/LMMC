@@ -370,23 +370,21 @@ lmmc_status_t lmmc_ode_rk45_solve(
             lmmc_ode_do_log(&local_cfg, out_result->num_steps, t, y, dim);
         }
 
-        /* --- Compute new step size --- */
+        /** 计算下一候选步长。 */
         if (err_norm > 0.0) {
-            /* Optimal step factor: beta * (1/err_norm)^(1/5) for 5th-order method */
+            /** 五阶方法使用 beta * (1/err_norm)^(1/5) 计算候选步长。 */
             h_new = h * local_cfg.adaptive_step_beta * pow(1.0 / err_norm, 0.2);
         } else {
-            /* Error is zero (or negligible): grow step by factor of 5 */
+            /** 嵌入误差接近零时采用最大增长因子。 */
             h_new = h * 5.0;
         }
 
-        /* Clamp new step to [min_step, max_step] */
+        /** 将候选步长约束到配置区间。 */
         h_new = lmmc_clamp(h_new, local_cfg.min_step, local_cfg.max_step);
 
         if (!step_accepted) {
-            /* Step was rejected: check if required step is below min_step */
+            /** min_step 生效后，持续超出容差即报告步长失败。 */
             if (h_new <= local_cfg.min_step && err_norm > 1.0) {
-                /* Even at min_step we can't meet tolerance — check if min_step itself fails */
-                /* Try with min_step; if error still too large, report failure */
                 if (h <= local_cfg.min_step) {
                     out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_STEP;
                     goto rk45_fail;

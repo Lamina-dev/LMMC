@@ -173,7 +173,7 @@ lmmc_status_t lmmc_sparse_create_csc(size_t rows, size_t cols, size_t nnz, lmmc_
  * @brief 用外部缓冲区包装为 CSR 视图（不拥有内存，不分配）。
  *
  * 内部会验证 row_ptr 的单调性和 col_idx 的范围合法性。
- * owns_data 置 0，::lmmc_sparse_destroy 不会释放传入的缓冲区。
+ * 传入缓冲区的所有权保留给调用方；::lmmc_sparse_destroy 仅销毁视图。
  *
  * @param[in]  rows       行数。
  * @param[in]  cols       列数。
@@ -390,9 +390,12 @@ lmmc_status_t lmmc_sparse_to_csr(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
 /**
  * @brief 稀疏 LU 分解上下文（不透明类型）。
  *
- * The @c col_perm field is populated by AMD (Approximate Minimum Degree)
- * reordering during the symbolic phase to reduce fill-in. The factorization
- * uses a three-stage pipeline: analyze (symbolic) -> factorize (numeric) -> solve.
+ * 符号阶段使用 AMD（近似最小度）填充 @c col_perm，以降低 LU 因子填充量。
+ * 分解按符号分析、数值分解与求解三个阶段执行。
+ *
+ * @see Patrick R. Amestoy, Timothy A. Davis, and Iain S. Duff,
+ *      “An Approximate Minimum Degree Ordering Algorithm,”
+ *      SIAM Journal on Matrix Analysis and Applications 17(4), 1996.
  */
 typedef struct lmmc_sparse_lu_t lmmc_sparse_lu_t;
 
@@ -438,6 +441,10 @@ lmmc_status_t lmmc_sparse_lu_symbolic(
  * @par 副作用
  * - 修改 lu 内部的 L/U 数值数组和行置换。
  * - 分配临时工作内存并在返回前释放。
+ *
+ * @see John R. Gilbert and Tim Peierls,
+ *      “Sparse Partial Pivoting in Time Proportional to Arithmetic Operations,”
+ *      SIAM Journal on Scientific and Statistical Computing 9(5), 1988.
  */
 lmmc_status_t lmmc_sparse_lu_numeric(
     const lmmc_sparse_mat_t* a,
@@ -476,9 +483,12 @@ void lmmc_sparse_lu_destroy(lmmc_sparse_lu_t* lu);
 /**
  * @brief 稀疏 Cholesky 分解上下文（不透明类型，要求 @c A 对称正定）。
  *
- * The @c perm field is populated by AMD (Approximate Minimum Degree)
- * reordering during the symbolic phase to reduce fill-in. The factorization
- * uses a three-stage pipeline: analyze (symbolic) -> factorize (numeric) -> solve.
+ * 符号阶段使用 AMD（近似最小度）填充 @c perm，以降低 Cholesky 因子填充量。
+ * 分解按符号分析、数值分解与求解三个阶段执行。
+ *
+ * @see Patrick R. Amestoy, Timothy A. Davis, and Iain S. Duff,
+ *      “An Approximate Minimum Degree Ordering Algorithm,”
+ *      SIAM Journal on Matrix Analysis and Applications 17(4), 1996.
  */
 typedef struct lmmc_sparse_chol_t lmmc_sparse_chol_t;
 

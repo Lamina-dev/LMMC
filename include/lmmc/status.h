@@ -16,8 +16,8 @@ extern "C" {
 /**
  * @brief LMMC 库统一返回的状态码。
  *
- * 任何返回该枚举的函数若返回非 ::LMMC_STATUS_OK ，
- * 输出参数的内容均不应被使用。
+ * 任何返回该枚举的函数都以 ::LMMC_STATUS_OK 标记有效输出；
+ * 其他状态保留输出参数的未指定状态。
  */
 typedef enum {
     LMMC_STATUS_OK = 0,                    /**< 操作成功。 */
@@ -43,8 +43,7 @@ typedef enum {
  * @brief 获取状态码对应的可读字符串。
  *
  * @param status 任意 ::lmmc_status_t 取值。
- * @return 指向静态字符串的指针，调用方不得释放，亦不会失效。
- *         未知状态码返回 @c "unknown" 。
+ * @return 指向进程生命周期内静态字符串的指针。未知状态码映射为 @c "unknown"。
  */
 const char* lmmc_status_string(lmmc_status_t status);
 

@@ -67,11 +67,10 @@ typedef struct {
 lmmc_status_t lmmc_mat_create(size_t rows, size_t cols, lmmc_mat_t* out_mat);
 
 /**
- * @brief 用外部缓冲区构造矩阵视图（不拥有内存，不分配）。
+ * @brief 创建引用调用方连续缓冲区的矩阵视图。
  *
- * 将已有的连续内存区域包装为 lmmc_mat_t，owns_data 置 0，
- * 因此 ::lmmc_mat_destroy 不会释放 data 指针。
- * 调用方需保证 data 的生命周期覆盖该视图的使用期。
+ * 将已有的连续内存区域包装为 lmmc_mat_t，并将缓冲区所有权保留给调用方。
+ * ::lmmc_mat_destroy 仅销毁视图；调用方负责让 data 的生命周期覆盖视图使用期。
  *
  * @param[in]  rows    行数，必须 > 0。
  * @param[in]  cols    列数，必须 > 0。
@@ -144,8 +143,7 @@ lmmc_status_t lmmc_mat_copy(const lmmc_mat_t* src, lmmc_mat_t* dst);
 /**
  * @brief 计算矩阵转置：dst = src^T。
  *
- * dst 的维度必须为 (src->cols × src->rows)。src 与 dst 不可为同一矩阵
- * （不支持就地转置）。
+ * dst 的维度必须为 (src->cols × src->rows)，并使用独立矩阵承载转置结果。
  *
  * @param[in]  src 源矩阵 (m×n)。
  * @param[out] dst 目标矩阵，必须已创建为 (n×m)。
@@ -153,7 +151,7 @@ lmmc_status_t lmmc_mat_copy(const lmmc_mat_t* src, lmmc_mat_t* dst);
  * @return
  * - ::LMMC_STATUS_OK — 成功。
  * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL。
- * - ::LMMC_STATUS_DIMENSION_MISMATCH — dst 维度不是 (src->cols × src->rows)。
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH — dst 维度与 (src->cols × src->rows) 不匹配。
  *
  * @par 副作用
  * - 覆写 dst->data。src 不被修改。无内存分配。
@@ -259,10 +257,10 @@ lmmc_status_t lmmc_mat_norm_fro(const lmmc_mat_t* a, lmmc_real_t* out_norm);
 lmmc_status_t lmmc_vec_create(size_t size, lmmc_vec_t* out_vec);
 
 /**
- * @brief 用外部缓冲区构造向量视图（不拥有内存，不分配）。
+ * @brief 创建引用调用方连续缓冲区的向量视图。
  *
- * owns_data 置 0，::lmmc_vec_destroy 不会释放 data。
- * 调用方需保证 data 的生命周期覆盖该视图的使用期。
+ * 缓冲区所有权保留给调用方；::lmmc_vec_destroy 仅销毁视图。
+ * 调用方负责让 data 的生命周期覆盖视图使用期。
  *
  * @param[in]  size    元素个数，必须 > 0。
  * @param[in]  data    外部缓冲区，至少 size 个 lmmc_real_t。不可为 NULL。

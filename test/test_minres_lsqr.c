@@ -120,15 +120,17 @@ static lmmc_status_t matvec_callback(const lmmc_vec_t* x, lmmc_vec_t* y, void* u
     return lmmc_sparse_mat_vec_mul(ctx->mat, x, y);
 }
 
-/* ===================== Test 1: MINRES on symmetric indefinite system ===================== */
+/** @brief 验证 MINRES 对称正定与对称不定系统求解路径。
+ *
+ * 正定三对角用例验证收敛性，不定用例验证跨正负特征值的有限数值输出。
+ *
+ * @see C. C. Paige and M. A. Saunders, “Solution of Sparse Indefinite Systems
+ *      of Linear Equations,” SIAM J. Numer. Anal. 12(4), 1975.
+ */
 static int test_minres_symmetric_indefinite(void) {
-    /* Test MINRES on a symmetric system. MINRES is designed for symmetric
-     * (possibly indefinite) systems. We test on a symmetric positive definite
-     * tridiagonal system first to verify convergence, then verify the solver
-     * handles an indefinite system without crashing and produces finite output. */
     int rc = 0;
 
-    /* Part A: MINRES on SPD system (should converge like CG) */
+    /** A 部分覆盖对称正定路径。 */
     {
         const size_t n = 20;
         lmmc_sparse_mat_t A = {0};
@@ -154,7 +156,7 @@ static int test_minres_symmetric_indefinite(void) {
         lmmc_vec_create(n, &b);
         lmmc_vec_create(n, &x);
 
-        /* b = A * ones */
+        /** 由全一已知解构造右端向量 b。 */
         lmmc_vec_t ones = {0};
         lmmc_vec_create(n, &ones);
         lmmc_vec_fill(&ones, 1.0);
@@ -176,7 +178,7 @@ static int test_minres_symmetric_indefinite(void) {
             double norm_b;
             lmmc_vec_norm2(&b, &norm_b);
 
-            /* Verify solution is finite and solver completed without error */
+            /** 收敛后验证解向量各分量均为有限值。 */
             int all_finite = 1;
             for (size_t i = 0; i < n; i++) {
                 if (!isfinite(x.data[i])) { all_finite = 0; break; }
@@ -196,9 +198,7 @@ static int test_minres_symmetric_indefinite(void) {
         if (rc) return rc;
     }
 
-    /* Part B: MINRES on symmetric indefinite system - verify solver runs
-     * without error and produces finite output. The matrix has both positive
-     * and negative eigenvalues. */
+    /** B 部分覆盖同时具有正负特征值的对称不定矩阵，并验证有限输出。 */
     {
         const size_t n = 10;
         lmmc_sparse_mat_t A = {0};

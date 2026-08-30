@@ -1,14 +1,19 @@
 /**
  * @file fft.c
- * @brief True N-point FFT with radix-2 Cooley-Tukey and Bluestein chirp-z.
+ * @brief 使用 radix-2 Cooley-Tukey 与 Bluestein chirp-z 实现任意长度 N 的 FFT。
  *
- * Provides lmmc_fft / lmmc_fft_forward / lmmc_fft_inverse for arbitrary N,
- * plus the explicit padding helper lmmc_fft_radix4_pad_into.
+ * lmmc_fft、lmmc_fft_forward 与 lmmc_fft_inverse 处理任意 N，
+ * lmmc_fft_radix4_pad_into 提供显式填充接口。
  *
- * Dispatch:
- *   - N is power of 4 -> existing radix-4 path (lmmc_fft_radix4)
- *   - N is power of 2 -> radix-2 Cooley-Tukey (in-place, iterative)
- *   - Otherwise        -> Bluestein chirp-z (pad to next power-of-2 >= 2N-1)
+ * 分派规则：
+ *   - N 为 4 的幂：使用现有 radix-4 路径
+ *   - N 为 2 的幂：使用原地迭代 radix-2 Cooley-Tukey
+ *   - 其他 N：使用 Bluestein chirp-z，并填充到不小于 2N-1 的 2 的幂
+ *
+ * @see James W. Cooley and John W. Tukey,
+ *      “An Algorithm for the Machine Calculation of Complex Fourier Series,” 1965.
+ * @see Leo I. Bluestein,
+ *      “A Linear Filtering Approach to the Computation of Discrete Fourier Transform,” 1970.
  */
 #include <math.h>
 #include <string.h>
@@ -29,7 +34,7 @@ static int fft_is_power_of_two(size_t n) {
 static int fft_is_power_of_four(size_t n) {
     if (n == 0) return 0;
     if ((n & (n - 1)) != 0) return 0;
-    /* A power of 2 is a power of 4 iff the single set bit is at an even position */
+    /** 2 的幂仅有一个置位；该位位于偶数位置时数值同时为 4 的幂。 */
     return (n & 0x5555555555555555ULL) != 0;
 }
 
@@ -95,17 +100,17 @@ static lmmc_status_t fft_radix2(lmmc_real_t* real, lmmc_real_t* imag, size_t n, 
                 size_t u_idx = i + j;
                 size_t v_idx = i + j + half;
 
-                /* twiddle * x[v] */
+                /** 计算旋转因子与 x[v] 的乘积。 */
                 double t_r = w_r * real[v_idx] - w_i * imag[v_idx];
                 double t_i = w_r * imag[v_idx] + w_i * real[v_idx];
 
-                /* butterfly */
+                /** 执行蝶形合并。 */
                 real[v_idx] = real[u_idx] - t_r;
                 imag[v_idx] = imag[u_idx] - t_i;
                 real[u_idx] = real[u_idx] + t_r;
                 imag[u_idx] = imag[u_idx] + t_i;
 
-                /* advance twiddle */
+                /** 推进旋转因子。 */
                 {
                     double new_w_r = w_r * wlen_r - w_i * wlen_i;
                     double new_w_i = w_r * wlen_i + w_i * wlen_r;
@@ -128,14 +133,14 @@ static lmmc_status_t fft_radix2(lmmc_real_t* real, lmmc_real_t* imag, size_t n, 
 }
 
 /**
- * @brief Bluestein chirp-z transform for arbitrary length N.
+ * @brief 对任意长度 N 执行 Bluestein chirp-z 变换。
  *
- * Algorithm:
- *   1. Compute chirp sequence: w[k] = exp(±i*pi*k^2/N)
- *   2. Multiply input by chirp: a[k] = x[k] * conj(w[k])
- *   3. Build convolution kernel: b[k] = w[k] (zero-padded)
- *   4. Convolve a and b using power-of-2 FFT (length M >= 2N-1)
- *   5. Multiply result by conj(w[k]) to get X[k]
+ * 算法步骤：
+ *   1. 计算 chirp 序列：w[k] = exp(±i*pi*k^2/N)
+ *   2. 输入乘 chirp：a[k] = x[k] * conj(w[k])
+ *   3. 构造零填充卷积核：b[k] = w[k]
+ *   4. 通过 FFT 计算循环卷积
+ *   5. 结果乘 chirp 并完成归一化
  */
 static lmmc_status_t fft_bluestein(lmmc_real_t* real, lmmc_real_t* imag, size_t n, int inverse) {
     size_t m;           /* padded power-of-2 length */
@@ -149,10 +154,10 @@ static lmmc_status_t fft_bluestein(lmmc_real_t* real, lmmc_real_t* imag, size_t 
         return LMMC_STATUS_OK;
     }
 
-    /* Padded length: next power of 2 >= 2N - 1 */
+    /** 填充长度取不小于 2N-1 的最小 2 的幂。 */
     m = fft_next_power_of_two(2 * n - 1);
 
-    /* Allocate working arrays */
+    /** 分配工作数组。 */
     a_r = (lmmc_real_t*)lmmc_alloc(m * sizeof(lmmc_real_t));
     a_i = (lmmc_real_t*)lmmc_alloc(m * sizeof(lmmc_real_t));
     b_r = (lmmc_real_t*)lmmc_alloc(m * sizeof(lmmc_real_t));
@@ -163,29 +168,28 @@ static lmmc_status_t fft_bluestein(lmmc_real_t* real, lmmc_real_t* imag, size_t 
         goto cleanup;
     }
 
-    /* Zero-fill */
+    /** 将工作数组初始化为零。 */
     memset(a_r, 0, m * sizeof(lmmc_real_t));
     memset(a_i, 0, m * sizeof(lmmc_real_t));
     memset(b_r, 0, m * sizeof(lmmc_real_t));
     memset(b_i, 0, m * sizeof(lmmc_real_t));
 
-    /* Sign for forward/inverse: forward DFT uses exp(-2*pi*i*k*n/N),
-     * so chirp phase sign is -1 for forward, +1 for inverse. */
+    /** 正向 DFT 使用 exp(-2*pi*i*k*n/N)，因此正向 chirp 相位符号为 -1，
+     * 逆向相位符号为 +1。
+     */
     sign = inverse ? 1.0 : -1.0;
 
-    /* Build chirp-modulated input a[k] = x[k] * exp(sign * i * pi * k^2 / N)
-     * (Bluestein identity: modulate by exp(-i*pi*k^2/N) for forward) */
+    /** 构造 chirp 调制输入 a[k] = x[k] * exp(sign*i*pi*k^2/N)。 */
     for (k = 0; k < n; ++k) {
         double phase = sign * LMMC_PI * (double)(k * k) / (double)n;
         double c = cos(phase);
         double s = sin(phase);
-        /* a[k] = x[k] * exp(sign*i*pi*k^2/N) = x[k] * (c + i*s) */
+        /** 将输入乘以 c + i*s。 */
         a_r[k] = real[k] * c - imag[k] * s;
         a_i[k] = imag[k] * c + real[k] * s;
     }
 
-    /* Build convolution kernel b[k] = exp(-sign * i * pi * k^2 / N)
-     * with wrap-around for negative indices */
+    /** 构造卷积核 b[k] = exp(-sign*i*pi*k^2/N)，并为负索引设置环绕项。 */
     for (k = 0; k < n; ++k) {
         double phase = -sign * LMMC_PI * (double)(k * k) / (double)n;
         double c = cos(phase);
@@ -193,20 +197,20 @@ static lmmc_status_t fft_bluestein(lmmc_real_t* real, lmmc_real_t* imag, size_t 
         b_r[k] = c;
         b_i[k] = s;
     }
-    /* Wrap-around: b[m-k] = b[k] for k = 1..n-1 */
+    /** 设置环绕项 b[m-k] = b[k]，k = 1..n-1。 */
     for (k = 1; k < n; ++k) {
         b_r[m - k] = b_r[k];
         b_i[m - k] = b_i[k];
     }
 
-    /* FFT both a and b (forward, length m which is power of 2) */
+    /** 对 a 与 b 执行长度 m 的正向 radix-2 FFT。 */
     st = fft_radix2(a_r, a_i, m, 0);
     if (st != LMMC_STATUS_OK) goto cleanup;
 
     st = fft_radix2(b_r, b_i, m, 0);
     if (st != LMMC_STATUS_OK) goto cleanup;
 
-    /* Pointwise multiply: a = a * b */
+    /** 逐点计算 a = a * b。 */
     for (k = 0; k < m; ++k) {
         double tr = a_r[k] * b_r[k] - a_i[k] * b_i[k];
         double ti = a_r[k] * b_i[k] + a_i[k] * b_r[k];

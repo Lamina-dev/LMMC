@@ -40,7 +40,7 @@ typedef struct {
     lmmc_diagnostic_level_t minimum_level;
 } lmmc_diagnostic_sink_t;
 
-/** Emit one event through a caller-owned sink. A null sink is a no-op. */
+/** @brief 通过调用方持有的接收器发送一个诊断事件；空接收器直接完成。 */
 void lmmc_diagnostic_emit(
     const lmmc_diagnostic_sink_t* sink,
     const lmmc_diagnostic_t* diagnostic

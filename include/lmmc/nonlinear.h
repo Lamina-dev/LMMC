@@ -60,7 +60,7 @@ typedef struct {
     size_t max_iter;                              /**< 最大迭代次数。 */
     lmmc_real_t derivative_step;                  /**< 数值导数差分步长（仅割线 / 自动差分使用）。 */
     lmmc_real_t min_derivative;                   /**< Newton 法允许的最小导数绝对值。 */
-    lmmc_real_t min_step;                         /**< 步长下限（防止震荡）。 */
+    lmmc_real_t min_step;                         /**< 维持迭代稳定性的步长下限。 */
     lmmc_diagnostic_sink_t diagnostics;           /**< 统一诊断出口。 */
 } lmmc_nonlinear_config_t;
 

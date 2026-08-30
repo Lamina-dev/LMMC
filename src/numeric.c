@@ -450,7 +450,7 @@ lmmc_status_t lmmc_erf(lmmc_real_t x, lmmc_real_t* out) {
 /**
  * @brief 互补误差函数 erfc(x) = 1 - erf(x) — 使用 C 标准库 erfc()。
  *
- * 对大 |x| 直接计算以避免 1 - erf(x) 的精度损失。
+ * 对大 |x| 直接计算以保持尾部概率的有效精度。
  */
 lmmc_status_t lmmc_erfc(lmmc_real_t x, lmmc_real_t* out) {
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
@@ -532,7 +532,7 @@ lmmc_status_t lmmc_tgamma(lmmc_real_t x, lmmc_real_t* out) {
 /**
  * @brief 贝塔函数 B(a,b) = Gamma(a)*Gamma(b)/Gamma(a+b)。
  *
- * 使用对数伽马避免溢出：B(a,b) = exp(lgamma(a) + lgamma(b) - lgamma(a+b))。
+ * 使用对数伽马控制中间结果幅值：B(a,b) = exp(lgamma(a) + lgamma(b) - lgamma(a+b))。
  */
 lmmc_status_t lmmc_beta(lmmc_real_t a, lmmc_real_t b, lmmc_real_t* out) {
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;

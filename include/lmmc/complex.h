@@ -128,7 +128,10 @@ lmmc_status_t lmmc_complex_mul(const lmmc_complex_t* a, const lmmc_complex_t* b,
 /**
  * @brief 复数除法：@f$ \text{out} = a / b @f$。
  *
- * 使用 Smith 算法避免中间结果溢出。当除数 @p b 的模为零时返回错误。
+ * 使用 Smith 缩放除法控制中间结果幅值。除数 @p b 的模为零时返回错误。
+ *
+ * @see Robert L. Smith, “Algorithm 116: Complex Division,”
+ *      Communications of the ACM 5(8), 1962.
  *
  * @param[in]  a   被除数。
  * @param[in]  b   除数（模不可为零）。

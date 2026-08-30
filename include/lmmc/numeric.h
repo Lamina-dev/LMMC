@@ -69,7 +69,7 @@ lmmc_status_t lmmc_signbit(lmmc_real_t x, int* out_signbit);
 lmmc_status_t lmmc_atan2(lmmc_real_t y, lmmc_real_t x, lmmc_real_t* out_res);
 /** @brief 同时计算 sin/cos （某些平台可加速）。 */
 lmmc_status_t lmmc_sincos(lmmc_real_t x, lmmc_real_t* out_sin, lmmc_real_t* out_cos);
-/** @brief 计算 @f$\sqrt{x^2+y^2}@f$ ，避免溢出。 */
+/** @brief 采用缩放计算求 @f$\sqrt{x^2+y^2}@f$，使中间幅值保持在浮点范围内。 */
 lmmc_status_t lmmc_hypot(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out_res);
 
 /* ===================== 指数与对数补充 ===================== */
@@ -148,8 +148,8 @@ lmmc_status_t lmmc_fft_radix4_next_size(size_t n, size_t* out_nfft);
  * @param[in]     n       FFT 长度，必须为 4 的幂。
  * @param[in]     inverse 非 0 时执行逆变换并归一化（除以 n）。
  *
- * @return ::LMMC_STATUS_OK 成功；
- *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n 不是 4 的幂或指针为 NULL。
+ * @return ::LMMC_STATUS_OK 表示成功；
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 表示 n 位于 4 的幂集合之外或指针为 NULL。
  *
  * @par 副作用
  * - 就地修改 @p real 和 @p imag 数组的全部 n 个元素。
@@ -225,7 +225,7 @@ lmmc_status_t lmmc_erf(lmmc_real_t x, lmmc_real_t* out);
 /**
  * @brief 计算互补误差函数 @f$\mathrm{erfc}(x) = 1 - \mathrm{erf}(x)@f$ 。
  *
- * 对大 @f$|x|@f$ 使用直接近似以避免精度损失。
+ * 对大 @f$|x|@f$ 使用直接近似以保持有效精度。
  *
  * @param[in]  x   输入值。
  * @param[out] out 输出 @f$\mathrm{erfc}(x)@f$ 。

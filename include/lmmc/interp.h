@@ -121,8 +121,11 @@ typedef struct lmmc_interp_pchip_t lmmc_interp_pchip_t;
 /**
  * @brief 由节点构造 PCHIP 单调三次插值。
  *
- * PCHIP（Piecewise Cubic Hermite Interpolating Polynomial）保证在单调数据上
- * 插值结果也保持单调性，不会产生虚假振荡。使用 Fritsch-Carlson 方法计算导数。
+ * PCHIP（Piecewise Cubic Hermite Interpolating Polynomial）在单调数据上
+ * 保持插值单调性。节点导数由 Fritsch-Carlson 方法计算。
+ *
+ * @see F. N. Fritsch and R. E. Carlson,
+ *      “Monotone Piecewise Cubic Interpolation,” SIAM J. Numer. Anal. 17(2), 1980.
  *
  * @param[in]  xs   严格升序节点 x 数组。
  * @param[in]  ys   对应 y 值数组。
@@ -160,8 +163,11 @@ typedef struct lmmc_interp_akima_t lmmc_interp_akima_t;
 /**
  * @brief 由节点构造 Akima 局部三次插值。
  *
- * Akima 插值使用局部加权平均计算节点导数，相比全局样条对离群点更鲁棒，
- * 不会产生全局振荡。需要至少 5 个节点以计算边界处的导数。
+ * Akima 插值使用局部加权平均计算节点导数，使离群点的影响保持局部。
+ * 边界导数计算需要至少 5 个节点。
+ *
+ * @see Hiroshi Akima, “A New Method of Interpolation and Smooth Curve Fitting
+ *      Based on Local Procedures,” J. ACM 17(4), 1970.
  *
  * @param[in]  xs   严格升序节点 x 数组。
  * @param[in]  ys   对应 y 值数组。

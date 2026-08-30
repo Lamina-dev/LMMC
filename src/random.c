@@ -78,7 +78,7 @@ lmmc_status_t lmmc_rng_create(lmmc_rng_t** out_rng) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
 
-    /* Use robust entropy-mixed seed instead of a fixed constant */
+    /** 将平台熵混入默认种子，为各随机数发生器建立独立数据流。 */
     lmmc_rng_seed(rng, generate_default_seed());
 
     *out_rng = rng;
