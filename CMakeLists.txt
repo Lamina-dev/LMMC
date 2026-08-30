@@ -177,8 +177,11 @@ endif()
 target_include_directories(lmmc
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<BUILD_INTERFACE:${_lmmc_lammp_include}>
         $<INSTALL_INTERFACE:include>
+)
+target_include_directories(lmmc SYSTEM
+    PUBLIC
+        $<BUILD_INTERFACE:${_lmmc_lammp_include}>
 )
 if(UNIX)
     target_link_libraries(lmmc PUBLIC m)
