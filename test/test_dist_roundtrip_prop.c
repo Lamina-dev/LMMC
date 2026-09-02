@@ -459,7 +459,7 @@ int main(void)
     printf("Verify |quantile(cdf(x)) - x| <= 1e-8 for continuous distributions\n");
     printf("Test erf accuracy against high-precision reference for x in [-5, 5]\n\n");
 
-    lmmc_init();
+    if (lmmc_init() != LMMC_STATUS_OK) return 1;
     rng_seed(RNG_SEED);
 
     for (i = 0; i < n_tests; i++) {
@@ -476,6 +476,6 @@ int main(void)
 
     printf("=== Results: %zu passed, %zu failed ===\n", n_passed, n_failed);
 
-    lmmc_deinit();
+    if (lmmc_deinit() != LMMC_STATUS_OK) return 1;
     return (n_failed > 0) ? 1 : 0;
 }

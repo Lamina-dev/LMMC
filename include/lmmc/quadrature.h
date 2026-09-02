@@ -157,7 +157,7 @@ lmmc_status_t lmmc_quad_adaptive(
  * @param[out] out       积分结果（值、误差估计、求值次数）。
  *
  * @return ::LMMC_STATUS_OK 在容差内收敛；
- *         ::LMMC_STATUS_MAX_ITERATIONS 达到最大迭代次数但结果仍可用；
+ *         ::LMMC_STATUS_CONVERGENCE_FAILED 达到最大迭代次数；
  *         ::LMMC_STATUS_INVALID_ARGUMENT 若参数超出有效范围或指针为 NULL。
  *
  * @par 副作用
@@ -189,7 +189,7 @@ lmmc_status_t lmmc_quad_romberg(
  * @param[out] out       积分结果（值、误差估计、求值次数）。
  *
  * @return ::LMMC_STATUS_OK 在容差内收敛；
- *         ::LMMC_STATUS_MAX_ITERATIONS 达到最大节点数但结果仍可用；
+ *         ::LMMC_STATUS_CONVERGENCE_FAILED 达到最大节点数；
  *         ::LMMC_STATUS_INVALID_ARGUMENT 若参数超出有效范围或指针为 NULL。
  *
  * @par 副作用

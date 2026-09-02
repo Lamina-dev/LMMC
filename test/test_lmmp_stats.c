@@ -1,13 +1,13 @@
 /**
- * @file test_lammp_stats.c
- * 针对 LMMC 中 lammp stats 相关接口的单元测试。
+ * @file test_lmmp_stats.c
+ * 针对 LMMC 中 LMMP 统计接口的单元测试。
  */
 #include <stdio.h>
 #include <assert.h>
 #include "lmmc/lmmc.h"
 
 int main(void) {
-    printf("Testing LAMMP high-precision stats functions...\n");
+    printf("Testing LMMP high-precision stats functions...\n");
 
 
     lmmc_real_t fac_150;
@@ -35,6 +35,6 @@ int main(void) {
     printf("C(150, 5) = %e\n", ncr_val);
     assert(ncr_val > 5.8e8 && ncr_val < 6.0e8);
 
-    printf("LAMMP Stats Tests Passed!\n");
+    printf("LMMP Stats Tests Passed!\n");
     return 0;
 }

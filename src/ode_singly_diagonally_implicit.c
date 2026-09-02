@@ -35,50 +35,6 @@ static const lmmc_real_t sdirk_bhat[SDIRK_STAGES] = {
     59.0 / 48.0, -17.0 / 96.0, 225.0 / 32.0, -85.0 / 12.0, 0.0
 };
 
-static lmmc_status_t sdirk_check_finite(const lmmc_real_t* values, size_t count) {
-    size_t i;
-    for (i = 0; i < count; ++i) {
-        if (!isfinite(values[i])) {
-            return LMMC_STATUS_NUMERICAL_FAILURE;
-        }
-    }
-    return LMMC_STATUS_OK;
-}
-
-static lmmc_status_t sdirk_jacobian(
-    lmmc_ode_rhs_t rhs,
-    lmmc_ode_jac_t jacobian,
-    void* user_data,
-    lmmc_real_t t,
-    const lmmc_real_t* y,
-    const lmmc_real_t* f0,
-    size_t dim,
-    lmmc_real_t* jac,
-    lmmc_real_t* y_pert,
-    lmmc_real_t* f_pert,
-    lmmc_ode_result_t* result
-) {
-    size_t i, j;
-    lmmc_status_t st;
-    int callback_failed = 0;
-    if (jacobian != NULL) {
-        st = jacobian(t, y, jac, dim, user_data);
-        if (st != LMMC_STATUS_OK) return st;
-        return sdirk_check_finite(jac, dim * dim);
-    }
-    for (j = 0; j < dim; ++j) {
-        lmmc_real_t delta = sqrt(2.2204460492503131e-16) * fmax(1.0, fabs(y[j]));
-        memcpy(y_pert, y, dim * sizeof(*y));
-        y_pert[j] += delta;
-        st = lmmc_ode_rhs_eval(rhs, t, y_pert, f_pert, dim, user_data,
-                               &result->num_rhs_evals, &callback_failed);
-        if (st != LMMC_STATUS_OK) return st;
-        for (i = 0; i < dim; ++i) {
-            jac[i * dim + j] = (f_pert[i] - f0[i]) / delta;
-        }
-    }
-    return sdirk_check_finite(jac, dim * dim);
-}
 
 static lmmc_status_t sdirk_linear_solve(
     lmmc_mat_t* matrix,
@@ -94,7 +50,7 @@ static lmmc_status_t sdirk_linear_solve(
     if (st != LMMC_STATUS_OK) return st;
     st = lmmc_lu_solve(matrix, pivots, &rhs_vec, &solution_vec);
     if (st != LMMC_STATUS_OK) return st;
-    return sdirk_check_finite(solution, dim);
+    return lmmc_ode_values_are_finite(solution, dim);
 }
 
 lmmc_status_t lmmc_ode_sdirk4_solve(
@@ -198,11 +154,15 @@ lmmc_status_t lmmc_ode_sdirk4_solve(
                     break;
                 }
 
-                st = sdirk_jacobian(rhs, local_cfg.jacobian, user_data,
-                                    t + sdirk_c[stage] * h, y_stage, f_stage, dim,
-                                    matrix_data, y_pert, f_pert, out_result);
+                st = lmmc_ode_jacobian_eval(
+                    rhs, local_cfg.jacobian, user_data,
+                    t + sdirk_c[stage] * h, y_stage, f_stage, dim,
+                    matrix_data, rhs_sum, y_pert, f_pert,
+                    &out_result->num_rhs_evals, &callback_failed);
                 if (st != LMMC_STATUS_OK) {
-                    out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+                    out_result->failure_reason =
+                        callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
+                                        : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
                     goto cleanup;
                 }
                 for (i = 0; i < dim; ++i) {
@@ -232,7 +192,7 @@ lmmc_status_t lmmc_ode_sdirk4_solve(
             }
             error[i] = y_new[i] - y_hat[i];
         }
-        if (sdirk_check_finite(y_new, dim) != LMMC_STATUS_OK) {
+        if (lmmc_ode_values_are_finite(y_new, dim) != LMMC_STATUS_OK) {
             st = LMMC_STATUS_NUMERICAL_FAILURE;
             goto cleanup;
         }
@@ -244,9 +204,16 @@ lmmc_status_t lmmc_ode_sdirk4_solve(
                                                          : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
             goto cleanup;
         }
-        st = sdirk_jacobian(rhs, local_cfg.jacobian, user_data, t + h, y_new,
-                            f_stage, dim, matrix_data, y_pert, f_pert, out_result);
-        if (st != LMMC_STATUS_OK) goto cleanup;
+        st = lmmc_ode_jacobian_eval(
+            rhs, local_cfg.jacobian, user_data, t + h, y_new, f_stage, dim,
+            matrix_data, rhs_sum, y_pert, f_pert,
+            &out_result->num_rhs_evals, &callback_failed);
+        if (st != LMMC_STATUS_OK) {
+            out_result->failure_reason =
+                callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
+                                : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            goto cleanup;
+        }
         for (i = 0; i < dim; ++i) {
             for (j = 0; j < dim; ++j) {
                 matrix.data[i * dim + j] = -h * sdirk_gamma * matrix_data[i * dim + j];

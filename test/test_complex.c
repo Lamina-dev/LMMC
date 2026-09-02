@@ -596,7 +596,7 @@ static int test_unit_destroy_null(void)
 int main(void)
 {
     srand(12345);
-    lmmc_init();
+    if (lmmc_init() != LMMC_STATUS_OK) return 1;
 
     printf("=== Complex Module Property Tests ===\n");
     REPORT("Property 1: Polar-Cartesian round-trip",
@@ -629,6 +629,6 @@ int main(void)
     printf("\n=== Results: %d/%d passed ===\n",
            test_count - test_failures, test_count);
 
-    lmmc_deinit();
+    if (lmmc_deinit() != LMMC_STATUS_OK) return 1;
     return test_failures > 0 ? 1 : 0;
 }

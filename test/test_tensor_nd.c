@@ -475,7 +475,7 @@ static int test_contract_scalar(void) {
 int main(void) {
     int failures = 0;
 
-    lmmc_init();
+    if (lmmc_init() != LMMC_STATUS_OK) return 1;
     printf("=== N-D Tensor Unit Tests ===\n");
 
 #define RUN_TEST(fn) do { \
@@ -504,6 +504,6 @@ int main(void) {
 #undef RUN_TEST
 
     printf("\n%d test(s) failed.\n", failures);
-    lmmc_deinit();
+    if (lmmc_deinit() != LMMC_STATUS_OK) return 1;
     return failures > 0 ? 1 : 0;
 }

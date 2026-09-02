@@ -1,23 +1,23 @@
 /**
- * @file test_lammp_ext.c
- * 针对 LMMC 中 lammp ext 相关接口的单元测试。
+ * @file test_lmmp_ext.c
+ * 针对 LMMC 中 LMMP 扩展接口的单元测试。
  */
+#include <lmmp.h>
+#include <lmmpn.h>
+#include <mprand.h>
+#include <numth.h>
+#include <secret.h>
+#include <version.h>
+
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
-#include "lammp/lmmp.h"
-#include "lammp/lmmpn.h"
-#include "lammp/mprand.h"
-#include "lammp/numth.h"
-#include "lammp/secret.h"
-#include "lammp/version.h"
-
 #define CHECK_OR_FAIL(label, cond) \
     do { \
         if (!(cond)) { \
-            printf("lammp_ext fail: %s\n", (label)); \
+            printf("LMMP extension failure: %s\n", (label)); \
             rc = 1; \
             goto cleanup; \
         } \
@@ -179,7 +179,7 @@ cleanup:
     lmmp_global_deinit();
 
     if (rc != 0) {
-        printf("lammp_ext test failed\n");
+        printf("LMMP extension test failed\n");
     }
     return rc;
 }

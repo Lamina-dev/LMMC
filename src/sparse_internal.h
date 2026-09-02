@@ -2,8 +2,8 @@
  * @file sparse_internal.h
  * @brief 稀疏矩阵模块内部共享辅助函数（仅源文件可见）。
  *
- * 提供溢出检测乘法、稀疏矩阵结构校验与存储创建等内联辅助，
- * 供各稀疏矩阵实现文件共用。
+ * 提供稀疏矩阵结构校验与存储创建等内联辅助,
+ * 通用安全算术由 internal.h 提供.
  *
  * @internal
  */
@@ -13,21 +13,11 @@
 #include <stddef.h>
 #include <string.h>
 
+#include "internal.h"
 #include "memory_bridge.h"
 #include "lmmc/config.h"
 #include "lmmc/sparse.h"
 
-static inline int lmmc_mul_overflow_size(size_t a, size_t b, size_t* out) {
-    if (a == 0 || b == 0) {
-        *out = 0;
-        return 0;
-    }
-    if (a > ((size_t)-1) / b) {
-        return 1;
-    }
-    *out = a * b;
-    return 0;
-}
 
 static inline lmmc_status_t lmmc_sparse_validate(const lmmc_sparse_mat_t* sparse) {
     size_t i = 0;
@@ -89,9 +79,9 @@ static inline lmmc_status_t lmmc_sparse_create(size_t rows, size_t cols, size_t 
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    if (lmmc_mul_overflow_size(outer_size + 1, sizeof(size_t), &outer_ptr_bytes) ||
-        lmmc_mul_overflow_size(nnz, sizeof(size_t), &idx_bytes) ||
-        lmmc_mul_overflow_size(nnz, sizeof(lmmc_real_t), &val_bytes)) {
+    if (!lmmc_safe_mul_size(outer_size + 1, sizeof(size_t), &outer_ptr_bytes) ||
+        !lmmc_safe_mul_size(nnz, sizeof(size_t), &idx_bytes) ||
+        !lmmc_safe_mul_size(nnz, sizeof(lmmc_real_t), &val_bytes)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 

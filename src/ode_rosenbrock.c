@@ -43,56 +43,6 @@ static const lmmc_real_t ros_d[ROS_STAGES] = {
 static const lmmc_real_t ros_c2 = 0.462;
 static const lmmc_real_t ros_c3 = 0.8802083333333334;
 
-static lmmc_status_t ros_check_finite(const lmmc_real_t* values, size_t count) {
-    size_t i;
-    for (i = 0; i < count; ++i) {
-        if (!isfinite(values[i])) {
-            return LMMC_STATUS_NUMERICAL_FAILURE;
-        }
-    }
-    return LMMC_STATUS_OK;
-}
-
-static lmmc_status_t ros_jacobian(
-    lmmc_ode_rhs_t rhs,
-    lmmc_ode_jac_t jacobian,
-    void* user_data,
-    lmmc_real_t t,
-    const lmmc_real_t* y,
-    const lmmc_real_t* f0,
-    size_t dim,
-    lmmc_real_t* jac,
-    lmmc_real_t* y_pert,
-    lmmc_real_t* f_pert,
-    lmmc_ode_result_t* result
-) {
-    size_t i, j;
-    lmmc_status_t st;
-    int callback_failed = 0;
-
-    if (jacobian != NULL) {
-        st = jacobian(t, y, jac, dim, user_data);
-        if (st != LMMC_STATUS_OK) {
-            return st;
-        }
-        return ros_check_finite(jac, dim * dim);
-    }
-
-    for (j = 0; j < dim; ++j) {
-        lmmc_real_t delta = sqrt(2.2204460492503131e-16) * fmax(1.0, fabs(y[j]));
-        memcpy(y_pert, y, dim * sizeof(*y));
-        y_pert[j] += delta;
-        st = lmmc_ode_rhs_eval(rhs, t, y_pert, f_pert, dim, user_data,
-                               &result->num_rhs_evals, &callback_failed);
-        if (st != LMMC_STATUS_OK) {
-            return st;
-        }
-        for (i = 0; i < dim; ++i) {
-            jac[i * dim + j] = (f_pert[i] - f0[i]) / delta;
-        }
-    }
-    return ros_check_finite(jac, dim * dim);
-}
 
 static lmmc_status_t ros_time_derivative(
     lmmc_ode_rhs_t rhs,
@@ -115,7 +65,7 @@ static lmmc_status_t ros_time_derivative(
         if (st != LMMC_STATUS_OK) {
             return st;
         }
-        return ros_check_finite(dfdt, dim);
+        return lmmc_ode_values_are_finite(dfdt, dim);
     }
 
     {
@@ -129,7 +79,7 @@ static lmmc_status_t ros_time_derivative(
             dfdt[i] = (f_pert[i] - f0[i]) / delta;
         }
     }
-    return ros_check_finite(dfdt, dim);
+    return lmmc_ode_values_are_finite(dfdt, dim);
 }
 
 static lmmc_status_t ros_solve_stage(
@@ -145,7 +95,7 @@ static lmmc_status_t ros_solve_stage(
     if (st != LMMC_STATUS_OK) {
         return st;
     }
-    return ros_check_finite(stage, dim);
+    return lmmc_ode_values_are_finite(stage, dim);
 }
 
 lmmc_status_t lmmc_ode_rosenbrock_grk4t_solve(
@@ -228,10 +178,14 @@ lmmc_status_t lmmc_ode_rosenbrock_grk4t_solve(
                                                          : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
             goto cleanup;
         }
-        st = ros_jacobian(rhs, local_cfg.jacobian, user_data, t, y, f0, dim,
-                          matrix_data, y_pert, f_pert, out_result);
+        st = lmmc_ode_jacobian_eval(
+            rhs, local_cfg.jacobian, user_data, t, y, f0, dim, matrix_data,
+            f_stage, y_pert, f_pert, &out_result->num_rhs_evals,
+            &callback_failed);
         if (st != LMMC_STATUS_OK) {
-            out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            out_result->failure_reason =
+                callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
+                                : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
             goto cleanup;
         }
         st = ros_time_derivative(rhs, local_cfg.time_derivative, user_data, t, y,
@@ -305,7 +259,7 @@ lmmc_status_t lmmc_ode_rosenbrock_grk4t_solve(
             error[i] = ros_e[0] * k[0][i] + ros_e[1] * k[1][i]
                      + ros_e[2] * k[2][i] + ros_e[3] * k[3][i];
         }
-        st = ros_check_finite(y_new, dim);
+        st = lmmc_ode_values_are_finite(y_new, dim);
         if (st != LMMC_STATUS_OK) goto cleanup;
         st = lmmc_ode_weighted_rms(error, y, y_new, dim, local_cfg.abs_tol,
                                     local_cfg.rel_tol, &error_norm);

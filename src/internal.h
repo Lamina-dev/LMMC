@@ -14,6 +14,13 @@
 #include <stdint.h>
 #include <math.h>
 
+typedef struct lmmc_rng_t lmmc_rng_t;
+
+/** Return the allocation-free default RNG for the current thread. */
+lmmc_rng_t* lmmc_rng_default_get(void);
+
+/** Clear only the current thread's default RNG state. */
+void lmmc_rng_default_reset(void);
 /**
  * @internal
  * @brief 计算 @c a*b 并检测溢出.
@@ -98,7 +105,7 @@ static inline int lmmc_storage_envelopes_overlap(
 /** @internal @brief 判断 @c *x 是否为有限数. */
 static inline int lmmc_is_finite(const lmmc_real_t *x)
 {
-    return isfinite(*x) != 0;
+    return LMMC_REAL_IS_FINITE(x) ? 1 : 0;
 }
 
 /** @internal @brief 绝对值. */

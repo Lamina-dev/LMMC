@@ -10,17 +10,6 @@
 #include "lmmc/dense.h"
 #include "lmmc/linear_algebra.h"
 
-static int lmmc_mul_overflow_size(size_t a, size_t b, size_t* out) {
-    if (a == 0 || b == 0) {
-        *out = 0;
-        return 0;
-    }
-    if (a > ((size_t)-1) / b) {
-        return 1;
-    }
-    *out = a * b;
-    return 0;
-}
 
 lmmc_status_t lmmc_mat_create(size_t rows, size_t cols, lmmc_mat_t* out_mat) {
     size_t n_elem = 0;
@@ -30,7 +19,8 @@ lmmc_status_t lmmc_mat_create(size_t rows, size_t cols, lmmc_mat_t* out_mat) {
     if (out_mat == NULL || rows == 0 || cols == 0) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (lmmc_mul_overflow_size(rows, cols, &n_elem) || lmmc_mul_overflow_size(n_elem, sizeof(lmmc_real_t), &n_bytes)) {
+    if (!lmmc_safe_mul_size(rows, cols, &n_elem) ||
+        !lmmc_safe_mul_size(n_elem, sizeof(lmmc_real_t), &n_bytes)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -150,7 +140,7 @@ lmmc_status_t lmmc_vec_create(size_t size, lmmc_vec_t* out_vec) {
     if (out_vec == NULL || size == 0) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (lmmc_mul_overflow_size(size, sizeof(lmmc_real_t), &n_bytes)) {
+    if (!lmmc_safe_mul_size(size, sizeof(lmmc_real_t), &n_bytes)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     data = (lmmc_real_t*)lmmc_alloc(n_bytes);

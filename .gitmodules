@@ -1,4 +1,4 @@
-[submodule "LAMMP"]
-	path = LAMMP
-	url = https://github.com/Lamina-dev/LAMMP.git
+[submodule "LMMP"]
+	path = LMMP
+	url = https://github.com/Lamina-dev/LMMP.git
 	branch = main

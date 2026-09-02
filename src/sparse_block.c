@@ -21,19 +21,19 @@ lmmc_status_t lmmc_sparse_bsr_create(size_t rows, size_t cols, size_t block_size
     }
 
     /* 计算所需内存大小，检查溢出 */
-    if (lmmc_mul_overflow_size(rows + 1, sizeof(size_t), &row_ptr_bytes)) {
+    if (!lmmc_safe_mul_size(rows + 1, sizeof(size_t), &row_ptr_bytes)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (lmmc_mul_overflow_size(nnz_blocks, sizeof(size_t), &col_idx_bytes)) {
+    if (!lmmc_safe_mul_size(nnz_blocks, sizeof(size_t), &col_idx_bytes)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (lmmc_mul_overflow_size(block_size, block_size, &val_count)) {
+    if (!lmmc_safe_mul_size(block_size, block_size, &val_count)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (lmmc_mul_overflow_size(val_count, nnz_blocks, &val_count)) {
+    if (!lmmc_safe_mul_size(val_count, nnz_blocks, &val_count)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (lmmc_mul_overflow_size(val_count, sizeof(lmmc_real_t), &val_bytes)) {
+    if (!lmmc_safe_mul_size(val_count, sizeof(lmmc_real_t), &val_bytes)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 

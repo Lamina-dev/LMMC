@@ -16,26 +16,28 @@ lmmc_status_t lmmc_quad_trapezoid(
     size_t n,
     lmmc_real_t* out_result)
 {
-    if (func == NULL || out_result == NULL) {
+    lmmc_real_t h, left, right, sum;
+    size_t i;
+    if (func == NULL || out_result == NULL || n == 0 || a >= b) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (n == 0) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
+    h = (b - a) / (lmmc_real_t)n;
+    left = func(a, user_data);
+    right = func(b, user_data);
+    if (!lmmc_is_finite(&h) || !lmmc_is_finite(&left) ||
+        !lmmc_is_finite(&right)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
     }
-    if (a >= b) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
+    sum = left + right;
+    for (i = 1; i < n; ++i) {
+        lmmc_real_t value = func(a + (lmmc_real_t)i * h, user_data);
+        if (!lmmc_is_finite(&value)) return LMMC_STATUS_NUMERICAL_FAILURE;
+        sum += 2.0 * value;
+        if (!lmmc_is_finite(&sum)) return LMMC_STATUS_NUMERICAL_FAILURE;
     }
-
-    lmmc_real_t h = (b - a) / (lmmc_real_t)n;
-    lmmc_real_t sum = func(a, user_data) + func(b, user_data);
-
-    for (size_t i = 1; i < n; i++) {
-        lmmc_real_t x_i = a + (lmmc_real_t)i * h;
-        sum += 2.0 * func(x_i, user_data);
-    }
-
     *out_result = (h / 2.0) * sum;
-    return LMMC_STATUS_OK;
+    return lmmc_is_finite(out_result) ? LMMC_STATUS_OK
+                                      : LMMC_STATUS_NUMERICAL_FAILURE;
 }
 
 
@@ -47,34 +49,36 @@ lmmc_status_t lmmc_quad_simpson(
     size_t n,
     lmmc_real_t* out_result)
 {
-    if (func == NULL || out_result == NULL) {
+    lmmc_real_t h, left, right, sum;
+    size_t i;
+    if (func == NULL || out_result == NULL || n == 0 || n % 2 != 0 ||
+        a >= b) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (n == 0 || n % 2 != 0) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
+    h = (b - a) / (lmmc_real_t)n;
+    left = func(a, user_data);
+    right = func(b, user_data);
+    if (!lmmc_is_finite(&h) || !lmmc_is_finite(&left) ||
+        !lmmc_is_finite(&right)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
     }
-    if (a >= b) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
+    sum = left + right;
+    for (i = 1; i < n; ++i) {
+        lmmc_real_t value = func(a + (lmmc_real_t)i * h, user_data);
+        if (!lmmc_is_finite(&value)) return LMMC_STATUS_NUMERICAL_FAILURE;
+        sum += (i % 2 == 1 ? 4.0 : 2.0) * value;
+        if (!lmmc_is_finite(&sum)) return LMMC_STATUS_NUMERICAL_FAILURE;
     }
-
-    lmmc_real_t h = (b - a) / (lmmc_real_t)n;
-    lmmc_real_t sum = func(a, user_data) + func(b, user_data);
-
-    for (size_t i = 1; i < n; i++) {
-        lmmc_real_t x_i = a + (lmmc_real_t)i * h;
-        if (i % 2 == 1) {
-            sum += 4.0 * func(x_i, user_data);
-        } else {
-            sum += 2.0 * func(x_i, user_data);
-        }
-    }
-
     *out_result = (h / 3.0) * sum;
-    return LMMC_STATUS_OK;
+    return lmmc_is_finite(out_result) ? LMMC_STATUS_OK
+                                      : LMMC_STATUS_NUMERICAL_FAILURE;
 }
 
 #define LMMC_GL_MAX_ORDER 20
-#define LMMC_GL_MIN_ORDER 2
+#define LMMC_GL_MIN_ORDER 1
+
+static const lmmc_real_t gl_nodes_1[] = {0.0};
+static const lmmc_real_t gl_weights_1[] = {2.0};
 
 static const lmmc_real_t gl_nodes_2[] = {
     -0.5773502691896257645, 0.5773502691896257645
@@ -326,19 +330,17 @@ static const lmmc_real_t gl_weights_20[] = {
 };
 
 static const lmmc_real_t* const gl_nodes_table[] = {
-    gl_nodes_2,  gl_nodes_3,  gl_nodes_4,  gl_nodes_5,
-    gl_nodes_6,  gl_nodes_7,  gl_nodes_8,  gl_nodes_9,
-    gl_nodes_10, gl_nodes_11, gl_nodes_12, gl_nodes_13,
-    gl_nodes_14, gl_nodes_15, gl_nodes_16, gl_nodes_17,
-    gl_nodes_18, gl_nodes_19, gl_nodes_20
+    gl_nodes_1,  gl_nodes_2,  gl_nodes_3,  gl_nodes_4,  gl_nodes_5,
+    gl_nodes_6,  gl_nodes_7,  gl_nodes_8,  gl_nodes_9,  gl_nodes_10,
+    gl_nodes_11, gl_nodes_12, gl_nodes_13, gl_nodes_14, gl_nodes_15,
+    gl_nodes_16, gl_nodes_17, gl_nodes_18, gl_nodes_19, gl_nodes_20
 };
 
 static const lmmc_real_t* const gl_weights_table[] = {
-    gl_weights_2,  gl_weights_3,  gl_weights_4,  gl_weights_5,
-    gl_weights_6,  gl_weights_7,  gl_weights_8,  gl_weights_9,
-    gl_weights_10, gl_weights_11, gl_weights_12, gl_weights_13,
-    gl_weights_14, gl_weights_15, gl_weights_16, gl_weights_17,
-    gl_weights_18, gl_weights_19, gl_weights_20
+    gl_weights_1,  gl_weights_2,  gl_weights_3,  gl_weights_4,  gl_weights_5,
+    gl_weights_6,  gl_weights_7,  gl_weights_8,  gl_weights_9,  gl_weights_10,
+    gl_weights_11, gl_weights_12, gl_weights_13, gl_weights_14, gl_weights_15,
+    gl_weights_16, gl_weights_17, gl_weights_18, gl_weights_19, gl_weights_20
 };
 
 lmmc_status_t lmmc_quad_gauss_legendre(
@@ -349,126 +351,108 @@ lmmc_status_t lmmc_quad_gauss_legendre(
     size_t order,
     lmmc_real_t* out_result)
 {
-    if (func == NULL || out_result == NULL) {
+    const lmmc_real_t* nodes;
+    const lmmc_real_t* weights;
+    lmmc_real_t half_len, midpoint, sum = 0.0;
+    size_t i;
+    if (func == NULL || out_result == NULL ||
+        order < LMMC_GL_MIN_ORDER || order > LMMC_GL_MAX_ORDER || a >= b) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (order < LMMC_GL_MIN_ORDER || order > LMMC_GL_MAX_ORDER) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
+    nodes = gl_nodes_table[order - LMMC_GL_MIN_ORDER];
+    weights = gl_weights_table[order - LMMC_GL_MIN_ORDER];
+    half_len = (b - a) / 2.0;
+    midpoint = a / 2.0 + b / 2.0;
+    if (!lmmc_is_finite(&half_len) || !lmmc_is_finite(&midpoint)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
     }
-    if (a >= b) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
+    for (i = 0; i < order; ++i) {
+        lmmc_real_t value = func(half_len * nodes[i] + midpoint, user_data);
+        if (!lmmc_is_finite(&value)) return LMMC_STATUS_NUMERICAL_FAILURE;
+        sum += weights[i] * value;
+        if (!lmmc_is_finite(&sum)) return LMMC_STATUS_NUMERICAL_FAILURE;
     }
-
-    const lmmc_real_t* nodes   = gl_nodes_table[order - LMMC_GL_MIN_ORDER];
-    const lmmc_real_t* weights = gl_weights_table[order - LMMC_GL_MIN_ORDER];
-
-    lmmc_real_t half_len = (b - a) / 2.0;
-    lmmc_real_t midpoint = (a + b) / 2.0;
-
-    lmmc_real_t sum = 0.0;
-    for (size_t i = 0; i < order; i++) {
-        lmmc_real_t x_i = half_len * nodes[i] + midpoint;
-        sum += weights[i] * func(x_i, user_data);
-    }
-
     *out_result = half_len * sum;
-    return LMMC_STATUS_OK;
+    return lmmc_is_finite(out_result) ? LMMC_STATUS_OK
+                                      : LMMC_STATUS_NUMERICAL_FAILURE;
 }
 
-static const lmmc_real_t gk15_nodes[15] = {
-    -0.9914553711208126392, -0.9491079123427585245, -0.8648644233597690728,
-    -0.7415311855993944399, -0.5860872354676911303, -0.4058451513773971669,
-    -0.2077849550078984676,  0.0000000000000000000,  0.2077849550078984676,
-     0.4058451513773971669,  0.5860872354676911303,  0.7415311855993944399,
-     0.8648644233597690728,  0.9491079123427585245,  0.9914553711208126392
-};
+static lmmc_real_t lmmc_simpson_segment(
+    lmmc_real_t a, lmmc_real_t b,
+    lmmc_real_t fa, lmmc_real_t fb, lmmc_real_t fm)
+{
+    return ((b - a) / 6.0) * (fa + 4.0 * fm + fb);
+}
 
-static const lmmc_real_t gk15_weights[15] = {
-    0.0229353220105292250, 0.0630920926299785533, 0.1047900103222501838,
-    0.1406532597155259187, 0.1690047266392679028, 0.1903505780647854099,
-    0.2044329400752988924, 0.2094821410847278280, 0.2044329400752988924,
-    0.1903505780647854099, 0.1690047266392679028, 0.1406532597155259187,
-    0.1047900103222501838, 0.0630920926299785533, 0.0229353220105292250
-};
-
-static const lmmc_real_t g7_weights[7] = {
-    0.1294849661688696932, 0.2797053914892766679, 0.3818300505051189449,
-    0.4179591836734693878, 0.3818300505051189449, 0.2797053914892766679,
-    0.1294849661688696932
-};
-
-static const int g7_kronrod_idx[7] = { 1, 3, 5, 7, 9, 11, 13 };
-
-static lmmc_status_t gk15_adaptive_recursive(
+static lmmc_status_t lmmc_simpson_adaptive_recursive(
     lmmc_quad_func_t func, void* user_data,
     lmmc_real_t a, lmmc_real_t b,
-    lmmc_real_t abs_tol, lmmc_real_t rel_tol,
+    lmmc_real_t fa, lmmc_real_t fb, lmmc_real_t fm,
+    lmmc_real_t whole, lmmc_real_t abs_tol, lmmc_real_t rel_tol,
     size_t depth, size_t max_depth,
     lmmc_real_t* out_value, lmmc_real_t* out_error, size_t* out_evals)
 {
-    lmmc_real_t half_len = (b - a) / 2.0;
-    lmmc_real_t midpoint = (a + b) / 2.0;
-
-    lmmc_real_t fvals[15];
-    for (int i = 0; i < 15; i++) {
-        lmmc_real_t x_i = half_len * gk15_nodes[i] + midpoint;
-        fvals[i] = func(x_i, user_data);
-    }
-    *out_evals = 15;
-
-    lmmc_real_t k15_sum = 0.0;
-    for (int i = 0; i < 15; i++) {
-        k15_sum += gk15_weights[i] * fvals[i];
-    }
-    lmmc_real_t k15_result = half_len * k15_sum;
-
-    lmmc_real_t g7_sum = 0.0;
-    for (int i = 0; i < 7; i++) {
-        g7_sum += g7_weights[i] * fvals[g7_kronrod_idx[i]];
-    }
-    lmmc_real_t g7_result = half_len * g7_sum;
-
-    lmmc_real_t error = lmmc_abs(k15_result - g7_result);
-    lmmc_real_t tolerance = lmmc_max(abs_tol, rel_tol * lmmc_abs(k15_result));
-
-    if (error <= tolerance) {
-        *out_value = k15_result;
-        *out_error = error;
-        return LMMC_STATUS_OK;
-    }
-
-    if (depth >= max_depth) {
-        *out_value = k15_result;
-        *out_error = error;
-        return LMMC_STATUS_WARNING_MAX_DEPTH;
-    }
-
-    lmmc_real_t mid = (a + b) / 2.0;
+    lmmc_real_t mid = a / 2.0 + b / 2.0;
+    lmmc_real_t left_mid = a / 2.0 + mid / 2.0;
+    lmmc_real_t right_mid = mid / 2.0 + b / 2.0;
+    lmmc_real_t f_left_mid = func(left_mid, user_data);
+    lmmc_real_t f_right_mid = func(right_mid, user_data);
+    lmmc_real_t left, right, delta, corrected, error, tolerance;
     lmmc_real_t left_value, left_error, right_value, right_error;
-    size_t left_evals, right_evals;
+    size_t left_evals = 0, right_evals = 0;
+    lmmc_status_t left_status, right_status;
 
-    /* Adaptive tolerance distribution: split tolerance proportionally */
-    lmmc_real_t sub_abs_tol = abs_tol / 2.0;
+    *out_value = 0.0;
+    *out_error = 0.0;
+    *out_evals = 2;
+    if (!lmmc_is_finite(&left_mid) || !lmmc_is_finite(&right_mid) ||
+        !lmmc_is_finite(&f_left_mid) || !lmmc_is_finite(&f_right_mid)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    left = lmmc_simpson_segment(a, mid, fa, fm, f_left_mid);
+    right = lmmc_simpson_segment(mid, b, fm, fb, f_right_mid);
+    delta = left + right - whole;
+    corrected = left + right + delta / 15.0;
+    error = lmmc_abs(delta) / 15.0;
+    tolerance = lmmc_max(abs_tol, rel_tol * lmmc_abs(corrected));
+    if (!lmmc_is_finite(&left) || !lmmc_is_finite(&right) ||
+        !lmmc_is_finite(&corrected) || !lmmc_is_finite(&error) ||
+        !lmmc_is_finite(&tolerance)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    if (error <= tolerance || depth >= max_depth) {
+        *out_value = corrected;
+        *out_error = error;
+        return error <= tolerance ? LMMC_STATUS_OK
+                                  : LMMC_STATUS_WARNING_MAX_DEPTH;
+    }
 
-    lmmc_status_t left_status = gk15_adaptive_recursive(
-        func, user_data, a, mid,
-        sub_abs_tol, rel_tol, depth + 1, max_depth,
-        &left_value, &left_error, &left_evals);
-
-    lmmc_status_t right_status = gk15_adaptive_recursive(
-        func, user_data, mid, b,
-        sub_abs_tol, rel_tol, depth + 1, max_depth,
-        &right_value, &right_error, &right_evals);
-
+    left_status = lmmc_simpson_adaptive_recursive(
+        func, user_data, a, mid, fa, fm, f_left_mid, left, abs_tol / 2.0,
+        rel_tol, depth + 1, max_depth, &left_value, &left_error, &left_evals);
+    *out_evals += left_evals;
+    if (left_status != LMMC_STATUS_OK &&
+        left_status != LMMC_STATUS_WARNING_MAX_DEPTH) {
+        return left_status;
+    }
+    right_status = lmmc_simpson_adaptive_recursive(
+        func, user_data, mid, b, fm, fb, f_right_mid, right, abs_tol / 2.0,
+        rel_tol, depth + 1, max_depth, &right_value, &right_error,
+        &right_evals);
+    *out_evals += right_evals;
+    if (right_status != LMMC_STATUS_OK &&
+        right_status != LMMC_STATUS_WARNING_MAX_DEPTH) {
+        return right_status;
+    }
     *out_value = left_value + right_value;
     *out_error = left_error + right_error;
-    *out_evals += left_evals + right_evals;
-
-    if (left_status == LMMC_STATUS_WARNING_MAX_DEPTH ||
-        right_status == LMMC_STATUS_WARNING_MAX_DEPTH) {
-        return LMMC_STATUS_WARNING_MAX_DEPTH;
+    if (!lmmc_is_finite(out_value) || !lmmc_is_finite(out_error)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
     }
-    return LMMC_STATUS_OK;
+    return left_status == LMMC_STATUS_WARNING_MAX_DEPTH ||
+                   right_status == LMMC_STATUS_WARNING_MAX_DEPTH
+               ? LMMC_STATUS_WARNING_MAX_DEPTH
+               : LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_quad_adaptive(
@@ -477,31 +461,35 @@ lmmc_status_t lmmc_quad_adaptive(
     lmmc_real_t abs_tol, lmmc_real_t rel_tol,
     size_t max_depth, lmmc_quad_result_t* out_result)
 {
-    if (func == NULL || out_result == NULL) {
+    lmmc_real_t mid, fa, fb, fm, whole, value = 0.0, error = 0.0;
+    size_t evals = 0;
+    lmmc_status_t status;
+    if (func == NULL || out_result == NULL || a >= b ||
+        !lmmc_is_finite(&a) || !lmmc_is_finite(&b) ||
+        !lmmc_is_finite(&abs_tol) || !lmmc_is_finite(&rel_tol) ||
+        abs_tol < 0.0 || rel_tol < 0.0) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (a >= b) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (abs_tol < 0.0 || rel_tol < 0.0) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
     out_result->value = 0.0;
     out_result->error = 0.0;
     out_result->num_evals = 0;
-
-    lmmc_real_t value, error;
-    size_t evals;
-
-    lmmc_status_t status = gk15_adaptive_recursive(
-        func, user_data, a, b,
-        abs_tol, rel_tol, 0, max_depth,
-        &value, &error, &evals);
-
+    mid = a / 2.0 + b / 2.0;
+    fa = func(a, user_data);
+    fb = func(b, user_data);
+    fm = func(mid, user_data);
+    out_result->num_evals = 3;
+    if (!lmmc_is_finite(&mid) || !lmmc_is_finite(&fa) ||
+        !lmmc_is_finite(&fb) || !lmmc_is_finite(&fm)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    whole = lmmc_simpson_segment(a, b, fa, fb, fm);
+    if (!lmmc_is_finite(&whole)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    status = lmmc_simpson_adaptive_recursive(
+        func, user_data, a, b, fa, fb, fm, whole, abs_tol, rel_tol, 0,
+        max_depth, &value, &error, &evals);
+    out_result->num_evals += evals;
     out_result->value = value;
     out_result->error = error;
-    out_result->num_evals = evals;
     return status;
 }
 

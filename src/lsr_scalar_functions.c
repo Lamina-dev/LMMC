@@ -41,6 +41,12 @@ const char* lmmc_lsr_error_name(lmmc_status_t status)
         return "UnitStripInvalid";
     case LMMC_STATUS_UNIT_STRIP_LEGACY_SYNTAX:
         return "UnitStripLegacySyntax";
+    case LMMC_STATUS_NOT_INITIALIZED:
+        return "NotInitialized";
+    case LMMC_STATUS_BUSY:
+        return "Busy";
+    case LMMC_STATUS_REFERENCE_LIMIT:
+        return "ResourceLimit";
     }
     return "InternalInvariant";
 }

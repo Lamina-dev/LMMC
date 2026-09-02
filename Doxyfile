@@ -143,7 +143,7 @@ RECURSIVE              = YES
 EXCLUDE                = src/blas_backend.h
 EXCLUDE_SYMLINKS       = NO
 EXCLUDE_PATTERNS       = */build*/* \
-                         */LAMMP/* \
+                         */LMMP/* \
                          */.git/* \
                          */.kiro/*
 EXCLUDE_SYMBOLS        =

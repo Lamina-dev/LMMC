@@ -36,7 +36,10 @@ typedef enum {
     LMMC_STATUS_UNIT_STRIP_TYPE_MISMATCH = 13, /**< 量纲剥离作用于非数值类型. */
     LMMC_STATUS_UNIT_STRIP_OVERFLOW = 14,  /**< 量纲剥离发生表示范围溢出. */
     LMMC_STATUS_UNIT_STRIP_INVALID = 15,   /**< 量纲剥离的单位转换阶段失败. */
-    LMMC_STATUS_UNIT_STRIP_LEGACY_SYNTAX = 16 /**< 使用了废弃的量纲剥离语法. */
+    LMMC_STATUS_UNIT_STRIP_LEGACY_SYNTAX = 16, /**< 使用了废弃的量纲剥离语法. */
+    LMMC_STATUS_NOT_INITIALIZED = 17,      /**< 当前线程尚未初始化 LMMC. */
+    LMMC_STATUS_BUSY = 18,                 /**< 当前线程仍有嵌套生命周期租约. */
+    LMMC_STATUS_REFERENCE_LIMIT = 19       /**< 当前线程生命周期引用计数已达上限. */
 } lmmc_status_t;
 
 /**

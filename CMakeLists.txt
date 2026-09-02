@@ -5,8 +5,8 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-# Force MSVC to treat all source files (including UTF-8 LAMMP headers without BOM)
-# as UTF-8. Avoids C2026/C4819 errors when including lammp/lmmp.h on locales whose
+# Force MSVC to treat all source files (including UTF-8 LMMP headers without BOM)
+# as UTF-8. Avoids C2026/C4819 errors when including lmmp/lmmp.h on locales whose
 # default code page is not UTF-8 (e.g. Chinese Windows / GBK).
 if(MSVC)
     add_compile_options($<$<COMPILE_LANGUAGE:C>:/utf-8>)
@@ -20,17 +20,16 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     )
 endif()
 
-option(LMMC_BUILD_TESTS "Build LMMC tests" ON)
-option(LMMC_BUILD_EXAMPLES "Build LMMC examples" ON)
+option(LMMC_BUILD_TESTS "Build LMMC tests" ${PROJECT_IS_TOP_LEVEL})
+option(LMMC_BUILD_EXAMPLES "Build LMMC examples" ${PROJECT_IS_TOP_LEVEL})
 option(LMMC_BUILD_SHARED "Build LMMC as a shared library" ON)
 option(LMMC_USE_BLAS "Enable external BLAS/LAPACK acceleration" OFF)
-option(LMMC_USE_LAMMP_ASM "Enable the LAMMP assembly backend" OFF)
+set(LMMC_LMMP_ASM "AUTO" CACHE STRING "LMMP assembly mode")
+set_property(CACHE LMMC_LMMP_ASM PROPERTY STRINGS GENERIC X64 ARM64 AUTO)
 option(LMMC_WARNINGS_AS_ERRORS "Treat LMMC compiler warnings as errors" OFF)
 option(LMMC_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(LMMC_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(LMMC_ENABLE_COVERAGE "Enable compiler coverage instrumentation" OFF)
-option(LMMC_ENABLE_FAST_MATH "Enable aggressive floating point optimizations" OFF)
-option(LMMC_ENABLE_NATIVE_ARCH "Enable native architecture instructions" OFF)
 
 if(LMMC_ENABLE_SANITIZERS AND LMMC_ENABLE_TSAN)
     message(FATAL_ERROR "LMMC_ENABLE_SANITIZERS and LMMC_ENABLE_TSAN are mutually exclusive")
@@ -39,48 +38,16 @@ if(LMMC_ENABLE_COVERAGE AND (LMMC_ENABLE_SANITIZERS OR LMMC_ENABLE_TSAN))
     message(FATAL_ERROR "LMMC_ENABLE_COVERAGE cannot be combined with sanitizer instrumentation")
 endif()
 
-set(LAMMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/LAMMP" CACHE PATH "Path to LAMMP root")
-set(LAMMP_INCLUDE_DIR "${LAMMP_ROOT}/include" CACHE PATH "Path to LAMMP include directory")
-set(LAMMP_BUILD_DIR_HINT "${CMAKE_CURRENT_BINARY_DIR}/lammp" CACHE PATH "Preferred out-of-source LAMMP build directory")
-set(LAMMP_STATIC_LIBRARY "" CACHE FILEPATH "Path to prebuilt static LAMMP library")
+set(LMMP_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/LMMP" CACHE PATH "Path to LMMP root")
+set(LMMP_INCLUDE_DIR "${LMMP_ROOT}/include" CACHE PATH "Path to LMMP include directory")
+set(LMMP_LIBRARY "" CACHE FILEPATH "Path to a prebuilt LMMP library")
 
-set(_lmmc_lammp_root "${LAMMP_ROOT}")
-cmake_path(ABSOLUTE_PATH _lmmc_lammp_root
+set(_lmmc_lmmp_root "${LMMP_ROOT}")
+cmake_path(ABSOLUTE_PATH _lmmc_lmmp_root
     BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE)
-set(_lmmc_lammp_include "${LAMMP_INCLUDE_DIR}")
-cmake_path(ABSOLUTE_PATH _lmmc_lammp_include
+set(_lmmc_lmmp_include "${LMMP_INCLUDE_DIR}")
+cmake_path(ABSOLUTE_PATH _lmmc_lmmp_include
     BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE)
-set(_lmmc_lammp_build_hint "${LAMMP_BUILD_DIR_HINT}")
-cmake_path(ABSOLUTE_PATH _lmmc_lammp_build_hint
-    BASE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}" NORMALIZE)
-
-if(NOT EXISTS "${_lmmc_lammp_include}/lammp/lmmp.h")
-    message(FATAL_ERROR "LAMMP include headers not found in ${_lmmc_lammp_include}")
-endif()
-
-set(_lmmc_lammp_search_paths
-    "${_lmmc_lammp_build_hint}/dist/lammp/lib/Release"
-    "${_lmmc_lammp_build_hint}/dist/lammp/lib/Debug"
-    "${_lmmc_lammp_build_hint}/dist/lammp/lib/RelWithDebInfo"
-    "${_lmmc_lammp_build_hint}/dist/lammp/lib/MinSizeRel"
-    "${_lmmc_lammp_root}/dist/lammp/lib/Release"
-    "${_lmmc_lammp_root}/dist/lammp/lib/Debug"
-    "${_lmmc_lammp_root}/dist/lammp/lib/RelWithDebInfo"
-    "${_lmmc_lammp_root}/dist/lammp/lib/MinSizeRel"
-)
-unset(_lmmc_lammp_discovered_library CACHE)
-find_library(_lmmc_lammp_discovered_library
-    NAMES LammpCore libLammpCore
-    PATHS ${_lmmc_lammp_search_paths}
-    NO_DEFAULT_PATH
-)
-if(LAMMP_STATIC_LIBRARY)
-    set(_lmmc_lammp_static_library "${LAMMP_STATIC_LIBRARY}")
-    cmake_path(ABSOLUTE_PATH _lmmc_lammp_static_library
-        BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE)
-else()
-    set(_lmmc_lammp_static_library "${_lmmc_lammp_discovered_library}")
-endif()
 
 set(LMMC_SOURCES
     src/complex.c
@@ -96,6 +63,7 @@ set(LMMC_SOURCES
     src/singular_value_decomposition.c
     src/fft.c
     src/init.c
+    src/memory_bridge.c
     src/interp.c
     src/itersolve.c
     src/lsr_boolean_sets.c
@@ -181,15 +149,16 @@ target_include_directories(lmmc
 )
 target_include_directories(lmmc SYSTEM
     PUBLIC
-        $<BUILD_INTERFACE:${_lmmc_lammp_include}>
+        $<BUILD_INTERFACE:${_lmmc_lmmp_include}>
 )
+target_include_directories(lmmc PRIVATE "${_lmmc_lmmp_include}/lmmp")
 if(UNIX)
     target_link_libraries(lmmc PUBLIC m)
 endif()
 
-# LAMMP selects MSVC import declarations through this platform define.
-if(MSVC)
-    target_compile_definitions(lmmc PRIVATE LAMMP_WINDOWS)
+# LMMP headers select MinGW import declarations through this platform define.
+if(WIN32)
+    target_compile_definitions(lmmc PRIVATE LMMP_WINDOWS)
 endif()
 
 # Optional BLAS/LAPACK acceleration
@@ -201,72 +170,76 @@ if(LMMC_USE_BLAS)
     target_link_libraries(lmmc PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
 endif()
 
-if(TARGET LammpCore)
-    target_link_libraries(lmmc PUBLIC LammpCore)
-    target_compile_definitions(lmmc PRIVATE LMMC_USE_LAMMP_ALLOC=1)
-    if(WIN32)
-        set_target_properties(LammpCore PROPERTIES PREFIX "")
+if(TARGET lmmp)
+    target_link_libraries(lmmc PUBLIC lmmp)
+    message(STATUS "LMMC: linking against the lmmp CMake target")
+elseif(LMMP_LIBRARY)
+    set(_lmmc_lmmp_library "${LMMP_LIBRARY}")
+    cmake_path(ABSOLUTE_PATH _lmmc_lmmp_library
+        BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE)
+    if(NOT EXISTS "${_lmmc_lmmp_library}")
+        message(FATAL_ERROR "LMMP_LIBRARY does not exist: ${_lmmc_lmmp_library}")
     endif()
-    message(STATUS "LMMC: linking against LammpCore CMake target")
-elseif(_lmmc_lammp_static_library)
-    if(NOT EXISTS "${_lmmc_lammp_static_library}")
-        message(FATAL_ERROR "LAMMP_STATIC_LIBRARY does not exist: ${_lmmc_lammp_static_library}")
-    endif()
-    add_library(lammp_static UNKNOWN IMPORTED GLOBAL)
-    set_target_properties(lammp_static PROPERTIES
-        IMPORTED_LOCATION "${_lmmc_lammp_static_library}"
-        INTERFACE_INCLUDE_DIRECTORIES "${_lmmc_lammp_include}"
+    add_library(lmmp_imported UNKNOWN IMPORTED GLOBAL)
+    set_target_properties(lmmp_imported PROPERTIES
+        IMPORTED_LOCATION "${_lmmc_lmmp_library}"
+        INTERFACE_INCLUDE_DIRECTORIES "${_lmmc_lmmp_include}"
     )
-    target_link_libraries(lmmc PUBLIC lammp_static)
-    target_compile_definitions(lmmc PRIVATE LMMC_USE_LAMMP_ALLOC=1)
-    message(STATUS "LMMC: linking static LAMMP library: ${_lmmc_lammp_static_library}")
-elseif(EXISTS "${_lmmc_lammp_root}/CMakeLists.txt")
-    if(NOT DEFINED LAMMP_BUILD_TESTS)
-        set(LAMMP_BUILD_TESTS OFF)
+    target_link_libraries(lmmc PUBLIC lmmp_imported)
+    message(STATUS "LMMC: linking prebuilt LMMP library: ${_lmmc_lmmp_library}")
+elseif(EXISTS "${_lmmc_lmmp_root}/CMakeLists.txt")
+    if(NOT DEFINED LMMP_BUILD_TESTS)
+        set(LMMP_BUILD_TESTS OFF)
     endif()
-    if(NOT DEFINED LAMMP_BUILD_EXAMPLES)
-        set(LAMMP_BUILD_EXAMPLES OFF)
+    if(NOT DEFINED LMMP_BUILD_EXAMPLES)
+        set(LMMP_BUILD_EXAMPLES OFF)
     endif()
-    if(NOT DEFINED LAMMP_BUILD_BENCHMARKS)
-        set(LAMMP_BUILD_BENCHMARKS OFF)
+    if(NOT DEFINED LMMP_BUILD_BENCHMARKS)
+        set(LMMP_BUILD_BENCHMARKS OFF)
     endif()
-    if(NOT DEFINED USE_ASM)
-        set(USE_ASM "${LMMC_USE_LAMMP_ASM}")
+    if(NOT DEFINED CACHE{LMMP_ASM})
+        set(LMMP_ASM "${LMMC_LMMP_ASM}" CACHE STRING
+            "Assembly mode: GENERIC | X64 | ARM64 | AUTO")
     endif()
-    add_subdirectory("${_lmmc_lammp_root}"
-        "${CMAKE_CURRENT_BINARY_DIR}/lammp" EXCLUDE_FROM_ALL)
-    set_target_properties(LammpCore PROPERTIES
+    add_subdirectory("${_lmmc_lmmp_root}"
+        "${CMAKE_CURRENT_BINARY_DIR}/lmmp" EXCLUDE_FROM_ALL)
+    if(NOT TARGET liblmmp)
+        message(FATAL_ERROR "LMMP did not define its liblmmp target")
+    endif()
+    target_include_directories(liblmmp PUBLIC
+        $<BUILD_INTERFACE:${_lmmc_lmmp_include}>
+        $<BUILD_INTERFACE:${_lmmc_lmmp_include}/lmmp>
+        $<INSTALL_INTERFACE:include>
+        $<INSTALL_INTERFACE:include/lmmp>
+    )
+    set_target_properties(liblmmp PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY
-            "${CMAKE_CURRENT_BINARY_DIR}/lammp/dist/lammp/bin"
+            "${CMAKE_CURRENT_BINARY_DIR}/lmmp/dist/lmmp/bin"
         LIBRARY_OUTPUT_DIRECTORY
-            "${CMAKE_CURRENT_BINARY_DIR}/lammp/dist/lammp/lib"
+            "${CMAKE_CURRENT_BINARY_DIR}/lmmp/dist/lmmp/lib"
         ARCHIVE_OUTPUT_DIRECTORY
-            "${CMAKE_CURRENT_BINARY_DIR}/lammp/dist/lammp/lib"
+            "${CMAKE_CURRENT_BINARY_DIR}/lmmp/dist/lmmp/lib"
     )
     foreach(_lmmc_config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
-        set_target_properties(LammpCore PROPERTIES
+        set_target_properties(liblmmp PROPERTIES
             RUNTIME_OUTPUT_DIRECTORY_${_lmmc_config}
-                "${CMAKE_CURRENT_BINARY_DIR}/lammp/dist/lammp/bin"
+                "${CMAKE_CURRENT_BINARY_DIR}/lmmp/dist/lmmp/bin"
             LIBRARY_OUTPUT_DIRECTORY_${_lmmc_config}
-                "${CMAKE_CURRENT_BINARY_DIR}/lammp/dist/lammp/lib"
+                "${CMAKE_CURRENT_BINARY_DIR}/lmmp/dist/lmmp/lib"
             ARCHIVE_OUTPUT_DIRECTORY_${_lmmc_config}
-                "${CMAKE_CURRENT_BINARY_DIR}/lammp/dist/lammp/lib"
+                "${CMAKE_CURRENT_BINARY_DIR}/lmmp/dist/lmmp/lib"
         )
     endforeach()
-    if(WIN32)
-        set_target_properties(LammpCore PROPERTIES PREFIX "")
-    endif()
-    target_link_libraries(lmmc PUBLIC LammpCore)
-    target_compile_definitions(lmmc PRIVATE LMMC_USE_LAMMP_ALLOC=1)
-    message(STATUS "LMMC: building the LammpCore dependency from ${_lmmc_lammp_root}")
+    target_link_libraries(lmmc PUBLIC lmmp)
+    message(STATUS "LMMC: building LMMP from ${_lmmc_lmmp_root}")
 else()
     message(FATAL_ERROR
-        "LAMMP core was not found. Set LAMMP_STATIC_LIBRARY or provide LAMMP_ROOT.")
+        "LMMP core was not found. Set LMMP_LIBRARY or provide LMMP_ROOT.")
 endif()
 
 lmmc_apply_instrumentation(lmmc)
-if(TARGET LammpCore)
-    lmmc_apply_instrumentation(LammpCore)
+if(TARGET liblmmp)
+    lmmc_apply_instrumentation(liblmmp)
 endif()
 
 set(_lmmc_warning_options
@@ -281,18 +254,6 @@ if(LMMC_WARNINGS_AS_ERRORS)
         $<$<COMPILE_LANG_AND_ID:C,MSVC>:/WX>
     )
 endif()
-if(LMMC_ENABLE_FAST_MATH)
-    list(APPEND _lmmc_warning_options
-        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>>:-ffast-math>
-        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,MSVC>>:/fp:fast>
-    )
-endif()
-if(LMMC_ENABLE_NATIVE_ARCH)
-    list(APPEND _lmmc_warning_options
-        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>>:-march=native>
-        $<$<AND:$<CONFIG:Release>,$<COMPILE_LANG_AND_ID:C,MSVC>>:/arch:AVX2>
-    )
-endif()
 target_compile_options(lmmc PRIVATE ${_lmmc_warning_options})
 
 function(lmmc_prepare_runtime target_name)
@@ -303,10 +264,10 @@ function(lmmc_prepare_runtime target_name)
                 "$<TARGET_FILE_DIR:${target_name}>"
             VERBATIM
         )
-        if(TARGET LammpCore)
+        if(TARGET liblmmp)
             add_custom_command(TARGET ${target_name} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    "$<TARGET_FILE:LammpCore>"
+                    "$<TARGET_FILE:liblmmp>"
                     "$<TARGET_FILE_DIR:${target_name}>"
                 VERBATIM
             )
@@ -316,6 +277,10 @@ endfunction()
 
 if(LMMC_BUILD_EXAMPLES)
     add_subdirectory(example)
+endif()
+
+if(LMMC_BUILD_TESTS)
+    target_compile_definitions(lmmc PRIVATE LMMC_BUILD_TESTS=1)
 endif()
 
 if(LMMC_BUILD_TESTS)

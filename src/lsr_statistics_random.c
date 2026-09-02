@@ -7,6 +7,7 @@
 #include "lmmc/random.h"
 #include "lmmc/stats.h"
 #include "memory_bridge.h"
+#include "internal.h"
 
 #include "lsr_stdlib_internal.h"
 
@@ -417,24 +418,16 @@ lmmc_status_t lmmc_lsr_random_choice(lmmc_rng_t* rng,
     return lmmc_lsr_store_finite_real(values[index], out);
 }
 
-static lmmc_rng_t* lmmc_lsr_default_rng = NULL;
-
 static lmmc_status_t lmmc_lsr_default_rng_get(lmmc_rng_t** out)
 {
-    lmmc_status_t status;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (!lmmc_lsr_default_rng) {
-        status = lmmc_rng_create(&lmmc_lsr_default_rng);
-        if (status != LMMC_STATUS_OK) return status;
-    }
-    *out = lmmc_lsr_default_rng;
+    *out = lmmc_rng_default_get();
     return LMMC_STATUS_OK;
 }
 
 void lmmc_lsr_random_default_deinit(void)
 {
-    lmmc_rng_destroy(lmmc_lsr_default_rng);
-    lmmc_lsr_default_rng = NULL;
+    lmmc_rng_default_reset();
 }
 
 lmmc_status_t lmmc_lsr_random_default_seed(uint64_t seed)

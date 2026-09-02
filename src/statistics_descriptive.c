@@ -38,7 +38,7 @@ static lmmc_status_t lmmc_vec_mean_m2(const lmmc_vec_t* x, lmmc_real_t* out_mean
         LMMC_REAL_SET(&v, &x->data[i]);
         LMMC_REAL_SET_D(&n, (double)(i + 1));
 
-        if (!lmmc_is_finite_number(v)) {
+        if (!lmmc_is_finite(&v)) {
             LMMC_REAL_CLEAR(&tmp);
             LMMC_REAL_CLEAR(&delta2);
             LMMC_REAL_CLEAR(&delta);
@@ -63,7 +63,7 @@ static lmmc_status_t lmmc_vec_mean_m2(const lmmc_vec_t* x, lmmc_real_t* out_mean
         LMMC_REAL_CLEAR(&v);
     }
 
-    if (!lmmc_is_finite_number(mean) || !lmmc_is_finite_number(m2)) {
+    if (!lmmc_is_finite(&mean) || !lmmc_is_finite(&m2)) {
         LMMC_REAL_CLEAR(&mean);
         LMMC_REAL_CLEAR(&m2);
         return LMMC_STATUS_NUMERICAL_FAILURE;
@@ -126,7 +126,7 @@ static lmmc_status_t lmmc_vec_cov_accumulate(
         LMMC_REAL_SET(&vy, &y->data[i]);
         LMMC_REAL_SET_D(&n, (double)(i + 1));
 
-        if (!lmmc_is_finite_number(vx) || !lmmc_is_finite_number(vy)) {
+        if (!lmmc_is_finite(&vx) || !lmmc_is_finite(&vy)) {
             LMMC_REAL_CLEAR(&tmp2);
             LMMC_REAL_CLEAR(&tmp1);
             LMMC_REAL_CLEAR(&dy);
@@ -172,7 +172,7 @@ static lmmc_status_t lmmc_vec_cov_accumulate(
         LMMC_REAL_CLEAR(&vx);
     }
 
-    if (!lmmc_is_finite_number(c) || !lmmc_is_finite_number(m2x) || !lmmc_is_finite_number(m2y)) {
+    if (!lmmc_is_finite(&c) || !lmmc_is_finite(&m2x) || !lmmc_is_finite(&m2y)) {
         LMMC_REAL_CLEAR(&m2y);
         LMMC_REAL_CLEAR(&m2x);
         LMMC_REAL_CLEAR(&c);
@@ -293,7 +293,7 @@ static lmmc_status_t lmmc_vec_covariance_common(
     }
 
     LMMC_REAL_DIV(&cov, &c, &denom);
-    if (!lmmc_is_finite_number(cov)) {
+    if (!lmmc_is_finite(&cov)) {
         LMMC_REAL_CLEAR(&cov);
         LMMC_REAL_CLEAR(&denom);
         LMMC_REAL_CLEAR(&m2y);
@@ -365,7 +365,7 @@ static lmmc_status_t lmmc_vec_correlation_common(
     LMMC_REAL_SQRT(&tmp, &tmp);
     LMMC_REAL_DIV(&corr, &c, &tmp);
 
-    if (!lmmc_is_finite_number(corr)) {
+    if (!lmmc_is_finite(&corr)) {
         st = LMMC_STATUS_NUMERICAL_FAILURE;
         goto cleanup;
     }
@@ -427,7 +427,7 @@ static lmmc_status_t lmmc_mat_column_means_to_buffer(const lmmc_mat_t* x, lmmc_r
             LMMC_REAL_SET(&v, &x->data[row * x->stride + col]);
             LMMC_REAL_SET_D(&n, (double)(row + 1));
 
-            if (!lmmc_is_finite_number(v)) {
+            if (!lmmc_is_finite(&v)) {
                 LMMC_REAL_CLEAR(&tmp);
                 LMMC_REAL_CLEAR(&delta);
                 LMMC_REAL_CLEAR(&n);
@@ -446,7 +446,7 @@ static lmmc_status_t lmmc_mat_column_means_to_buffer(const lmmc_mat_t* x, lmmc_r
             LMMC_REAL_CLEAR(&v);
         }
 
-        if (!lmmc_is_finite_number(mean)) {
+        if (!lmmc_is_finite(&mean)) {
             LMMC_REAL_CLEAR(&mean);
             return LMMC_STATUS_NUMERICAL_FAILURE;
         }
@@ -489,7 +489,7 @@ static lmmc_status_t lmmc_mat_covariance_or_correlation(
         LMMC_REAL_SET_D(&denom, (double)x->rows);
     }
 
-    if (lmmc_mul_overflow_size(x->cols, sizeof(lmmc_real_t), &bytes)) {
+    if (!lmmc_safe_mul_size(x->cols, sizeof(lmmc_real_t), &bytes)) {
         LMMC_REAL_CLEAR(&denom);
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
@@ -567,7 +567,7 @@ static lmmc_status_t lmmc_mat_covariance_or_correlation(
 
             LMMC_REAL_SQRT(&stddev[col_i], &variance);
 
-            if (!lmmc_is_finite_number(stddev[col_i])) {
+            if (!lmmc_is_finite(&stddev[col_i])) {
                 LMMC_REAL_CLEAR(&tmp);
                 LMMC_REAL_CLEAR(&d);
                 LMMC_REAL_CLEAR(&variance);
@@ -607,7 +607,7 @@ static lmmc_status_t lmmc_mat_covariance_or_correlation(
             }
 
             LMMC_REAL_DIV(&cov, &sum, &denom);
-            if (!lmmc_is_finite_number(cov)) {
+            if (!lmmc_is_finite(&cov)) {
                 LMMC_REAL_CLEAR(&tmp);
                 LMMC_REAL_CLEAR(&dj);
                 LMMC_REAL_CLEAR(&di);
@@ -630,7 +630,7 @@ static lmmc_status_t lmmc_mat_covariance_or_correlation(
                 } else {
                     LMMC_REAL_MUL(&tmp, &stddev[col_i], &stddev[col_j]);
                     LMMC_REAL_DIV(&out_value, &cov, &tmp);
-                    if (!lmmc_is_finite_number(out_value)) {
+                    if (!lmmc_is_finite(&out_value)) {
                         LMMC_REAL_CLEAR(&tmp);
                         LMMC_REAL_CLEAR(&dj);
                         LMMC_REAL_CLEAR(&di);
@@ -760,7 +760,7 @@ lmmc_status_t lmmc_vec_stddev_population(const lmmc_vec_t* x, lmmc_real_t* out_s
 
     *out_stddev = variance;
     LMMC_REAL_SQRT(out_stddev, out_stddev);
-    if (!lmmc_is_finite_number(*out_stddev)) {
+    if (!lmmc_is_finite(&*out_stddev)) {
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }
 
@@ -782,7 +782,7 @@ lmmc_status_t lmmc_vec_stddev_sample(const lmmc_vec_t* x, lmmc_real_t* out_stdde
 
     *out_stddev = variance;
     LMMC_REAL_SQRT(out_stddev, out_stddev);
-    if (!lmmc_is_finite_number(*out_stddev)) {
+    if (!lmmc_is_finite(&*out_stddev)) {
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }
 

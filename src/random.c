@@ -4,9 +4,11 @@
  */
 #include <string.h>
 #include <math.h>
+#include <stdlib.h>
 #include <time.h>
 #include <stdatomic.h>
 #include "memory_bridge.h"
+#include "internal.h"
 #include "lmmc/config.h"
 #include "lmmc/random.h"
 #include "lmmc/status.h"
@@ -15,6 +17,8 @@
 struct lmmc_rng_t {
     uint64_t state[4];
 };
+static _Thread_local struct lmmc_rng_t lmmc_default_rng;
+static _Thread_local int lmmc_default_rng_initialized = 0;
 
 
 static inline uint64_t rotl(const uint64_t x, int k) {
@@ -46,6 +50,18 @@ static uint64_t generate_default_seed(void) {
     /* Mix all sources via SplitMix64 finalizer */
     uint64_t mixed = t ^ addr ^ counter;
     return splitmix64_next(&mixed);
+}
+lmmc_rng_t* lmmc_rng_default_get(void) {
+    if (!lmmc_default_rng_initialized) {
+        lmmc_rng_seed(&lmmc_default_rng, generate_default_seed());
+        lmmc_default_rng_initialized = 1;
+    }
+    return &lmmc_default_rng;
+}
+
+void lmmc_rng_default_reset(void) {
+    memset(&lmmc_default_rng, 0, sizeof(lmmc_default_rng));
+    lmmc_default_rng_initialized = 0;
 }
 
 
@@ -266,34 +282,13 @@ lmmc_status_t lmmc_rng_uniform(
 #define ZIG_R 3.6541528853610088
 #define ZIG_V 0.00492867323399
 
-static double zig_xtab[ZIG_N + 1]; /* x-coordinates of rectangle edges */
-static int zig_ready = 0;
-
+static const double zig_xtab[ZIG_N + 1] = {
+#include "ziggurat_table.inc"
+};
 static inline double zig_pdf(double x) {
     return exp(-0.5 * x * x);
 }
 
-static void zig_setup(void) {
-    int i;
-
-    if (zig_ready) return;
-
-    /* Build the table:
-     * xtab[1] = r (the tail start)
-     * xtab[i] for i=2..255: computed from equal-area property
-     * xtab[256] = 0 (the peak of the distribution)
-     * xtab[0] = v / f(r) (width of the base strip that includes the tail)
-     */
-    zig_xtab[256] = 0.0;
-    zig_xtab[1] = ZIG_R;
-
-    for (i = 2; i <= 255; i++) {
-        zig_xtab[i] = sqrt(-2.0 * log(ZIG_V / zig_xtab[i - 1] + zig_pdf(zig_xtab[i - 1])));
-    }
-    zig_xtab[0] = ZIG_V / zig_pdf(ZIG_R);
-
-    zig_ready = 1;
-}
 
 /**
  * @brief Marsaglia's exact tail algorithm.
@@ -329,9 +324,6 @@ static double ziggurat_rnor(uint64_t* state) {
     int i, sign;
     double x;
 
-    if (!zig_ready) {
-        zig_setup();
-    }
 
     for (;;) {
         u = xoshiro256ss_next(state);

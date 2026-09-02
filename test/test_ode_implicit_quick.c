@@ -15,7 +15,7 @@ int main(void) {
     double y[1];
     double exact;
 
-    lmmc_init();
+    if (lmmc_init() != LMMC_STATUS_OK) return 1;
     lmmc_ode_default_config(0.0, 1.0, 1, &cfg);
     cfg.jacobian = NULL;
     exact = exp(-10.0);
@@ -58,6 +58,6 @@ int main(void) {
     if (fabs(y[0]) > 2.0) { printf("FAIL: not A-stable\n"); return 1; }
 
     printf("ALL PASSED\n");
-    lmmc_deinit();
+    if (lmmc_deinit() != LMMC_STATUS_OK) return 1;
     return 0;
 }

@@ -1,15 +1,15 @@
 /**
- * @file example_lammp_ext.c
- * @brief 演示 LMMC 中 lammp ext 相关接口的使用。
+ * @file example_lmmp_ext.c
+ * @brief 演示 LMMC 中 LMMP 扩展接口的使用。
  */
+#include <lmmp.h>
+#include <mprand.h>
+#include <numth.h>
+#include <secret.h>
+#include <version.h>
+
 #include <stdint.h>
 #include <stdio.h>
-
-#include "lammp/lmmp.h"
-#include "lammp/mprand.h"
-#include "lammp/numth.h"
-#include "lammp/secret.h"
-#include "lammp/version.h"
 
 int main(void) {
     mp_limb_t rnd = 0;
@@ -21,8 +21,8 @@ int main(void) {
     lmmp_strong_rng_t* strong_rng = NULL;
     mp_size_t strong_actual = 0;
 
-    printf("LAMMP version: %s\n", lmmp_get_version());
-    printf("LAMMP build: %s\n", lmmp_get_build_type());
+    printf("LMMP version: %s\n", lmmp_get_version());
+    printf("LMMP build: %s\n", lmmp_get_build_type());
     printf("gcd(48,18) = %llu\n", (unsigned long long)lmmp_gcd_11_(48, 18));
     printf("powmod(7,128,13) = %llu\n", (unsigned long long)lmmp_powmod_ulong_odd_(7, 128, 13));
     printf("is_prime(97) = %d\n", lmmp_is_prime_ulong_(97) ? 1 : 0);

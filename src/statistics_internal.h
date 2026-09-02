@@ -6,26 +6,12 @@
 #include <math.h>
 #include <stdlib.h>
 
+#include "internal.h"
 #include "memory_bridge.h"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 #include "lmmc/stats.h"
 
-static inline int lmmc_mul_overflow_size(size_t a, size_t b, size_t* out) {
-    if (a == 0 || b == 0) {
-        *out = 0;
-        return 0;
-    }
-    if (a > ((size_t)-1) / b) {
-        return 1;
-    }
-    *out = a * b;
-    return 0;
-}
-
-static inline int lmmc_is_finite_number(lmmc_real_t v) {
-    return LMMC_REAL_IS_FINITE(&v) ? 1 : 0;
-}
 
 static inline lmmc_status_t lmmc_validate_vec(const lmmc_vec_t* x) {
     if (x == NULL || x->data == NULL || x->size == 0) {
@@ -43,7 +29,7 @@ static inline lmmc_status_t lmmc_validate_mat(const lmmc_mat_t* x) {
 
 static inline lmmc_status_t lmmc_finalize_nonnegative(lmmc_real_t value, lmmc_real_t* out_value) {
     lmmc_real_t zero, tol;
-    if (!lmmc_is_finite_number(value) || out_value == NULL) {
+    if (!lmmc_is_finite(&value) || out_value == NULL) {
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }
 

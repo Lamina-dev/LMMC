@@ -220,7 +220,7 @@ lmmc_status_t lmmc_ode_rk4_solve(
  * @return ::LMMC_STATUS_OK 成功抵达终点；
  *         ::LMMC_STATUS_INVALID_ARGUMENT 若参数非法；
  *         ::LMMC_STATUS_NUMERICAL_FAILURE 若积分过程中出现 NaN/Inf；
- *         ::LMMC_STATUS_MAX_ITERATIONS 若达到 cfg->max_steps 仍未抵达终点。
+ *         ::LMMC_STATUS_CONVERGENCE_FAILED 若达到 cfg->max_steps 仍未抵达终点。
  *
  * @par 副作用
  * - 就地修改 @p y 数组为终态值。

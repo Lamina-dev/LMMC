@@ -47,9 +47,9 @@ lmmc_status_t lmmc_sparse_sym_csr_from_csr(const lmmc_sparse_mat_t* full,
     }
 
     /* 分配内存 */
-    if (lmmc_mul_overflow_size(n + 1, sizeof(size_t), &row_ptr_bytes) ||
-        lmmc_mul_overflow_size(nnz_half, sizeof(size_t), &col_idx_bytes) ||
-        lmmc_mul_overflow_size(nnz_half, sizeof(lmmc_real_t), &val_bytes)) {
+    if (!lmmc_safe_mul_size(n + 1, sizeof(size_t), &row_ptr_bytes) ||
+        !lmmc_safe_mul_size(nnz_half, sizeof(size_t), &col_idx_bytes) ||
+        !lmmc_safe_mul_size(nnz_half, sizeof(lmmc_real_t), &val_bytes)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 

@@ -192,7 +192,7 @@ static void test_poisson_dist(void) {
 }
 
 int main(void) {
-    lmmc_init();
+    if (lmmc_init() != LMMC_STATUS_OK) return 1;
 
     test_median();
     test_quantile();
@@ -209,6 +209,6 @@ int main(void) {
     printf("\n=== Stats Distribution Tests ===\n");
     printf("Passed: %d, Failed: %d\n", g_pass, g_fail);
 
-    lmmc_deinit();
+    if (lmmc_deinit() != LMMC_STATUS_OK) return 1;
     return g_fail > 0 ? 1 : 0;
 }

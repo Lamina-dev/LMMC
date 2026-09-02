@@ -196,7 +196,7 @@ lmmc_status_t lmmc_fft_radix4_pad_into(
  *
  * @return ::LMMC_STATUS_OK 成功;
  *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n == 0 或指针为 NULL;
- *         ::LMMC_STATUS_ALLOC_FAILED 若 Bluestein 路径内存分配失败.
+ *         ::LMMC_STATUS_ALLOCATION_FAILED 若 Bluestein 路径内存分配失败.
  *
  * @par 副作用
  * - 就地修改 @p real 和 @p imag 数组的全部 n 个元素.

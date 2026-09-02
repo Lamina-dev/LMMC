@@ -498,7 +498,7 @@ static int test_shared_validation(void) {
 int main(void) {
     int failures = 0;
 
-    lmmc_init();
+    if (lmmc_init() != LMMC_STATUS_OK) return 1;
 
     failures += test_sdirk4_vanderpol();
     failures += test_rosenbrock_vanderpol();
@@ -508,7 +508,7 @@ int main(void) {
     failures += test_trapezoidal_second_order();
     failures += test_advertised_fourth_order();
 
-    lmmc_deinit();
+    if (lmmc_deinit() != LMMC_STATUS_OK) return 1;
 
     printf("\n=== Results: %d test(s) failed ===\n", failures);
     return failures;

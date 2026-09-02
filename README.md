@@ -1,44 +1,32 @@
 # LMMC
-Build for Lamina Project, boosted by LAMMP technology.
-## Build it
+Build for Lamina Project, powered by LMMP.
+
+## Build
+
+LMMP is built from the `LMMP` submodule as part of the LMMC build.
+
 ```pwsh
-$root = (Get-Location).Path
-$rt = Join-Path $root "build/lammp/dist/lammp/bin/Release"
-$ar = Join-Path $root "build/lammp/dist/lammp/lib/Release"
-cmake -S LAMMP -B build/lammp -G "Visual Studio 17 2022" -A x64 -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$rt" -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY="$ar" -DCMAKE_LIBRARY_OUTPUT_DIRECTORY="$ar"
-cmake --build build/lammp --config Release --target LammpCore
-cmake -S . -B build
-cmake --build build --config Release
-ctest --test-dir build -C Release --output-on-failure
+cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_BUILD_TYPE=Release -DLMMC_BUILD_TESTS=ON -DLMMC_LMMP_ASM=AUTO
+cmake --build build
+ctest --test-dir build --output-on-failure
 ```
 
-## TODO List
+`LMMC_LMMP_ASM` accepts `AUTO`, `GENERIC`, `X64`, or `ARM64`. `AUTO` selects the supported GAS/LLVM-compatible `.S` backend for the target architecture and falls back to the generic C implementation only on unsupported platforms.
 
-- [x] dense matrix
-- [x] vector
-- [x] LU/QR decomposition
-- [x] linear solve
-- [x] CSR sparse matrix container
-- [x] sparse calculation
-- [x] CG
-- [x] BiCGSTAB
-- [x] GMRES(restart)
-- [x] None
-- [x] Jacobi
-- [x] ILU0
-- [x] ILUT
-- [x] Non linear solve
-- [x] ODE solve
-- [x] statistics
-- [x] 3d tensor
-- [x] FFT
+## Implemented modules
 
-- [ ] sample prog
-- [ ] benchmark
-- [ ] solver logging
-- [ ] preconditioner & iterative solver performance(assmbly?)
-- [ ] large sparse and boundary condition testing
-- [ ] parallelization(may not?)
+- Dense vectors and matrices, elementwise operations, products, decompositions,
+  direct solvers, and eigenvalue/SVD routines
+- Sparse CSR/CSC/COO storage, arithmetic, direct and iterative solvers, and
+  Jacobi/ILU preconditioners
+- Nonlinear equations, optimization, quadrature, interpolation, and ODE
+  integration
+- Statistics, probability distributions, explicit and thread-local default
+  random-number streams
+- N-dimensional tensors, FFTs, complex arithmetic, and scalar special
+  functions
 
-
-due to lazy reason, the source code didnt conatin any comments, maybe i will use copilot to add some...
+Persistent LMMC objects use recoverable heap ownership and may be transferred
+between initialized threads. Concurrent mutation requires external
+synchronization. LMMP temporary algorithms retain their direct fail-fast
+allocation contract.

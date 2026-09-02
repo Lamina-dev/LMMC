@@ -374,6 +374,10 @@ lmmc_status_t lmmc_lsr_random_choice(lmmc_rng_t* rng,
                                      const lmmc_real_t* values,
                                      size_t count,
                                      lmmc_real_t* out);
+/**
+ * @brief Default RNG operations use one allocation-free independent stream
+ * per thread. Deinitialization resets only the calling thread's stream.
+ */
 void lmmc_lsr_random_default_deinit(void);
 lmmc_status_t lmmc_lsr_random_default_seed(uint64_t seed);
 lmmc_status_t lmmc_lsr_random_default_rand(lmmc_real_t* out);

@@ -5,14 +5,11 @@
 #include <math.h>
 #include <string.h>
 #include "memory_bridge.h"
+#include "internal.h"
 #include "lmmc/config.h"
 #include "lmmc/dense.h"
 #include "lmmc/itersolve.h"
 
-static int lmmc_is_finite_number(lmmc_real_t v) {
-
-    return isfinite(v) ? 1 : 0;
-}
 
 static lmmc_status_t lmmc_vec_norm2_checked(const lmmc_vec_t* v, lmmc_real_t* out_norm) {
     if (v == NULL || out_norm == NULL || v->data == NULL || v->size == 0) {
@@ -21,7 +18,7 @@ static lmmc_status_t lmmc_vec_norm2_checked(const lmmc_vec_t* v, lmmc_real_t* ou
 
 
     for (size_t i = 0; i < v->size; ++i) {
-        if (!lmmc_is_finite_number(v->data[i])) {
+        if (!lmmc_is_finite(&v->data[i])) {
             return LMMC_STATUS_NUMERICAL_FAILURE;
         }
     }
@@ -31,7 +28,7 @@ static lmmc_status_t lmmc_vec_norm2_checked(const lmmc_vec_t* v, lmmc_real_t* ou
         return st;
     }
 
-    if (!lmmc_is_finite_number(*out_norm)) {
+    if (!lmmc_is_finite(&*out_norm)) {
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }
     return LMMC_STATUS_OK;
@@ -42,7 +39,7 @@ static lmmc_status_t lmmc_vec_dot_checked(const lmmc_vec_t* a, const lmmc_vec_t*
     if (st != LMMC_STATUS_OK) {
         return st;
     }
-    if (!lmmc_is_finite_number(*out_dot)) {
+    if (!lmmc_is_finite(&*out_dot)) {
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }
     return LMMC_STATUS_OK;
@@ -109,7 +106,7 @@ static lmmc_status_t lmmc_gmres_back_substitute(
         LMMC_REAL_SET(&diag, &h[i * ld + i]);
         LMMC_REAL_ABS(&abs_diag, &diag);
 
-        if (!lmmc_is_finite_number(sum) || !lmmc_is_finite_number(diag) || LMMC_REAL_CMP(&abs_diag, &eps_30) <= 0) {
+        if (!lmmc_is_finite(&sum) || !lmmc_is_finite(&diag) || LMMC_REAL_CMP(&abs_diag, &eps_30) <= 0) {
             LMMC_REAL_CLEAR(&eps_30);
             LMMC_REAL_CLEAR(&abs_diag);
             LMMC_REAL_CLEAR(&tmp_sub);
@@ -120,7 +117,7 @@ static lmmc_status_t lmmc_gmres_back_substitute(
         }
 
         LMMC_REAL_DIV(&out_y[i], &sum, &diag);
-        if (!lmmc_is_finite_number(out_y[i])) {
+        if (!lmmc_is_finite(&out_y[i])) {
             LMMC_REAL_CLEAR(&eps_30);
             LMMC_REAL_CLEAR(&abs_diag);
             LMMC_REAL_CLEAR(&tmp_sub);
@@ -210,7 +207,7 @@ static lmmc_status_t validate_and_init_itersolve_config(
         if (st != LMMC_STATUS_OK) goto cleanup;
     }
 
-    if (!lmmc_is_finite_number(out_cfg->abs_tol) || !lmmc_is_finite_number(out_cfg->rel_tol) ||
+    if (!lmmc_is_finite(&out_cfg->abs_tol) || !lmmc_is_finite(&out_cfg->rel_tol) ||
         LMMC_REAL_CMP(&out_cfg->abs_tol, &zero) < 0 || LMMC_REAL_CMP(&out_cfg->rel_tol, &zero) < 0 || out_cfg->max_iter == 0) {
         st = LMMC_STATUS_INVALID_ARGUMENT;
         goto cleanup;
@@ -316,7 +313,7 @@ static lmmc_status_t lmmc_gmres_apply_givens(
 
         lmmc_real_t gtmp; LMMC_REAL_INIT(&gtmp); LMMC_REAL_SET_D(&gtmp, 0.0);
 
-        if (!lmmc_is_finite_number(denom_loc)) {
+        if (!lmmc_is_finite(&denom_loc)) {
             LMMC_REAL_CLEAR(&a_sum); LMMC_REAL_CLEAR(&m2); LMMC_REAL_CLEAR(&m1);
             LMMC_REAL_CLEAR(&gtmp); LMMC_REAL_CLEAR(&denom_loc);
             LMMC_REAL_CLEAR(&hsub); LMMC_REAL_CLEAR(&hj);
@@ -332,7 +329,7 @@ static lmmc_status_t lmmc_gmres_apply_givens(
 
         LMMC_REAL_DIV(&cs[j], &hj, &denom_loc);
         LMMC_REAL_DIV(&sn[j], &hsub, &denom_loc);
-        if (!lmmc_is_finite_number(cs[j]) || !lmmc_is_finite_number(sn[j])) {
+        if (!lmmc_is_finite(&cs[j]) || !lmmc_is_finite(&sn[j])) {
             LMMC_REAL_CLEAR(&a_sum); LMMC_REAL_CLEAR(&m2); LMMC_REAL_CLEAR(&m1);
             LMMC_REAL_CLEAR(&gtmp); LMMC_REAL_CLEAR(&denom_loc);
             LMMC_REAL_CLEAR(&hsub); LMMC_REAL_CLEAR(&hj);
@@ -423,7 +420,7 @@ lmmc_status_t lmmc_cg_solve(
     LMMC_REAL_MUL(&tmp_mul, &local_cfg.rel_tol, &norm_b);
     LMMC_REAL_ADD(&threshold, &local_cfg.abs_tol, &tmp_mul);
 
-    if (!lmmc_is_finite_number(threshold)) {
+    if (!lmmc_is_finite(&threshold)) {
         st = LMMC_STATUS_NUMERICAL_FAILURE;
         goto cleanup;
     }
@@ -474,7 +471,7 @@ lmmc_status_t lmmc_cg_solve(
             }
 
             LMMC_REAL_DIV(&alpha, &rho, &denom);
-            if (!lmmc_is_finite_number(alpha)) {
+            if (!lmmc_is_finite(&alpha)) {
                 st = LMMC_STATUS_NUMERICAL_FAILURE;
                 goto cleanup;
             }
@@ -483,7 +480,7 @@ lmmc_status_t lmmc_cg_solve(
                 LMMC_REAL_MUL(&tmp_mul, &alpha, &p.data[i]);
                 LMMC_REAL_ADD(&tmp_add, &x->data[i], &tmp_mul);
                 LMMC_REAL_SET(&x->data[i], &tmp_add);
-                if (!lmmc_is_finite_number(x->data[i])) {
+                if (!lmmc_is_finite(&x->data[i])) {
                     st = LMMC_STATUS_NUMERICAL_FAILURE;
                     goto cleanup;
                 }
@@ -526,7 +523,7 @@ lmmc_status_t lmmc_cg_solve(
             }
 
             LMMC_REAL_DIV(&beta, &rho_new, &rho);
-            if (!lmmc_is_finite_number(beta)) {
+            if (!lmmc_is_finite(&beta)) {
                 st = LMMC_STATUS_NUMERICAL_FAILURE;
                 goto cleanup;
             }
@@ -535,7 +532,7 @@ lmmc_status_t lmmc_cg_solve(
                 LMMC_REAL_MUL(&tmp_mul, &beta, &p.data[i]);
                 LMMC_REAL_ADD(&tmp_add, &z.data[i], &tmp_mul);
                 LMMC_REAL_SET(&p.data[i], &tmp_add);
-                if (!lmmc_is_finite_number(p.data[i])) {
+                if (!lmmc_is_finite(&p.data[i])) {
                     st = LMMC_STATUS_NUMERICAL_FAILURE;
                     goto cleanup;
                 }
@@ -554,7 +551,7 @@ cleanup:
     if (out_result != NULL) {
         out_result->converged = converged;
         out_result->num_iter = iter_count;
-        if (lmmc_is_finite_number(norm_r)) {
+        if (lmmc_is_finite(&norm_r)) {
             LMMC_REAL_SET(&out_result->final_residual_norm, &norm_r);
         }
     }
@@ -606,7 +603,7 @@ static lmmc_status_t lmmc_bicgstab_compute_alpha(
     }
 
     LMMC_REAL_DIV(out_alpha, &rho_hat, &denom);
-    if (!lmmc_is_finite_number(*out_alpha)) {
+    if (!lmmc_is_finite(&*out_alpha)) {
         st = LMMC_STATUS_NUMERICAL_FAILURE; goto end;
     }
 
@@ -643,7 +640,7 @@ static lmmc_status_t lmmc_bicgstab_compute_omega(
     }
 
     LMMC_REAL_DIV(out_omega, &ts, &tt);
-    if (!lmmc_is_finite_number(*out_omega)) {
+    if (!lmmc_is_finite(&*out_omega)) {
         st = LMMC_STATUS_NUMERICAL_FAILURE; goto end;
     }
 
@@ -725,7 +722,7 @@ lmmc_status_t lmmc_bicgstab_solve(
     LMMC_REAL_MUL(&tmp_mul, &local_cfg.rel_tol, &norm_b);
     LMMC_REAL_ADD(&threshold, &local_cfg.abs_tol, &tmp_mul);
 
-    if (!lmmc_is_finite_number(threshold)) {
+    if (!lmmc_is_finite(&threshold)) {
         st = LMMC_STATUS_NUMERICAL_FAILURE; goto cleanup;
     }
 
@@ -772,7 +769,7 @@ lmmc_status_t lmmc_bicgstab_solve(
                 LMMC_REAL_CLEAR(&tmp_div2);
                 LMMC_REAL_CLEAR(&tmp_div1);
 
-                if (!lmmc_is_finite_number(beta)) {
+                if (!lmmc_is_finite(&beta)) {
                     st = LMMC_STATUS_NUMERICAL_FAILURE; goto cleanup;
                 }
 
@@ -783,7 +780,7 @@ lmmc_status_t lmmc_bicgstab_solve(
                     LMMC_REAL_ADD(&tmp_add, &r.data[i], &tmp_mul);
                     LMMC_REAL_SET(&p.data[i], &tmp_add);
 
-                    if (!lmmc_is_finite_number(p.data[i])) {
+                    if (!lmmc_is_finite(&p.data[i])) {
                         st = LMMC_STATUS_NUMERICAL_FAILURE; goto cleanup;
                     }
                 }
@@ -811,7 +808,7 @@ lmmc_status_t lmmc_bicgstab_solve(
                     LMMC_REAL_MUL(&tmp_mul, &alpha, &y.data[i]);
                     LMMC_REAL_ADD(&tmp_add, &x->data[i], &tmp_mul);
                     LMMC_REAL_SET(&x->data[i], &tmp_add);
-                    if (!lmmc_is_finite_number(x->data[i])) {
+                    if (!lmmc_is_finite(&x->data[i])) {
                         st = LMMC_STATUS_NUMERICAL_FAILURE; goto cleanup;
                     }
                 }
@@ -840,7 +837,7 @@ lmmc_status_t lmmc_bicgstab_solve(
                 LMMC_REAL_CLEAR(&tmp_add2);
                 LMMC_REAL_CLEAR(&tmp_mul2);
 
-                if (!lmmc_is_finite_number(x->data[i])) {
+                if (!lmmc_is_finite(&x->data[i])) {
                     st = LMMC_STATUS_NUMERICAL_FAILURE; goto cleanup;
                 }
             }
@@ -884,7 +881,7 @@ cleanup:
     if (out_result != NULL) {
         out_result->converged = converged;
         out_result->num_iter = iter_count;
-        if (lmmc_is_finite_number(norm_r)) {
+        if (lmmc_is_finite(&norm_r)) {
             LMMC_REAL_SET(&out_result->final_residual_norm, &norm_r);
         }
     }
@@ -1018,7 +1015,7 @@ lmmc_status_t lmmc_gmres_solve(
     LMMC_REAL_MUL(&tmp_mul, &local_cfg.rel_tol, &norm_b);
     LMMC_REAL_ADD(&threshold, &local_cfg.abs_tol, &tmp_mul);
 
-    if (!lmmc_is_finite_number(threshold)) {
+    if (!lmmc_is_finite(&threshold)) {
         st = LMMC_STATUS_NUMERICAL_FAILURE; goto cleanup;
     }
 
@@ -1071,7 +1068,7 @@ lmmc_status_t lmmc_gmres_solve(
 
         for (i = 0; i < n; ++i) {
             LMMC_REAL_DIV(&basis[0].data[i], &z.data[i], &beta);
-            if (!lmmc_is_finite_number(basis[0].data[i])) {
+            if (!lmmc_is_finite(&basis[0].data[i])) {
                 st = LMMC_STATUS_NUMERICAL_FAILURE; goto cleanup;
             }
         }
@@ -1100,7 +1097,7 @@ lmmc_status_t lmmc_gmres_solve(
                     LMMC_REAL_ADD(&tmp_add, &val, &tmp_mul);
                     LMMC_REAL_SET(&val, &tmp_add);
                 }
-                if (!lmmc_is_finite_number(val)) {
+                if (!lmmc_is_finite(&val)) {
                     LMMC_REAL_CLEAR(&val); LMMC_REAL_CLEAR(&h_next);
                     st = LMMC_STATUS_NUMERICAL_FAILURE; goto cleanup;
                 }
@@ -1140,7 +1137,7 @@ lmmc_status_t lmmc_gmres_solve(
 
             for (i = 0; i < n; ++i) {
                 LMMC_REAL_DIV(&basis[j + 1].data[i], &w.data[i], &h_next);
-                if (!lmmc_is_finite_number(basis[j + 1].data[i])) {
+                if (!lmmc_is_finite(&basis[j + 1].data[i])) {
                     LMMC_REAL_CLEAR(&h_next);
                     st = LMMC_STATUS_NUMERICAL_FAILURE; goto cleanup;
                 }
@@ -1166,7 +1163,7 @@ cleanup:
     if (out_result != NULL) {
         out_result->converged = converged;
         out_result->num_iter = iter_count;
-        if (lmmc_is_finite_number(norm_r)) {
+        if (lmmc_is_finite(&norm_r)) {
             LMMC_REAL_SET(&out_result->final_residual_norm, &norm_r);
         }
     }

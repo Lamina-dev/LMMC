@@ -290,7 +290,7 @@ int main(void) {
     int failures = 0;
     int total_trials = 0;
 
-    lmmc_init();
+    if (lmmc_init() != LMMC_STATUS_OK) return 1;
 
     printf("=== Property Test: Tensor Contraction ===\n");
     printf("output matches unrolled nested-loop reference\n");
@@ -301,7 +301,7 @@ int main(void) {
     st = lmmc_rng_create(&rng);
     if (st != LMMC_STATUS_OK) {
         printf("FATAL: Failed to create RNG\n");
-        lmmc_deinit();
+        if (lmmc_deinit() != LMMC_STATUS_OK) return 1;
         return 1;
     }
     lmmc_rng_seed(rng, seed);
@@ -419,6 +419,6 @@ int main(void) {
     }
 
     lmmc_rng_destroy(rng);
-    lmmc_deinit();
+    if (lmmc_deinit() != LMMC_STATUS_OK) return 1;
     return (failures == 0) ? 0 : 1;
 }

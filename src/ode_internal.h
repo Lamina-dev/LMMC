@@ -225,46 +225,81 @@ static inline lmmc_real_t lmmc_ode_next_step(
     return lmmc_clamp(h * factor, cfg->min_step, cfg->max_step);
 }
 
-/**
- * @brief 有限差分近似 Jacobian df/dy。
- */
-static inline lmmc_status_t ode_fd_jacobian(
-    lmmc_ode_rhs_t rhs, void* user_data,
-    lmmc_real_t t, const lmmc_real_t* y, size_t dim,
-    lmmc_real_t* J, lmmc_real_t* f0, lmmc_real_t* y_pert, lmmc_real_t* f_pert
+/** @brief 检查连续 ODE 数值数组是否全部有限. */
+static inline lmmc_status_t lmmc_ode_values_are_finite(
+    const lmmc_real_t* values,
+    size_t count
 ) {
-    size_t i, j;
-    lmmc_real_t eps_fd = 1.0e-7;
-    lmmc_status_t st;
-
-    st = rhs(t, y, f0, dim, user_data);
-    if (st != LMMC_STATUS_OK) return st;
-
-    for (j = 0; j < dim; ++j) {
-        lmmc_real_t delta = eps_fd * (1.0 + fabs(y[j]));
-        memcpy(y_pert, y, dim * sizeof(lmmc_real_t));
-        y_pert[j] += delta;
-        st = rhs(t, y_pert, f_pert, dim, user_data);
-        if (st != LMMC_STATUS_OK) return st;
-        for (i = 0; i < dim; ++i) {
-            J[i * dim + j] = (f_pert[i] - f0[i]) / delta;
+    size_t i;
+    if (values == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    for (i = 0; i < count; ++i) {
+        if (!lmmc_is_finite(&values[i])) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
         }
     }
     return LMMC_STATUS_OK;
 }
 
 /**
- * @brief 计算或获取 Jacobian（用户提供或有限差分）。
+ * @brief 计算解析或有限差分 Jacobian,复用调用者提供的工作区.
+ *
+ * @c base_rhs 可指向已计算的 f(t,y);为空时使用 @c base_rhs_work
+ * 计算一次.所有 RHS 调用统一经过 lmmc_ode_rhs_eval 记账并检查有限性.
  */
-static inline lmmc_status_t ode_get_jacobian(
-    lmmc_ode_rhs_t rhs, void* user_data, lmmc_ode_jac_t jac_cb,
-    lmmc_real_t t, const lmmc_real_t* y, size_t dim,
-    lmmc_real_t* J, lmmc_real_t* f0, lmmc_real_t* y_pert, lmmc_real_t* f_pert
+static inline lmmc_status_t lmmc_ode_jacobian_eval(
+    lmmc_ode_rhs_t rhs,
+    lmmc_ode_jac_t jacobian,
+    void* user_data,
+    lmmc_real_t t,
+    const lmmc_real_t* y,
+    const lmmc_real_t* base_rhs,
+    size_t dim,
+    lmmc_real_t* jacobian_data,
+    lmmc_real_t* base_rhs_work,
+    lmmc_real_t* y_perturbed,
+    lmmc_real_t* rhs_perturbed,
+    size_t* io_rhs_evals,
+    int* out_callback_failed
 ) {
-    if (jac_cb != NULL) {
-        return jac_cb(t, y, J, dim, user_data);
+    const lmmc_real_t* base = base_rhs;
+    size_t i, j;
+    size_t jacobian_count;
+    lmmc_status_t st;
+
+    if (rhs == NULL || y == NULL || jacobian_data == NULL ||
+        base_rhs_work == NULL || y_perturbed == NULL || rhs_perturbed == NULL ||
+        io_rhs_evals == NULL || out_callback_failed == NULL || dim == 0 ||
+        !lmmc_safe_mul_size(dim, dim, &jacobian_count)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    return ode_fd_jacobian(rhs, user_data, t, y, dim, J, f0, y_pert, f_pert);
+    *out_callback_failed = 0;
+    if (jacobian != NULL) {
+        st = jacobian(t, y, jacobian_data, dim, user_data);
+        if (st != LMMC_STATUS_OK) return st;
+        return lmmc_ode_values_are_finite(jacobian_data, jacobian_count);
+    }
+
+    if (base == NULL) {
+        st = lmmc_ode_rhs_eval(rhs, t, y, base_rhs_work, dim, user_data,
+                               io_rhs_evals, out_callback_failed);
+        if (st != LMMC_STATUS_OK) return st;
+        base = base_rhs_work;
+    }
+
+    for (j = 0; j < dim; ++j) {
+        const lmmc_real_t delta =
+            sqrt(LMMC_REAL_EPSILON) * fmax(1.0, fabs(y[j]));
+        memcpy(y_perturbed, y, dim * sizeof(*y));
+        y_perturbed[j] += delta;
+        st = lmmc_ode_rhs_eval(rhs, t, y_perturbed, rhs_perturbed, dim,
+                               user_data, io_rhs_evals, out_callback_failed);
+        if (st != LMMC_STATUS_OK) return st;
+        for (i = 0; i < dim; ++i) {
+            jacobian_data[i * dim + j] =
+                (rhs_perturbed[i] - base[i]) / delta;
+        }
+    }
+    return lmmc_ode_values_are_finite(jacobian_data, jacobian_count);
 }
 
 #endif

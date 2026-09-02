@@ -253,6 +253,47 @@ static int test_random_seeds_reproducibility(void)
     return 0;
 }
 
+static int test_fixed_seed_regression(void)
+{
+    static const uint64_t expected_u64[] = {
+        UINT64_C(0xa2c2a42038d4ec3d),
+        UINT64_C(0x05fc25d0738e7b0f),
+        UINT64_C(0x625e7bff938e701e),
+        UINT64_C(0x1ba4ddc6fe2b5726)
+    };
+    static const lmmc_real_t expected_normal[] = {
+        0x1.89664beb94724p-5,
+        0x1.0c54e795c686fp-2,
+        0x1.c0158b0e1bdf0p-3,
+        0x1.8829d4c784351p-1,
+        -0x1.228d0c34782e4p+0,
+        -0x1.b04618c23fcd1p+0
+    };
+    const uint64_t seed = UINT64_C(0x0123456789abcdef);
+    lmmc_rng_t* rng = NULL;
+    size_t i;
+
+    CHECK(lmmc_rng_create(&rng) == LMMC_STATUS_OK,
+          "fixed regression RNG creation failed");
+    CHECK(lmmc_rng_seed(rng, seed) == LMMC_STATUS_OK,
+          "fixed regression RNG seeding failed");
+    for (i = 0; i < sizeof(expected_u64) / sizeof(expected_u64[0]); ++i) {
+        CHECK(lmmc_rng_next_u64(rng) == expected_u64[i],
+              "fixed u64 sequence changed at index %zu", i);
+    }
+    CHECK(lmmc_rng_seed(rng, seed) == LMMC_STATUS_OK,
+          "fixed normal regression reseeding failed");
+    for (i = 0; i < sizeof(expected_normal) / sizeof(expected_normal[0]); ++i) {
+        lmmc_real_t value = 0.0;
+        CHECK(lmmc_rng_normal(rng, 0.0, 1.0, &value) == LMMC_STATUS_OK,
+              "fixed normal generation failed at index %zu", i);
+        CHECK(value == expected_normal[i],
+              "fixed normal sequence changed at index %zu", i);
+    }
+    lmmc_rng_destroy(rng);
+    return 0;
+}
+
 
 int main(void)
 {
@@ -280,6 +321,10 @@ int main(void)
     printf("\n--- Re-seeding resets state ---\n");
     if (test_reseed_resets_state()) { rc = 1; printf("  [FAIL] reseed resets state\n"); }
     else { printf("  [PASS] reseed resets state\n"); }
+
+    printf("\n--- Fixed-seed sequence regression ---\n");
+    if (test_fixed_seed_regression()) { rc = 1; printf("  [FAIL] fixed sequence\n"); }
+    else { printf("  [PASS] fixed sequence\n"); }
 
     printf("\n");
     if (rc == 0) {

@@ -55,7 +55,7 @@ typedef enum {
  *
  * @return ::LMMC_STATUS_OK 成功;
  *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n < 3 或指针为 NULL;
- *         ::LMMC_STATUS_ALLOC_FAILED 若内存分配失败.
+ *         ::LMMC_STATUS_ALLOCATION_FAILED 若内存分配失败.
  *
  * @par 副作用
  * - 分配堆内存存储样条系数,调用方必须调用 ::lmmc_interp_cspline_destroy 释放.
@@ -86,7 +86,7 @@ lmmc_status_t lmmc_interp_cspline_create(
  * @return ::LMMC_STATUS_OK 成功;
  *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n < 3,xs 非严格升序,
  *         PERIODIC 模式下首尾 y 值不匹配,或指针为 NULL;
- *         ::LMMC_STATUS_ALLOC_FAILED 若内存分配失败.
+ *         ::LMMC_STATUS_ALLOCATION_FAILED 若内存分配失败.
  *
  * @note 对于 LMMC_SPLINE_PERIODIC,要求 |ys[0] - ys[n-1]| <= 1e-12,否则返回
  *       LMMC_STATUS_INVALID_ARGUMENT.
@@ -134,7 +134,7 @@ typedef struct lmmc_interp_pchip_t lmmc_interp_pchip_t;
  *
  * @return ::LMMC_STATUS_OK 成功;
  *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n < 2,xs 非严格升序或指针为 NULL;
- *         ::LMMC_STATUS_ALLOC_FAILED 若内存分配失败.
+ *         ::LMMC_STATUS_ALLOCATION_FAILED 若内存分配失败.
  *
  * @par 副作用
  * - 分配堆内存存储插值系数,调用方必须调用 ::lmmc_interp_pchip_destroy 释放.
@@ -176,7 +176,7 @@ typedef struct lmmc_interp_akima_t lmmc_interp_akima_t;
  *
  * @return ::LMMC_STATUS_OK 成功;
  *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n < 5,xs 非严格升序或指针为 NULL;
- *         ::LMMC_STATUS_ALLOC_FAILED 若内存分配失败.
+ *         ::LMMC_STATUS_ALLOCATION_FAILED 若内存分配失败.
  *
  * @par 副作用
  * - 分配堆内存存储插值系数,调用方必须调用 ::lmmc_interp_akima_destroy 释放.

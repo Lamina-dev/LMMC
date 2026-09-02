@@ -33,8 +33,8 @@ lmmc_status_t lmmc_sparse_builder_create(size_t rows, size_t cols, size_t initia
 
     size_t sz_idx = 0;
     size_t sz_vals = 0;
-    if (lmmc_mul_overflow_size(b->capacity, sizeof(size_t), &sz_idx) ||
-        lmmc_mul_overflow_size(b->capacity, sizeof(lmmc_real_t), &sz_vals)) {
+    if (!lmmc_safe_mul_size(b->capacity, sizeof(size_t), &sz_idx) ||
+        !lmmc_safe_mul_size(b->capacity, sizeof(lmmc_real_t), &sz_vals)) {
         lmmc_free(b);
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
@@ -67,9 +67,9 @@ lmmc_status_t lmmc_sparse_builder_add(lmmc_sparse_builder_t* b, size_t row, size
         size_t* nc = NULL;
         lmmc_real_t* nv = NULL;
 
-        if (lmmc_mul_overflow_size(b->capacity, 2, &new_cap) ||
-            lmmc_mul_overflow_size(new_cap, sizeof(size_t), &sz_idx) ||
-            lmmc_mul_overflow_size(new_cap, sizeof(lmmc_real_t), &sz_vals)) {
+        if (!lmmc_safe_mul_size(b->capacity, 2, &new_cap) ||
+            !lmmc_safe_mul_size(new_cap, sizeof(size_t), &sz_idx) ||
+            !lmmc_safe_mul_size(new_cap, sizeof(lmmc_real_t), &sz_vals)) {
             return LMMC_STATUS_ALLOCATION_FAILED;
         }
 
@@ -185,8 +185,8 @@ lmmc_status_t lmmc_sparse_coo_create(
 
     actual_cap = capacity > 0 ? capacity : 16;
 
-    if (lmmc_mul_overflow_size(actual_cap, sizeof(size_t), &sz_idx) ||
-        lmmc_mul_overflow_size(actual_cap, sizeof(lmmc_real_t), &sz_vals)) {
+    if (!lmmc_safe_mul_size(actual_cap, sizeof(size_t), &sz_idx) ||
+        !lmmc_safe_mul_size(actual_cap, sizeof(lmmc_real_t), &sz_vals)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -235,9 +235,9 @@ lmmc_status_t lmmc_sparse_coo_add_entry(
         size_t* nc = NULL;
         lmmc_real_t* nv = NULL;
 
-        if (lmmc_mul_overflow_size(coo->capacity, 2, &new_cap) ||
-            lmmc_mul_overflow_size(new_cap, sizeof(size_t), &sz_idx) ||
-            lmmc_mul_overflow_size(new_cap, sizeof(lmmc_real_t), &sz_vals)) {
+        if (!lmmc_safe_mul_size(coo->capacity, 2, &new_cap) ||
+            !lmmc_safe_mul_size(new_cap, sizeof(size_t), &sz_idx) ||
+            !lmmc_safe_mul_size(new_cap, sizeof(lmmc_real_t), &sz_vals)) {
             return LMMC_STATUS_ALLOCATION_FAILED;
         }
 

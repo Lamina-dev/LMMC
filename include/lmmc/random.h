@@ -23,15 +23,15 @@ typedef struct lmmc_rng_t lmmc_rng_t;
 /**
  * @brief 创建随机数发生器实例。
  *
- * 分配并初始化一个 xoshiro256** 发生器，初始种子由系统时间或固定值确定
- * （具体取决于编译配置）。生成器为线程不安全，多线程环境下每个线程应
- * 独立创建或使用 ::lmmc_rng_clone + ::lmmc_rng_jump 拆分子流。
+ * 分配并初始化一个 xoshiro256** 发生器。句柄由调用方拥有，默认
+ * 线程受限；跨线程传递或并发访问必须由调用方同步。并行工作负载应为
+ * 每个线程创建独立句柄，或使用 ::lmmc_rng_clone 和 ::lmmc_rng_jump。
  *
  * @param[out] out_rng 输出新创建的 RNG 句柄。
  *
  * @return ::LMMC_STATUS_OK 成功；
  *         ::LMMC_STATUS_INVALID_ARGUMENT 若 out_rng 为 NULL；
- *         ::LMMC_STATUS_ALLOC_FAILED 若内存分配失败。
+ *         ::LMMC_STATUS_ALLOCATION_FAILED 若内存分配失败。
  *
  * @par 副作用
  * - 分配堆内存存储 RNG 内部状态，调用方必须调用 ::lmmc_rng_destroy 释放。

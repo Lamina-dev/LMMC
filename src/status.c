@@ -41,6 +41,12 @@ const char* lmmc_status_string(lmmc_status_t status) {
             return "unit strip invalid";
         case LMMC_STATUS_UNIT_STRIP_LEGACY_SYNTAX:
             return "unit strip legacy syntax";
+        case LMMC_STATUS_NOT_INITIALIZED:
+            return "not initialized";
+        case LMMC_STATUS_BUSY:
+            return "busy";
+        case LMMC_STATUS_REFERENCE_LIMIT:
+            return "reference limit";
         default:
             return "unknown";
     }

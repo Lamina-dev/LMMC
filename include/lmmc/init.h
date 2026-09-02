@@ -1,55 +1,50 @@
 /**
  * @file init.h
- * @brief LMMC 库初始化与底层栈管理接口。
+ * @brief LMMC 当前线程的初始化与底层栈管理接口.
  *
- * LMMC 在内部使用 LAMMP 提供的栈分配器以减少堆分配开销。
- * 调用任何 LMMC 接口前必须先 ::lmmc_init ，使用完毕后调用
- * ::lmmc_deinit 释放。两者支持嵌套调用计数（原子引用计数）。
+ * LMMC 在内部使用 LMMP 的线程局部临时内存.每个调用线程必须独立获取
+ * 生命周期租约,并在同一线程中成对释放.
  */
 #ifndef LMMC_INIT_H
 #define LMMC_INIT_H
 
 #include <stddef.h>
 
+#include "lmmc/status.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /**
- * @brief 初始化 LMMC 库。
+ * @brief 获取当前线程的 LMMC 生命周期租约.
  *
- * 内部维护原子引用计数，多次调用是安全的；只有首次调用（0→1 转换）
- * 真正完成初始化（调用 lmmp_global_init）。
- * 必须在调用其他 LMMC 接口之前完成至少一次。
+ * 调用支持嵌套;首次获取时初始化当前线程的 LMMP 资源.
  */
-void lmmc_init(void);
+lmmc_status_t lmmc_init(void);
 
 /**
- * @brief 反初始化 LMMC 库。
+ * @brief 释放当前线程的一层 LMMC 生命周期租约.
  *
- * 与 ::lmmc_init 配对使用，原子引用计数归零时（1→0 转换）执行真正的清理：
- * 释放栈分配器并调用 lmmp_global_deinit。
- *
- * 当编译时定义了 LMMC_DEBUG_LEAKS 宏，可在反初始化前通过
- * ::lmmc_debug_leaks_get_count 查询未释放的分配。
+ * 最后一层租约仅在当前线程没有活动 LMMC 分配时释放;否则返回
+ * ::LMMC_STATUS_BUSY 且保留租约和资源。
  */
-void lmmc_deinit(void);
+lmmc_status_t lmmc_deinit(void);
 
 /**
- * @brief 重置内部栈分配器到指定容量。
+ * @brief 重置当前线程的 LMMP 临时栈容量.
  *
- * 通常用于在大规模运算之间释放栈上残留分配，或调整可用栈尺寸。
- *
- * @param size 新的栈容量（字节数）。
+ * 当前线程必须恰好持有一层生命周期租约且没有活动 LMMC 分配;
+ * 存在嵌套租约或活动对象时返回 ::LMMC_STATUS_BUSY.
  */
-void lmmc_stack_reset(size_t size);
+lmmc_status_t lmmc_stack_reset(size_t size);
 
 #ifdef LMMC_DEBUG_LEAKS
 /**
  * @brief 记录一次分配（调试泄漏追踪）。
  *
  * 仅在 LMMC_DEBUG_LEAKS 编译宏启用时可用。
- * 内部使用原子计数器追踪分配数量。
+ * 计数按线程隔离，并与 LMMC 内部分配桥接共享。
  */
 void lmmc_debug_leaks_alloc(void);
 

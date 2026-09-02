@@ -259,8 +259,13 @@ int main(void) {
 
 
     {
-        st = lmmc_quad_gauss_legendre(fn_const, NULL, 0.0, 1.0, 1, &result);
-        if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; goto done; }
+        st = lmmc_quad_gauss_legendre(
+            fn_const, NULL, 0.0, 1.0, 1, &result);
+        if (st != LMMC_STATUS_OK ||
+            !lmmc_test_nearly_equal(result, 1.0, 1e-12)) {
+            rc = 1;
+            goto done;
+        }
 
         st = lmmc_quad_gauss_legendre(fn_const, NULL, 0.0, 1.0, 21, &result);
         if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; goto done; }
