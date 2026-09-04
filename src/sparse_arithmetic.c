@@ -100,7 +100,7 @@ lmmc_status_t lmmc_sparse_add(
     }
 
 
-    {
+    if (nnz_c > 0) {
         lmmc_real_t tmp_a; LMMC_REAL_INIT(&tmp_a);
         lmmc_real_t tmp_b; LMMC_REAL_INIT(&tmp_b);
         size_t c_idx = 0;

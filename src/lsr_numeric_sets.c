@@ -75,6 +75,7 @@ static lmmc_status_t lmmc_lsr_num_set_append_unique(
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }
     if (lmmc_lsr_num_set_index_of(set, value) >= 0) return LMMC_STATUS_OK;
+    if (!set->data) return LMMC_STATUS_INVALID_ARGUMENT;
     set->data[set->size++] = lmmc_lsr_num_set_key(value);
     return LMMC_STATUS_OK;
 }

@@ -55,6 +55,7 @@ static inline int lmmc_safe_add_size(size_t a, size_t b, size_t *result)
     return 1;
 }
 
+
 typedef struct lmmc_storage_envelope {
     uintptr_t begin;
     uintptr_t end;

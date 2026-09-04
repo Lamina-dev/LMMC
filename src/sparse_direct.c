@@ -119,6 +119,12 @@ static lmmc_status_t bucketed_greedy_residual_degree_reorder(
     size_t current_min = SIZE_MAX;
 
     if (n == 0) return LMMC_STATUS_OK;
+    if (!col_ptr || !perm) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (col_ptr[n] == 0) {
+        for (size_t i = 0; i < n; ++i) perm[i] = i;
+        return LMMC_STATUS_OK;
+    }
+    if (!row_idx) return LMMC_STATUS_INVALID_ARGUMENT;
     if (!lmmc_safe_mul_size(n, sizeof(size_t), &bytes)) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
@@ -262,6 +268,13 @@ static lmmc_status_t build_symmetric_simple_graph(
         }
     }
     raw_nnz = graph_col_ptr[n];
+    if (raw_nnz == 0) {
+        lmmc_free(cursor);
+        lmmc_free(stamp);
+        *out_graph_col_ptr = graph_col_ptr;
+        *out_graph_row_idx = NULL;
+        return LMMC_STATUS_OK;
+    }
     if (!lmmc_safe_mul_size(raw_nnz, sizeof(size_t), &index_bytes)) {
         lmmc_free(graph_col_ptr);
         lmmc_free(cursor);
@@ -743,8 +756,13 @@ lmmc_status_t lmmc_sparse_chol_symbolic(
             return status;
         }
 
-        status = bucketed_greedy_residual_degree_reorder(
-            n, sym_col_ptr, sym_row_idx, chol->perm);
+        if (sym_row_idx) {
+            status = bucketed_greedy_residual_degree_reorder(
+                n, sym_col_ptr, sym_row_idx, chol->perm);
+        } else {
+            for (size_t i = 0; i < n; ++i) chol->perm[i] = i;
+            status = LMMC_STATUS_OK;
+        }
 
         lmmc_free(sym_col_ptr);
         if (sym_row_idx) lmmc_free(sym_row_idx);

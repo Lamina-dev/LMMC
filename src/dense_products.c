@@ -7,7 +7,6 @@
 #include <string.h>
 #include "memory_bridge.h"
 #include "internal.h"
-#include "blas_backend.h"
 #include "lmmc/config.h"
 #include "lmmc/dense.h"
 #include "lmmc/linear_algebra.h"
@@ -43,19 +42,6 @@ lmmc_status_t lmmc_mat_gemm(lmmc_real_t alpha, const lmmc_mat_t* A, int transA,
     size_t b_stride = B->stride;
     size_t c_stride = C->stride;
 
-#ifdef LMMC_USE_BLAS
-    {
-        /* Route through BLAS dgemm with transpose support */
-        lmmc_blas_dgemm_ex(transA, transB,
-                           M, N, K,
-                           alpha,
-                           a_data, a_stride,
-                           b_data, b_stride,
-                           beta,
-                           c_data, c_stride);
-        return LMMC_STATUS_OK;
-    }
-#endif
 
     /* Scale C by beta */
     if (beta == 0.0) {
@@ -197,18 +183,6 @@ lmmc_status_t lmmc_mat_gemv(lmmc_real_t alpha, const lmmc_mat_t* A, int transA,
     const lmmc_real_t* restrict a_data = A->data;
     size_t a_stride = A->stride;
 
-#ifdef LMMC_USE_BLAS
-    {
-        char trans_char = transA ? 'T' : 'N';
-        lmmc_blas_dgemv(trans_char, A->rows, A->cols,
-                        alpha,
-                        a_data, a_stride,
-                        x->data, 1,
-                        beta,
-                        y->data, 1);
-        return LMMC_STATUS_OK;
-    }
-#endif
 
     /* Scale y by beta */
     if (beta == 0.0) {
@@ -276,11 +250,6 @@ lmmc_status_t lmmc_vec_axpy(lmmc_real_t alpha, const lmmc_vec_t* x, lmmc_vec_t* 
         return LMMC_STATUS_DIMENSION_MISMATCH;
     }
 
-#ifdef LMMC_USE_BLAS
-
-    lmmc_blas_daxpy(x->size, alpha, x->data, 1, y->data, 1);
-    return LMMC_STATUS_OK;
-#else
     lmmc_real_t tmp_mul; LMMC_REAL_INIT(&tmp_mul);
     lmmc_real_t tmp_sum; LMMC_REAL_INIT(&tmp_sum);
 
@@ -293,6 +262,5 @@ lmmc_status_t lmmc_vec_axpy(lmmc_real_t alpha, const lmmc_vec_t* x, lmmc_vec_t* 
     LMMC_REAL_CLEAR(&tmp_mul);
     LMMC_REAL_CLEAR(&tmp_sum);
     return LMMC_STATUS_OK;
-#endif
 }
 

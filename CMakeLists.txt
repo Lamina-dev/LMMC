@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.26)
-project(LMMC LANGUAGES C)
+project(LMMC VERSION 1.0.0 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -23,13 +23,14 @@ endif()
 option(LMMC_BUILD_TESTS "Build LMMC tests" ${PROJECT_IS_TOP_LEVEL})
 option(LMMC_BUILD_EXAMPLES "Build LMMC examples" ${PROJECT_IS_TOP_LEVEL})
 option(LMMC_BUILD_SHARED "Build LMMC as a shared library" ON)
-option(LMMC_USE_BLAS "Enable external BLAS/LAPACK acceleration" OFF)
 set(LMMC_LMMP_ASM "AUTO" CACHE STRING "LMMP assembly mode")
 set_property(CACHE LMMC_LMMP_ASM PROPERTY STRINGS GENERIC X64 ARM64 AUTO)
 option(LMMC_WARNINGS_AS_ERRORS "Treat LMMC compiler warnings as errors" OFF)
 option(LMMC_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(LMMC_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(LMMC_ENABLE_COVERAGE "Enable compiler coverage instrumentation" OFF)
+option(LMMC_ENABLE_CLANG_TIDY "Run clang-tidy on LMMC C sources" OFF)
+option(LMMC_DEBUG_LEAKS "Track live persistent bridge allocations" OFF)
 
 if(LMMC_ENABLE_SANITIZERS AND LMMC_ENABLE_TSAN)
     message(FATAL_ERROR "LMMC_ENABLE_SANITIZERS and LMMC_ENABLE_TSAN are mutually exclusive")
@@ -135,10 +136,9 @@ if(LMMC_BUILD_SHARED)
     set_target_properties(lmmc PROPERTIES
         OUTPUT_NAME lmmc
         EXPORT_NAME lmmc
+        VERSION "${PROJECT_VERSION}"
+        SOVERSION "${PROJECT_VERSION_MAJOR}"
     )
-    if(WIN32)
-        set_target_properties(lmmc PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
-    endif()
 else()
     add_library(lmmc STATIC ${LMMC_SOURCES})
 endif()
@@ -151,6 +151,73 @@ target_include_directories(lmmc SYSTEM
     PUBLIC
         $<BUILD_INTERFACE:${_lmmc_lmmp_include}>
 )
+# Export only declarations from the installed C API. Test-only hooks are
+# included only in test builds.
+file(GLOB_RECURSE _lmmc_public_headers CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/lmmc/*.h")
+set(_lmmc_export_headers ${_lmmc_public_headers})
+set(_lmmc_export_symbols)
+if(LMMC_BUILD_TESTS)
+    list(APPEND _lmmc_export_symbols lmmc_memory_fail_after_for_test)
+endif()
+foreach(_lmmc_header IN LISTS _lmmc_export_headers)
+    file(READ "${_lmmc_header}" _lmmc_header_content)
+    string(REGEX MATCHALL "lmmc_[A-Za-z0-9_]+[ \t\r\n]*\\("
+        _lmmc_header_symbols "${_lmmc_header_content}")
+    foreach(_lmmc_symbol IN LISTS _lmmc_header_symbols)
+        string(REGEX REPLACE "[ \t\r\n]*\\($" "" _lmmc_symbol
+            "${_lmmc_symbol}")
+        list(APPEND _lmmc_export_symbols "${_lmmc_symbol}")
+    endforeach()
+    string(REGEX MATCHALL
+        "lmmc_[A-Za-z0-9_]+[ \t\r\n]*\\([ \t\r\n]*\\*"
+        _lmmc_callback_return_types "${_lmmc_header_content}")
+    foreach(_lmmc_return_type IN LISTS _lmmc_callback_return_types)
+        string(REGEX REPLACE "[ \t\r\n]*\\([ \t\r\n]*\\*$" ""
+            _lmmc_return_type "${_lmmc_return_type}")
+        list(REMOVE_ITEM _lmmc_export_symbols "${_lmmc_return_type}")
+    endforeach()
+    string(REGEX MATCHALL
+        "\\(\\*[ \t\r\n]*lmmc_[A-Za-z0-9_]+[ \t\r\n]*\\("
+        _lmmc_header_callbacks "${_lmmc_header_content}")
+    foreach(_lmmc_callback IN LISTS _lmmc_header_callbacks)
+        string(REGEX REPLACE
+            "^\\(\\*[ \t\r\n]*|[ \t\r\n]*\\($" ""
+            _lmmc_callback "${_lmmc_callback}")
+        list(REMOVE_ITEM _lmmc_export_symbols "${_lmmc_callback}")
+    endforeach()
+endforeach()
+if(NOT LMMC_DEBUG_LEAKS)
+    list(REMOVE_ITEM _lmmc_export_symbols lmmc_debug_leaks_get_count)
+endif()
+list(REMOVE_DUPLICATES _lmmc_export_symbols)
+list(SORT _lmmc_export_symbols)
+
+if(WIN32 AND LMMC_BUILD_SHARED)
+    set(_lmmc_export_file "${CMAKE_CURRENT_BINARY_DIR}/lmmc.exports.def")
+    file(WRITE "${_lmmc_export_file}" "EXPORTS\n")
+    foreach(_lmmc_symbol IN LISTS _lmmc_export_symbols)
+        file(APPEND "${_lmmc_export_file}" "    ${_lmmc_symbol}\n")
+    endforeach()
+    target_sources(lmmc PRIVATE "${_lmmc_export_file}")
+elseif(APPLE AND LMMC_BUILD_SHARED)
+    set(_lmmc_export_file "${CMAKE_CURRENT_BINARY_DIR}/lmmc.exports")
+    file(WRITE "${_lmmc_export_file}" "")
+    foreach(_lmmc_symbol IN LISTS _lmmc_export_symbols)
+        file(APPEND "${_lmmc_export_file}" "_${_lmmc_symbol}\n")
+    endforeach()
+    target_link_options(lmmc PRIVATE
+        "LINKER:-exported_symbols_list,${_lmmc_export_file}")
+elseif(UNIX AND LMMC_BUILD_SHARED)
+    set(_lmmc_export_file "${CMAKE_CURRENT_BINARY_DIR}/lmmc.exports.map")
+    file(WRITE "${_lmmc_export_file}" "LMMC_1.0 {\n  global:\n")
+    foreach(_lmmc_symbol IN LISTS _lmmc_export_symbols)
+        file(APPEND "${_lmmc_export_file}" "    ${_lmmc_symbol};\n")
+    endforeach()
+    file(APPEND "${_lmmc_export_file}" "  local: *;\n};\n")
+    target_link_options(lmmc PRIVATE
+        "LINKER:--version-script,${_lmmc_export_file}")
+endif()
 target_include_directories(lmmc PRIVATE "${_lmmc_lmmp_include}/lmmp")
 if(UNIX)
     target_link_libraries(lmmc PUBLIC m)
@@ -161,14 +228,16 @@ if(WIN32)
     target_compile_definitions(lmmc PRIVATE LMMP_WINDOWS)
 endif()
 
-# Optional BLAS/LAPACK acceleration
-if(LMMC_USE_BLAS)
-    target_sources(lmmc PRIVATE src/blas_backend.c)
-    find_package(BLAS REQUIRED)
-    find_package(LAPACK REQUIRED)
-    target_compile_definitions(lmmc PRIVATE LMMC_USE_BLAS=1)
-    target_link_libraries(lmmc PRIVATE ${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
+if(LMMC_ENABLE_CLANG_TIDY)
+    find_program(LMMC_CLANG_TIDY_EXECUTABLE NAMES clang-tidy REQUIRED)
+    set_property(TARGET lmmc PROPERTY C_CLANG_TIDY
+        "${LMMC_CLANG_TIDY_EXECUTABLE};--config-file=${CMAKE_CURRENT_SOURCE_DIR}/../.clang-tidy")
 endif()
+
+if(LMMC_DEBUG_LEAKS)
+    target_compile_definitions(lmmc PUBLIC LMMC_DEBUG_LEAKS=1)
+endif()
+
 
 if(TARGET lmmp)
     target_link_libraries(lmmc PUBLIC lmmp)

@@ -7,7 +7,6 @@
 #include <string.h>
 #include "memory_bridge.h"
 #include "internal.h"
-#include "blas_backend.h"
 #include "lmmc/config.h"
 #include "lmmc/dense.h"
 #include "lmmc/linear_algebra.h"
@@ -51,11 +50,6 @@ lmmc_status_t lmmc_vec_norm2(const lmmc_vec_t* x, lmmc_real_t* out_norm) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-#ifdef LMMC_USE_BLAS
-
-    *out_norm = lmmc_blas_dnrm2(x->size, x->data, 1);
-    return LMMC_STATUS_OK;
-#else
     lmmc_real_t sum; LMMC_REAL_INIT(&sum);
     lmmc_real_t tmp_mul; LMMC_REAL_INIT(&tmp_mul);
     lmmc_real_t tmp_sum; LMMC_REAL_INIT(&tmp_sum);
@@ -72,7 +66,6 @@ lmmc_status_t lmmc_vec_norm2(const lmmc_vec_t* x, lmmc_real_t* out_norm) {
     LMMC_REAL_CLEAR(&tmp_mul);
     LMMC_REAL_CLEAR(&tmp_sum);
     return LMMC_STATUS_OK;
-#endif
 }
 
 lmmc_status_t lmmc_vec_norm_inf(const lmmc_vec_t* x, lmmc_real_t* out_norm) {

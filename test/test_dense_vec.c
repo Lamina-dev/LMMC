@@ -440,9 +440,9 @@ int main(void)
 
     printf("\n");
     if (rc == 0) {
-        printf("All BLAS L1 vector property tests PASSED.\n");
+        printf("All dense vector property tests PASSED.\n");
     } else {
-        printf("Some BLAS L1 vector property tests FAILED.\n");
+        printf("Some dense vector property tests FAILED.\n");
     }
 
     return rc;

@@ -140,7 +140,7 @@ FILE_PATTERNS          = *.c \
                          *.h \
                          *.md
 RECURSIVE              = YES
-EXCLUDE                = src/blas_backend.h
+EXCLUDE                =
 EXCLUDE_SYMLINKS       = NO
 EXCLUDE_PATTERNS       = */build*/* \
                          */LMMP/* \
@@ -351,8 +351,7 @@ EXPAND_ONLY_PREDEF     = YES
 SEARCH_INCLUDES        = YES
 INCLUDE_PATH           = include
 INCLUDE_FILE_PATTERNS  = *.h
-PREDEFINED             = LMMC_USE_BLAS=1 \
-                         LMMC_DEBUG_LEAKS=1 \
+PREDEFINED             = LMMC_DEBUG_LEAKS=1 \
                          __cplusplus
 EXPAND_AS_DEFINED      =
 SKIP_FUNCTION_MACROS   = YES

@@ -24,41 +24,40 @@ extern "C" {
 lmmc_status_t lmmc_init(void);
 
 /**
- * @brief 释放当前线程的一层 LMMC 生命周期租约.
+ * @brief Release one lifecycle lease owned by the current thread.
  *
- * 最后一层租约仅在当前线程没有活动 LMMC 分配时释放;否则返回
- * ::LMMC_STATUS_BUSY 且保留租约和资源。
+ * A final matching call releases only the current thread's LMMP temporary
+ * stack state. Persistent LMMC objects use the recoverable heap bridge and may
+ * outlive deinitialization; concurrent mutation still requires external
+ * synchronization.
+ *
+ * @return @c LMMC_STATUS_OK on success or
+ *         @c LMMC_STATUS_NOT_INITIALIZED when no lease is active.
  */
 lmmc_status_t lmmc_deinit(void);
 
 /**
- * @brief 重置当前线程的 LMMP 临时栈容量.
+ * @brief Reset the current thread's LMMP temporary-stack capacity.
  *
- * 当前线程必须恰好持有一层生命周期租约且没有活动 LMMC 分配;
- * 存在嵌套租约或活动对象时返回 ::LMMC_STATUS_BUSY.
+ * The reset is rejected only while this thread holds nested lifecycle leases.
+ * Persistent vectors, matrices, tensors, interpolation objects, and RNG
+ * handles do not block a temporary-stack reset.
+ *
+ * @param pool_size Requested LMMP temporary-pool size in bytes.
+ * @return @c LMMC_STATUS_OK on success, @c LMMC_STATUS_NOT_INITIALIZED
+ *         without an active lease, or @c LMMC_STATUS_BUSY for a nested lease.
  */
-lmmc_status_t lmmc_stack_reset(size_t size);
+lmmc_status_t lmmc_stack_reset(size_t pool_size);
 
 #ifdef LMMC_DEBUG_LEAKS
 /**
- * @brief 记录一次分配（调试泄漏追踪）。
+ * @brief Get the number of persistent allocations currently owned by LMMC.
  *
- * 仅在 LMMC_DEBUG_LEAKS 编译宏启用时可用。
- * 计数按线程隔离，并与 LMMC 内部分配桥接共享。
- */
-void lmmc_debug_leaks_alloc(void);
-
-/**
- * @brief 记录一次释放（调试泄漏追踪）。
+ * Available only when compiled with @c LMMC_DEBUG_LEAKS. The process-wide
+ * atomic count follows bridge allocations and remains correct when an object
+ * is destroyed on a different thread.
  *
- * 仅在 LMMC_DEBUG_LEAKS 编译宏启用时可用。
- */
-void lmmc_debug_leaks_free(void);
-
-/**
- * @brief 获取当前未释放的分配计数。
- *
- * @return 当前未释放的分配数量。
+ * @return Current live bridge-allocation count.
  */
 long long lmmc_debug_leaks_get_count(void);
 #endif /* LMMC_DEBUG_LEAKS */

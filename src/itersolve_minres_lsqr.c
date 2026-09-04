@@ -248,7 +248,6 @@ lmmc_status_t lmmc_minres_solve(
     /* Initialize Givens rotation state */
     sn_prev = 0.0;
     cs_curr = 1.0; sn_curr = 0.0;
-    epsilon_curr = 0.0;
 
     /* Main MINRES iteration */
     {

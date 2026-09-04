@@ -191,6 +191,11 @@ lmmc_status_t lmmc_sparse_dense_to_bsr(const lmmc_mat_t* dense, size_t block_siz
         LMMC_REAL_CLEAR(&zero);
         return st;
     }
+    if (nnz_blocks == 0) {
+        LMMC_REAL_CLEAR(&abs_v);
+        LMMC_REAL_CLEAR(&zero);
+        return LMMC_STATUS_OK;
+    }
 
     /* 第二遍：填充数据 */
     nz_idx = 0;

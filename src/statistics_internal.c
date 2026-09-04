@@ -35,9 +35,6 @@ lmmc_real_t regularized_gamma_upper_cf(lmmc_real_t a, lmmc_real_t x) {
     int i;
     lmmc_real_t tiny = 1e-30;
 
-    f = tiny;
-    c = tiny;
-    d = 0.0;
 
     /* CF: b0 = 0, a1 = 1, b1 = x - a + 1, a_i = (i-1)*(a - (i-1)), b_i = x - a + 2*i - 1 */
     /* Modified Lentz: start with b0 = x - a + 1 */

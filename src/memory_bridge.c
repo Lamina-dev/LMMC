@@ -7,6 +7,11 @@
 #include <stdatomic.h>
 #endif
 
+#ifdef LMMC_DEBUG_LEAKS
+static void lmmc_debug_leaks_alloc(void);
+static void lmmc_debug_leaks_free(void);
+#endif
+
 #ifdef LMMC_BUILD_TESTS
 static _Atomic size_t lmmc_memory_fail_after = SIZE_MAX;
 
@@ -39,16 +44,26 @@ static int lmmc_memory_should_fail(void) { return 0; }
 
 void* lmmc_memory_alloc(size_t size) {
     if (lmmc_memory_should_fail()) return NULL;
-    return malloc(size);
+    void* pointer = malloc(size);
+#ifdef LMMC_DEBUG_LEAKS
+    if (pointer != NULL) lmmc_debug_leaks_alloc();
+#endif
+    return pointer;
 }
 
 void lmmc_memory_free(void* pointer) {
+#ifdef LMMC_DEBUG_LEAKS
+    if (pointer != NULL) lmmc_debug_leaks_free();
+#endif
     free(pointer);
 }
 
 void* lmmc_memory_realloc(void* pointer, size_t size) {
     if (pointer == NULL) return lmmc_memory_alloc(size);
     if (size == 0) {
+#ifdef LMMC_DEBUG_LEAKS
+        lmmc_debug_leaks_free();
+#endif
         free(pointer);
         return NULL;
     }
@@ -59,12 +74,12 @@ void* lmmc_memory_realloc(void* pointer, size_t size) {
 #ifdef LMMC_DEBUG_LEAKS
 static _Atomic size_t lmmc_debug_allocation_count = 0;
 
-void lmmc_debug_leaks_alloc(void) {
+static void lmmc_debug_leaks_alloc(void) {
     atomic_fetch_add_explicit(
         &lmmc_debug_allocation_count, 1, memory_order_relaxed);
 }
 
-void lmmc_debug_leaks_free(void) {
+static void lmmc_debug_leaks_free(void) {
     size_t count = atomic_load_explicit(
         &lmmc_debug_allocation_count, memory_order_relaxed);
     while (count != 0 && !atomic_compare_exchange_weak_explicit(

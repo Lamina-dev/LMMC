@@ -1,6 +1,6 @@
 /**
  * @file dense.h
- * @brief 稠密矩阵 / 向量数据结构与基本运算(含 BLAS Level 1 / 2 接口).
+ * @brief 稠密矩阵 / 向量数据结构与基本运算.
  *
  * 本模块提供按行优先存储的二维稠密矩阵 ::lmmc_mat_t 与一维稠密向量
  * ::lmmc_vec_t ,并涵盖创建,包装,销毁,复制,转置,矩阵乘法,
@@ -163,7 +163,7 @@ lmmc_status_t lmmc_mat_transpose_to(const lmmc_mat_t* src, lmmc_mat_t* dst);
  *
  * op(X) = X(transX==0)或 X^T(transX!=0).
  * 设 op(A) 为 MxK,op(B) 为 KxN,则 C 必须为 MxN.
- * 当 LMMC_USE_BLAS 编译时,路由到外部 BLAS dgemm;否则使用内置分块三重循环(块大小 64).
+ * 使用内置分块三重循环实现，块大小为 64.
  *
  * @param[in]     alpha  标量乘子 alpha.
  * @param[in]     A      输入矩阵 A(不被修改).
@@ -189,7 +189,6 @@ lmmc_status_t lmmc_mat_gemm(lmmc_real_t alpha, const lmmc_mat_t* A, int transA,
  *
  * op(A) 为 MxN 时,要求 x->size==N,y->size==M。
  * y 的半开存储包络不得与 A 或 x 的存储包络重叠。
- * 当 LMMC_USE_BLAS 编译时路由到外部 BLAS dgemv.
  *
  * @param[in]     alpha  标量乘子 alpha.
  * @param[in]     A      输入矩阵 A(不被修改).
@@ -342,7 +341,6 @@ lmmc_status_t lmmc_mat_vec_mul(const lmmc_mat_t* a, const lmmc_vec_t* x, lmmc_ve
 /**
  * @brief 计算向量的欧几里得(L2)范数:@f$\|x\|_2 = \sqrt{\sum_i x_i^2}@f$.
  *
- * 当 LMMC_USE_BLAS 编译时路由到 dnrm2.
  *
  * @param[in]  x        输入向量(不被修改),size 必须 > 0.
  * @param[out] out_norm 输出范数值(非负).
@@ -389,7 +387,7 @@ lmmc_status_t lmmc_vec_scale(lmmc_vec_t* x, lmmc_real_t alpha);
 /**
  * @brief 向量 AXPY 运算:@f$y \leftarrow \alpha \cdot x + y@f$.
  *
- * 当 LMMC_USE_BLAS 编译时路由到 daxpy.x 与 y 长度须相同.
+ * x 与 y 长度须相同.
  *
  * @param[in]     alpha 缩放因子.
  * @param[in]     x     输入向量(不被修改).
@@ -455,7 +453,7 @@ lmmc_status_t lmmc_vec_swap(lmmc_vec_t* x, lmmc_vec_t* y);
 lmmc_status_t lmmc_vec_asum(const lmmc_vec_t* x, lmmc_real_t* out_asum);
 
 /**
- * @brief 返回绝对值最大元素的下标(BLAS idamax 语义).
+ * @brief 返回绝对值最大元素的下标.
  *
  * 若有多个相同最大值,返回最小下标.
  *

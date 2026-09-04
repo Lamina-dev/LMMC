@@ -118,6 +118,7 @@ lmmc_status_t lmmc_dist_t_cdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out) {
 lmmc_status_t lmmc_dist_t_quantile(lmmc_real_t p, lmmc_real_t df, lmmc_real_t* out) {
     /* Newton's method using t CDF and PDF */
     lmmc_real_t x, cdf_val, pdf_val;
+    lmmc_status_t status;
     int iter;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
     if (df <= 0.0) return LMMC_STATUS_INVALID_ARGUMENT;
@@ -128,8 +129,10 @@ lmmc_status_t lmmc_dist_t_quantile(lmmc_real_t p, lmmc_real_t df, lmmc_real_t* o
 
     for (iter = 0; iter < 100; ++iter) {
         lmmc_real_t dx;
-        lmmc_dist_t_cdf(x, df, &cdf_val);
-        lmmc_dist_t_pdf(x, df, &pdf_val);
+        status = lmmc_dist_t_cdf(x, df, &cdf_val);
+        if (status != LMMC_STATUS_OK) return status;
+        status = lmmc_dist_t_pdf(x, df, &pdf_val);
+        if (status != LMMC_STATUS_OK) return status;
         if (pdf_val < 1e-300) break;
         dx = (cdf_val - p) / pdf_val;
         x -= dx;
@@ -168,6 +171,7 @@ lmmc_status_t lmmc_dist_chi2_cdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out
 lmmc_status_t lmmc_dist_chi2_quantile(lmmc_real_t p, lmmc_real_t df, lmmc_real_t* out) {
     /* Newton's method on chi2 CDF */
     lmmc_real_t x, cdf_val, pdf_val, dx;
+    lmmc_status_t status;
     int iter;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
     if (df <= 0.0) return LMMC_STATUS_INVALID_ARGUMENT;
@@ -182,8 +186,10 @@ lmmc_status_t lmmc_dist_chi2_quantile(lmmc_real_t p, lmmc_real_t df, lmmc_real_t
     }
 
     for (iter = 0; iter < 100; ++iter) {
-        lmmc_dist_chi2_cdf(x, df, &cdf_val);
-        lmmc_dist_chi2_pdf(x, df, &pdf_val);
+        status = lmmc_dist_chi2_cdf(x, df, &cdf_val);
+        if (status != LMMC_STATUS_OK) return status;
+        status = lmmc_dist_chi2_pdf(x, df, &pdf_val);
+        if (status != LMMC_STATUS_OK) return status;
         if (pdf_val < 1e-300) break;
         dx = (cdf_val - p) / pdf_val;
         x -= dx;
@@ -228,6 +234,7 @@ lmmc_status_t lmmc_dist_f_quantile(lmmc_real_t p, lmmc_real_t df1, lmmc_real_t d
                                     lmmc_real_t* out) {
     /* Newton's method on F CDF */
     lmmc_real_t x, cdf_val, pdf_val, dx;
+    lmmc_status_t status;
     int iter;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
     if (df1 <= 0.0 || df2 <= 0.0) return LMMC_STATUS_INVALID_ARGUMENT;
@@ -238,8 +245,10 @@ lmmc_status_t lmmc_dist_f_quantile(lmmc_real_t p, lmmc_real_t df1, lmmc_real_t d
     if (x <= 0.0) x = 1.0;
 
     for (iter = 0; iter < 100; ++iter) {
-        lmmc_dist_f_cdf(x, df1, df2, &cdf_val);
-        lmmc_dist_f_pdf(x, df1, df2, &pdf_val);
+        status = lmmc_dist_f_cdf(x, df1, df2, &cdf_val);
+        if (status != LMMC_STATUS_OK) return status;
+        status = lmmc_dist_f_pdf(x, df1, df2, &pdf_val);
+        if (status != LMMC_STATUS_OK) return status;
         if (pdf_val < 1e-300) break;
         dx = (cdf_val - p) / pdf_val;
         x -= dx;
@@ -281,6 +290,7 @@ lmmc_status_t lmmc_dist_gamma_quantile(lmmc_real_t p, lmmc_real_t shape,
                                         lmmc_real_t scale, lmmc_real_t* out) {
     /* Newton's method on gamma CDF */
     lmmc_real_t x, cdf_val, pdf_val, dx;
+    lmmc_status_t status;
     int iter;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
     if (shape <= 0.0 || scale <= 0.0) return LMMC_STATUS_INVALID_ARGUMENT;
@@ -291,8 +301,10 @@ lmmc_status_t lmmc_dist_gamma_quantile(lmmc_real_t p, lmmc_real_t shape,
     if (x <= 0.0) x = 1.0;
 
     for (iter = 0; iter < 100; ++iter) {
-        lmmc_dist_gamma_cdf(x, shape, scale, &cdf_val);
-        lmmc_dist_gamma_pdf(x, shape, scale, &pdf_val);
+        status = lmmc_dist_gamma_cdf(x, shape, scale, &cdf_val);
+        if (status != LMMC_STATUS_OK) return status;
+        status = lmmc_dist_gamma_pdf(x, shape, scale, &pdf_val);
+        if (status != LMMC_STATUS_OK) return status;
         if (pdf_val < 1e-300) break;
         dx = (cdf_val - p) / pdf_val;
         x -= dx;
@@ -346,6 +358,7 @@ lmmc_status_t lmmc_dist_beta_quantile(lmmc_real_t p, lmmc_real_t alpha,
                                        lmmc_real_t beta_param, lmmc_real_t* out) {
     /* Newton's method on beta CDF */
     lmmc_real_t x, cdf_val, pdf_val, dx;
+    lmmc_status_t status;
     int iter;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
     if (alpha <= 0.0 || beta_param <= 0.0) return LMMC_STATUS_INVALID_ARGUMENT;
@@ -355,8 +368,10 @@ lmmc_status_t lmmc_dist_beta_quantile(lmmc_real_t p, lmmc_real_t alpha,
     x = alpha / (alpha + beta_param);
 
     for (iter = 0; iter < 100; ++iter) {
-        lmmc_dist_beta_cdf(x, alpha, beta_param, &cdf_val);
-        lmmc_dist_beta_pdf(x, alpha, beta_param, &pdf_val);
+        status = lmmc_dist_beta_cdf(x, alpha, beta_param, &cdf_val);
+        if (status != LMMC_STATUS_OK) return status;
+        status = lmmc_dist_beta_pdf(x, alpha, beta_param, &pdf_val);
+        if (status != LMMC_STATUS_OK) return status;
         if (pdf_val < 1e-300) break;
         dx = (cdf_val - p) / pdf_val;
         x -= dx;

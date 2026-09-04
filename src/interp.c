@@ -939,7 +939,6 @@ lmmc_status_t lmmc_interp_bicubic(
     /* Interpolate along y for each of the 4 x-rows */
     for (i = -1; i <= 2; i++) {
         /* Clamp x index */
-        xi = ix + (size_t)i;
         if (i == -1) {
             xi = (ix > 0) ? ix - 1 : 0;
         } else {
@@ -949,7 +948,6 @@ lmmc_status_t lmmc_interp_bicubic(
 
         /* Get 4 y-values for this x-row */
         for (j = -1; j <= 2; j++) {
-            yj = iy + (size_t)j;
             if (j == -1) {
                 yj = (iy > 0) ? iy - 1 : 0;
             } else {

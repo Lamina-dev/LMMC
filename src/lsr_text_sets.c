@@ -77,6 +77,7 @@ static lmmc_status_t lmmc_lsr_text_set_append_unique(
     char* copy = NULL;
     if (!set || !value) return LMMC_STATUS_INVALID_ARGUMENT;
     if (lmmc_lsr_text_set_index_of(set, value) >= 0) return LMMC_STATUS_OK;
+    if (!set->data) return LMMC_STATUS_INVALID_ARGUMENT;
     copy = lmmc_lsr_text_copy(value);
     if (!copy) return LMMC_STATUS_ALLOCATION_FAILED;
     set->data[set->size++] = copy;

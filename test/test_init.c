@@ -320,5 +320,21 @@ int main(void) {
                             LMMC_STATUS_OK)) return 1;
         lmmc_interp_cspline_destroy(spline);
     }
+#ifdef LMMC_DEBUG_LEAKS
+    {
+        const long long baseline = lmmc_debug_leaks_get_count();
+        lmmc_vec_t vector = {0};
+        lmmc_mat_t matrix = {0};
+        if (lmmc_vec_create(2, &vector) != LMMC_STATUS_OK) return 1;
+        if (lmmc_mat_create(2, 2, &matrix) != LMMC_STATUS_OK) {
+            lmmc_vec_destroy(&vector);
+            return 1;
+        }
+        if (lmmc_debug_leaks_get_count() != baseline + 2) return 1;
+        lmmc_vec_destroy(&vector);
+        lmmc_mat_destroy(&matrix);
+        if (lmmc_debug_leaks_get_count() != baseline) return 1;
+    }
+#endif
     return 0;
 }
