@@ -78,6 +78,17 @@ lmmc_status_t lmmc_sparse_sym_csr_from_csr(const lmmc_sparse_mat_t* full,
             return LMMC_STATUS_ALLOCATION_FAILED;
         }
     }
+    if (nnz_half == 0) {
+        for (i = 0; i < n; ++i) {
+            out->row_ptr[i] = 0;
+        }
+        out->row_ptr[n] = 0;
+        out->n = n;
+        out->nnz = 0;
+        out->half = half;
+        out->owns_data = 1;
+        return LMMC_STATUS_OK;
+    }
 
     /* 第二遍：填充数据 */
     nz_idx = 0;

@@ -5,7 +5,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #else
-#include <threads.h>
+#include <pthread.h>
 #endif
 
 #include "lmmc/lmmc.h"
@@ -118,17 +118,21 @@ static DWORD WINAPI rng_concurrency_thread(LPVOID argument) {
     return (DWORD)rng_concurrency_body((rng_concurrency_arg_t*)argument);
 }
 #else
-static int lifecycle_thread(void* unused) {
+static int thread_failure_token;
+
+static void* lifecycle_thread(void* unused) {
     (void)unused;
-    return lifecycle_thread_body();
+    return lifecycle_thread_body() == 0 ? NULL : &thread_failure_token;
 }
 
-static int cross_thread_destroy(void* argument) {
-    return cross_thread_destroy_body((cross_thread_state_t*)argument);
+static void* cross_thread_destroy(void* argument) {
+    return cross_thread_destroy_body((cross_thread_state_t*)argument) == 0
+        ? NULL : &thread_failure_token;
 }
 
-static int rng_concurrency_thread(void* argument) {
-    return rng_concurrency_body((rng_concurrency_arg_t*)argument);
+static void* rng_concurrency_thread(void* argument) {
+    return rng_concurrency_body((rng_concurrency_arg_t*)argument) == 0
+        ? NULL : &thread_failure_token;
 }
 #endif
 
@@ -137,8 +141,8 @@ int main(void) {
     HANDLE worker;
     DWORD worker_result = 1;
 #else
-    thrd_t worker;
-    int worker_result = 1;
+    pthread_t worker;
+    void* worker_result = &thread_failure_token;
 #endif
     cross_thread_state_t cross_thread = {0};
     rng_concurrency_state_t rng_state = {0};
@@ -146,7 +150,7 @@ int main(void) {
 #ifdef _WIN32
     HANDLE rng_workers[RNG_THREAD_COUNT] = {0};
 #else
-    thrd_t rng_workers[RNG_THREAD_COUNT];
+    pthread_t rng_workers[RNG_THREAD_COUNT];
 #endif
 
     if (!require_status("initial underflow", lmmc_deinit(),
@@ -185,8 +189,8 @@ int main(void) {
     }
     CloseHandle(worker);
 #else
-    if (thrd_create(&worker, lifecycle_thread, NULL) != thrd_success) return 1;
-    if (thrd_join(worker, &worker_result) != thrd_success || worker_result != 0) {
+    if (pthread_create(&worker, NULL, lifecycle_thread, NULL) != 0) return 1;
+    if (pthread_join(worker, &worker_result) != 0 || worker_result != NULL) {
         return 1;
     }
 #endif
@@ -205,8 +209,10 @@ int main(void) {
     }
     CloseHandle(worker);
 #else
-    if (thrd_create(&worker, cross_thread_destroy, &cross_thread) != thrd_success) return 1;
-    if (thrd_join(worker, &worker_result) != thrd_success || worker_result != 0) {
+    worker_result = &thread_failure_token;
+    if (pthread_create(
+            &worker, NULL, cross_thread_destroy, &cross_thread) != 0) return 1;
+    if (pthread_join(worker, &worker_result) != 0 || worker_result != NULL) {
         return 1;
     }
 #endif
@@ -221,8 +227,8 @@ int main(void) {
                 NULL, 0, rng_concurrency_thread, &rng_args[i], 0, NULL);
             if (rng_workers[i] == NULL) return 1;
 #else
-            if (thrd_create(&rng_workers[i], rng_concurrency_thread,
-                            &rng_args[i]) != thrd_success) return 1;
+            if (pthread_create(&rng_workers[i], NULL, rng_concurrency_thread,
+                               &rng_args[i]) != 0) return 1;
 #endif
         }
         while (atomic_load(&rng_state.ready) != RNG_THREAD_COUNT) {
@@ -238,9 +244,9 @@ int main(void) {
             }
             CloseHandle(rng_workers[i]);
 #else
-            int result = 1;
-            if (thrd_join(rng_workers[i], &result) != thrd_success ||
-                result != 0) return 1;
+            void* result = &thread_failure_token;
+            if (pthread_join(rng_workers[i], &result) != 0 ||
+                result != NULL) return 1;
 #endif
             if (rng_state.results[i] != 0) return 1;
         }
