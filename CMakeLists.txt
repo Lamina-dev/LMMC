@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.26)
 project(LMMC VERSION 1.0.0 LANGUAGES C)
 
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
@@ -145,7 +148,7 @@ endif()
 target_include_directories(lmmc
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 target_include_directories(lmmc SYSTEM
     PUBLIC
@@ -209,7 +212,7 @@ endif()
 if(LMMC_ENABLE_CLANG_TIDY)
     find_program(LMMC_CLANG_TIDY_EXECUTABLE NAMES clang-tidy REQUIRED)
     set_property(TARGET lmmc PROPERTY C_CLANG_TIDY
-        "${LMMC_CLANG_TIDY_EXECUTABLE};--config-file=${CMAKE_CURRENT_SOURCE_DIR}/../.clang-tidy")
+        "${LMMC_CLANG_TIDY_EXECUTABLE};--config-file=${CMAKE_CURRENT_SOURCE_DIR}/.clang-tidy")
 endif()
 
 if(LMMC_DEBUG_LEAKS)
@@ -217,6 +220,7 @@ if(LMMC_DEBUG_LEAKS)
 endif()
 
 
+set(_lmmc_bundled_lmmp OFF)
 if(TARGET lmmp)
     target_link_libraries(lmmc PUBLIC lmmp)
     message(STATUS "LMMC: linking against the lmmp CMake target")
@@ -256,9 +260,13 @@ elseif(EXISTS "${_lmmc_lmmp_root}/CMakeLists.txt")
     target_include_directories(liblmmp PUBLIC
         $<BUILD_INTERFACE:${_lmmc_lmmp_include}>
         $<BUILD_INTERFACE:${_lmmc_lmmp_include}/lmmp>
-        $<INSTALL_INTERFACE:include>
-        $<INSTALL_INTERFACE:include/lmmp>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/lmmp>
     )
+    if(WIN32)
+        target_compile_definitions(liblmmp INTERFACE LMMP_WINDOWS)
+    endif()
+    set(_lmmc_bundled_lmmp ON)
     set_target_properties(liblmmp PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY
             "${CMAKE_CURRENT_BINARY_DIR}/lmmp/dist/lmmp/bin"
@@ -284,6 +292,49 @@ else()
         "LMMP core was not found. Set LMMP_LIBRARY or provide LMMP_ROOT.")
 endif()
 
+# Embedded builds leave installation and export ownership to their parent.
+# A relocatable standalone package includes the LMMP target built above;
+# externally supplied targets and prebuilt libraries remain build-only modes.
+if(PROJECT_IS_TOP_LEVEL AND _lmmc_bundled_lmmp)
+    install(TARGETS lmmc liblmmp
+        EXPORT LMMCTargets
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    )
+
+    install(DIRECTORY include/lmmc/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/lmmc
+        FILES_MATCHING PATTERN "*.h")
+    file(GLOB _lmmc_lmmp_public_headers CONFIGURE_DEPENDS
+        "${_lmmc_lmmp_include}/lmmp/*.h")
+    install(FILES ${_lmmc_lmmp_public_headers}
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/lmmp)
+
+    install(EXPORT LMMCTargets
+        NAMESPACE LMMC::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/LMMC
+    )
+    configure_package_config_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/LMMCConfig.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/LMMCConfig.cmake
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/LMMC
+    )
+    write_basic_package_version_file(
+        ${CMAKE_CURRENT_BINARY_DIR}/LMMCConfigVersion.cmake
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY ExactVersion
+    )
+    install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/LMMCConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/LMMCConfigVersion.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/LMMC
+    )
+elseif(PROJECT_IS_TOP_LEVEL)
+    message(STATUS
+        "LMMC: standalone installation requires bundled LMMP; external LMMP is build-only")
+endif()
+
 lmmc_apply_instrumentation(lmmc)
 if(TARGET liblmmp)
     lmmc_apply_instrumentation(liblmmp)
@@ -304,13 +355,15 @@ endif()
 target_compile_options(lmmc PRIVATE ${_lmmc_warning_options})
 
 function(lmmc_prepare_runtime target_name)
-    if(WIN32 AND LMMC_BUILD_SHARED)
-        add_custom_command(TARGET ${target_name} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "$<TARGET_FILE:lmmc>"
-                "$<TARGET_FILE_DIR:${target_name}>"
-            VERBATIM
-        )
+    if(WIN32)
+        if(LMMC_BUILD_SHARED)
+            add_custom_command(TARGET ${target_name} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:lmmc>"
+                    "$<TARGET_FILE_DIR:${target_name}>"
+                VERBATIM
+            )
+        endif()
         if(TARGET liblmmp)
             add_custom_command(TARGET ${target_name} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different

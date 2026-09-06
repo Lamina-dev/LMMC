@@ -1,0 +1,236 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: "2"
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            cc: gcc
+            asm: AUTO
+          - compiler: gcc-generic
+            cc: gcc
+            asm: GENERIC
+          - compiler: clang
+            cc: clang
+            asm: AUTO
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        env:
+          CC: ${{ matrix.cc }}
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DLMMC_BUILD_TESTS=ON
+          -DLMMC_BUILD_EXAMPLES=OFF
+          -DLMMC_BUILD_SHARED=ON
+          -DLMMC_WARNINGS_AS_ERRORS=ON
+          -DLMMC_LMMP_ASM=${{ matrix.asm }}
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --timeout 300
+
+  mingw:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x64-debug-shared
+            msystem: MINGW64
+            build_type: Debug
+            shared: "ON"
+          - name: x64-debug-static
+            msystem: MINGW64
+            build_type: Debug
+            shared: "OFF"
+          - name: x64-release-shared
+            msystem: MINGW64
+            build_type: Release
+            shared: "ON"
+          - name: x64-release-static
+            msystem: MINGW64
+            build_type: Release
+            shared: "OFF"
+    name: mingw-${{ matrix.name }}
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: true
+          install: git
+          pacboy: toolchain:p cmake:p ninja:p
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DLMMC_BUILD_TESTS=ON
+          -DLMMC_BUILD_EXAMPLES=OFF
+          -DLMMC_BUILD_SHARED=${{ matrix.shared }}
+          -DLMMC_WARNINGS_AS_ERRORS=ON
+          -DLMMC_LMMP_ASM=AUTO
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --timeout 300
+
+  package-consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure package build
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DLMMC_BUILD_TESTS=OFF
+          -DLMMC_BUILD_EXAMPLES=OFF
+          -DLMMC_BUILD_SHARED=ON
+          -DLMMC_WARNINGS_AS_ERRORS=ON
+          -DLMMC_LMMP_ASM=AUTO
+          -DCMAKE_INSTALL_PREFIX="$PWD/dist"
+          -DCMAKE_INSTALL_LIBDIR=lib
+      - name: Build lmmc
+        run: cmake --build build --target lmmc
+      - name: Install
+        run: cmake --install build
+      - name: Configure consumer
+        run: cmake -S test/package_consumer -B build-consumer -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="$PWD/dist"
+      - name: Build consumer
+        run: cmake --build build-consumer
+      - name: Run consumer
+        run: LD_LIBRARY_PATH="$PWD/dist/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ./build-consumer/lmmc_package_consumer
+
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DLMMC_BUILD_TESTS=ON
+          -DLMMC_BUILD_EXAMPLES=OFF
+          -DLMMC_BUILD_SHARED=ON
+          -DLMMC_WARNINGS_AS_ERRORS=ON
+          -DLMMC_ENABLE_SANITIZERS=ON
+          -DLMMC_LMMP_ASM=GENERIC
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
+          LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp:print_suppressions=0
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --test-dir build --output-on-failure --timeout 600
+
+  thread-sanitizer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DLMMC_BUILD_TESTS=ON
+          -DLMMC_BUILD_EXAMPLES=OFF
+          -DLMMC_BUILD_SHARED=ON
+          -DLMMC_WARNINGS_AS_ERRORS=ON
+          -DLMMC_ENABLE_TSAN=ON
+          -DLMMC_LMMP_ASM=GENERIC
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        env:
+          TSAN_OPTIONS: halt_on_error=1
+        run: ctest --test-dir build --output-on-failure --timeout 600
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install clang-tidy
+        run: sudo apt-get update && sudo apt-get install -y clang-tidy
+      - name: Configure
+        run: >-
+          cmake -S . -B build-tidy -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DLMMC_BUILD_TESTS=OFF
+          -DLMMC_BUILD_EXAMPLES=OFF
+          -DLMMC_BUILD_SHARED=ON
+          -DLMMC_WARNINGS_AS_ERRORS=ON
+          -DLMMC_ENABLE_CLANG_TIDY=ON
+          -DLMMC_LMMP_ASM=GENERIC
+      - name: Analyze
+        run: cmake --build build-tidy --target lmmc
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install coverage tool
+        run: python3 -m pip install --user gcovr==7.2
+      - name: Configure
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DLMMC_BUILD_TESTS=ON
+          -DLMMC_BUILD_EXAMPLES=OFF
+          -DLMMC_BUILD_SHARED=ON
+          -DLMMC_WARNINGS_AS_ERRORS=ON
+          -DLMMC_ENABLE_COVERAGE=ON
+          -DLMMC_LMMP_ASM=GENERIC
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --timeout 300
+      - name: Generate coverage report
+        if: always()
+        run: >-
+          python3 -m gcovr
+          --config .gcovr.cfg
+          --object-directory build
+          --json-summary build/coverage-summary.json
+          --xml-pretty --xml build/coverage.xml
+          --html-details build/coverage.html
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            build/coverage-summary.json
+            build/coverage.xml
+            build/coverage.html
+            build/coverage.*.html

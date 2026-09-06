@@ -1,0 +1,9 @@
+Checks: >-
+  -*,
+  clang-analyzer-core.*,
+  clang-analyzer-deadcode.*,
+  bugprone-sizeof-expression,
+  bugprone-suspicious-memory-comparison
+WarningsAsErrors: '*'
+HeaderFilterRegex: '.*[\\/]LMMC[\\/](include|src)[\\/].*'
+FormatStyle: none
