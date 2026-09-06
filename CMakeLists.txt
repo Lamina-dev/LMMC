@@ -129,7 +129,9 @@ function(lmmc_apply_instrumentation target_name)
         if(WIN32 OR NOT CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
             message(FATAL_ERROR "LMMC coverage requires GCC or Clang on a non-Windows platform")
         endif()
-        target_compile_options(${target_name} PRIVATE --coverage -O0 -g)
+        # Threaded tests share coverage counters even for thread-local APIs.
+        target_compile_options(${target_name} PRIVATE
+            --coverage -fprofile-update=atomic -O0 -g)
         target_link_options(${target_name} PRIVATE --coverage)
     endif()
 endfunction()

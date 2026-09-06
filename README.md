@@ -20,7 +20,7 @@ GitHub Actions runs on every push and pull request, matching the applicable
 LMCAS checks:
 
 - Linux: GCC with `AUTO` and `GENERIC` backends, and Clang with `AUTO`.
-- Windows MinGW: Debug and Release, each with shared and static LMMC.
+- Windows MinGW UCRT64: Debug and Release, each with shared and static LMMC.
 - Installed-package consumption through `find_package(LMMC CONFIG REQUIRED)`.
 - AddressSanitizer/UndefinedBehaviorSanitizer, ThreadSanitizer, and clang-tidy.
 - Coverage reports with minimum line coverage of 77% and branch coverage of 44%.
@@ -29,6 +29,11 @@ LMCAS checks:
 All build jobs treat LMMC compiler warnings as errors. Analysis configuration
 is local to this repository; a parent LMCAS checkout is not required. The workflow
 validates packages but does not automatically publish GitHub Releases.
+
+Precision-sensitive kernels require a conforming fused multiply-add (`fma`).
+Windows CI uses the [recommended MSYS2 UCRT64 environment](https://www.msys2.org/docs/environments/)
+instead of legacy MINGW64/MSVCRT. Coverage builds use atomic counters so
+multithreaded tests do not corrupt profiling data.
 
 ## Install and consume
 
