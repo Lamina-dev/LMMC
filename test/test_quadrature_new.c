@@ -2,6 +2,7 @@
  * @file test_quadrature_new.c
  * Tests for new quadrature functions: Romberg, Tanh-Sinh, Gauss-Hermite, Gauss-Laguerre.
  */
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include "lmmc/quadrature.h"
@@ -18,11 +19,47 @@ static lmmc_real_t fn_sin(lmmc_real_t x, void* ud) {
     return sin(x);
 }
 
+static lmmc_real_t fn_scaled_const(lmmc_real_t x, void* ud) {
+    (void)x;
+    return *(const lmmc_real_t*)ud;
+}
+
 /* f(x) = 1/sqrt(x) - has endpoint singularity at x=0 */
 static lmmc_real_t fn_inv_sqrt(lmmc_real_t x, void* ud) {
     (void)ud;
-    if (x <= 0.0) return 0.0;
-    return 1.0 / sqrt(x);
+    return x <= 0.0 ? INFINITY : 1.0 / sqrt(x);
+}
+
+static lmmc_real_t fn_nan_midpoint(lmmc_real_t x, void* ud) {
+    (void)ud;
+    return fabs(x - 0.5) < 1e-15 ? NAN : 1.0;
+}
+
+static lmmc_real_t fn_nan(lmmc_real_t x, void* ud) {
+    (void)x;
+    (void)ud;
+    return NAN;
+}
+
+typedef struct {
+    lmmc_real_t a;
+    lmmc_real_t b;
+    size_t endpoint_calls;
+} endpoint_probe_t;
+
+static lmmc_real_t fn_endpoint_probe(lmmc_real_t x, void* ud) {
+    endpoint_probe_t* probe = (endpoint_probe_t*)ud;
+    if (x == probe->a || x == probe->b) {
+        ++probe->endpoint_calls;
+        return INFINITY;
+    }
+    return 1.0;
+}
+
+static lmmc_real_t fn_counted_exp(lmmc_real_t x, void* ud) {
+    size_t* calls = (size_t*)ud;
+    ++*calls;
+    return exp(x);
 }
 
 /* f(x) = 1 for Gauss-Hermite: integral of exp(-x^2) = sqrt(pi) */
@@ -78,10 +115,31 @@ int main(void) {
         if (fabs(result.value - exact) > 1e-10) { rc = 1; }
     }
 
+    {
+        const lmmc_real_t scale = 1.0 / DBL_MAX;
+        st = lmmc_quad_romberg(
+            fn_scaled_const, (void*)&scale,
+            -DBL_MAX, DBL_MAX, 1e-12, 4, &result);
+        if (st != LMMC_STATUS_OK || fabs(result.value - 2.0) > 1e-12) {
+            rc = 1;
+        }
+    }
+
+    {
+        const lmmc_real_t scale = 0.5;
+        st = lmmc_quad_romberg(
+            fn_scaled_const, (void*)&scale,
+            0.0, DBL_MAX, 1e-12, 4, &result);
+        if (st != LMMC_STATUS_OK || result.value != DBL_MAX * 0.5) {
+            rc = 1;
+        }
+    }
+
     /* Romberg: invalid arguments */
     {
         st = lmmc_quad_romberg(NULL, NULL, 0.0, 1.0, 1e-10, 20, &result);
         if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; }
+
         st = lmmc_quad_romberg(fn_exp, NULL, 1.0, 0.0, 1e-10, 20, &result);
         if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; }
     }
@@ -97,6 +155,16 @@ int main(void) {
         if (st != LMMC_STATUS_OK && st != LMMC_STATUS_CONVERGENCE_FAILED) { rc = 1; }
         if (fabs(result.value - exact) > 1e-8) { rc = 1; }
     }
+    {
+        endpoint_probe_t probe = {0.0, 1.0, 0};
+        st = lmmc_quad_tanh_sinh(
+            fn_endpoint_probe, &probe, probe.a, probe.b,
+            1e-12, 100000, &result);
+        if (st != LMMC_STATUS_OK || probe.endpoint_calls != 0 ||
+            fabs(result.value - 1.0) > 1e-9) {
+            rc = 1;
+        }
+    }
 
     /* Tanh-Sinh: integral of exp(x) from 0 to 1 = e - 1 */
     {
@@ -106,6 +174,43 @@ int main(void) {
                st, result.value, exact, fabs(result.value - exact));
         if (st != LMMC_STATUS_OK) { rc = 1; }
         if (fabs(result.value - exact) > 1e-9) { rc = 1; }
+    }
+
+    /* Tanh-Sinh must report callback failures and honor its evaluation budget. */
+    {
+        size_t calls = 0;
+        st = lmmc_quad_tanh_sinh(
+            fn_counted_exp, &calls, 0.0, 1.0, 1e-12, 2, &result);
+        if (st != LMMC_STATUS_CONVERGENCE_FAILED ||
+            result.num_evals > 2 || calls != result.num_evals ||
+            !isfinite(result.error) || result.error <= 0.0) {
+            rc = 1;
+        }
+        st = lmmc_quad_tanh_sinh(
+            fn_exp, NULL, 0.0, 1.0, 1e-12, 1, &result);
+        if (st != LMMC_STATUS_CONVERGENCE_FAILED ||
+            !isinf(result.error)) {
+            rc = 1;
+        }
+        st = lmmc_quad_tanh_sinh(
+            fn_nan_midpoint, NULL, 0.0, 1.0, 1e-12, 100, &result);
+        if (st != LMMC_STATUS_NUMERICAL_FAILURE) { rc = 1; }
+    }
+
+    /* Romberg must not claim convergence without an error estimate. */
+    {
+        st = lmmc_quad_romberg(
+            fn_exp, NULL, 0.0, 1.0, 1e-12, 1, &result);
+        if (st != LMMC_STATUS_CONVERGENCE_FAILED ||
+            !isinf(result.error)) {
+            rc = 1;
+        }
+        st = lmmc_quad_romberg(
+            fn_exp, NULL, 0.0, 1.0, 1e-12, 31, &result);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; }
+        st = lmmc_quad_romberg(
+            fn_nan, NULL, 0.0, 1.0, 1e-12, 4, &result);
+        if (st != LMMC_STATUS_NUMERICAL_FAILURE) { rc = 1; }
     }
 
     printf("\n=== Gauss-Hermite Tests ===\n");
@@ -140,6 +245,9 @@ int main(void) {
         if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; }
     }
 
+    st = lmmc_quad_gauss_hermite(fn_nan, NULL, 5, &val);
+    if (st != LMMC_STATUS_NUMERICAL_FAILURE) { rc = 1; }
+
     printf("\n=== Gauss-Laguerre Tests ===\n");
 
     /* Gauss-Laguerre: integral of 1 * exp(-x) from 0 to inf = 1 */
@@ -151,6 +259,9 @@ int main(void) {
         if (st != LMMC_STATUS_OK) { rc = 1; }
         if (fabs(val - exact) > 1e-10) { rc = 1; }
     }
+
+    st = lmmc_quad_gauss_laguerre(fn_nan, NULL, 5, &val);
+    if (st != LMMC_STATUS_NUMERICAL_FAILURE) { rc = 1; }
 
     /* Gauss-Laguerre: integral of x * exp(-x) from 0 to inf = 1 */
     {

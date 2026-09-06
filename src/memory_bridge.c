@@ -1,4 +1,5 @@
 #include "memory_bridge.h"
+#include "internal.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -49,6 +50,26 @@ void* lmmc_memory_alloc(size_t size) {
     if (pointer != NULL) lmmc_debug_leaks_alloc();
 #endif
     return pointer;
+}
+
+void* lmmc_memory_alloc_array(size_t count, size_t element_size) {
+    size_t bytes = 0;
+    if (!lmmc_safe_mul_size(count, element_size, &bytes)) return NULL;
+    return lmmc_memory_alloc(bytes);
+}
+
+void* lmmc_memory_alloc_array_plus(
+    size_t count, size_t extra, size_t element_size) {
+    size_t total = 0;
+    if (!lmmc_safe_add_size(count, extra, &total)) return NULL;
+    return lmmc_memory_alloc_array(total, element_size);
+}
+
+void* lmmc_memory_alloc_array_2d(
+    size_t rows, size_t cols, size_t element_size) {
+    size_t count = 0;
+    if (!lmmc_safe_mul_size(rows, cols, &count)) return NULL;
+    return lmmc_memory_alloc_array(count, element_size);
 }
 
 void lmmc_memory_free(void* pointer) {

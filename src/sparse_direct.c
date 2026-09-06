@@ -55,19 +55,28 @@ static lmmc_status_t ensure_csc(const lmmc_sparse_mat_t* a,
 static lmmc_status_t sparse_ensure_capacity(size_t** idx, lmmc_real_t** vals,
                                             size_t* capacity, size_t needed)
 {
+    size_t new_cap;
+    size_t idx_bytes;
+    size_t value_bytes;
+
     if (needed < *capacity) {
         return LMMC_STATUS_OK;
     }
-    size_t new_cap = *capacity * 2;
-    if (new_cap <= needed) {
-        new_cap = needed + 1;
+    if (!lmmc_safe_mul_size(*capacity, 2, &new_cap) || new_cap <= needed) {
+        if (!lmmc_safe_add_size(needed, 1, &new_cap)) {
+            return LMMC_STATUS_ALLOCATION_FAILED;
+        }
     }
-    size_t* new_idx = (size_t*)lmmc_realloc(*idx, new_cap * sizeof(size_t));
+    if (!lmmc_safe_mul_size(new_cap, sizeof(size_t), &idx_bytes) ||
+        !lmmc_safe_mul_size(new_cap, sizeof(lmmc_real_t), &value_bytes)) {
+        return LMMC_STATUS_ALLOCATION_FAILED;
+    }
+    size_t* new_idx = (size_t*)lmmc_realloc(*idx, idx_bytes);
     if (new_idx == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
     *idx = new_idx;
-    lmmc_real_t* new_vals = (lmmc_real_t*)lmmc_realloc(*vals, new_cap * sizeof(lmmc_real_t));
+    lmmc_real_t* new_vals = (lmmc_real_t*)lmmc_realloc(*vals, value_bytes);
     if (new_vals == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
@@ -354,10 +363,10 @@ lmmc_status_t lmmc_sparse_lu_symbolic(
     lu->n = n;
 
     /* 分配置换与因子索引数组。 */
-    lu->col_perm = (size_t*)lmmc_alloc(n * sizeof(size_t));
-    lu->row_perm = (size_t*)lmmc_alloc(n * sizeof(size_t));
-    lu->L_col_ptr = (size_t*)lmmc_alloc((n + 1) * sizeof(size_t));
-    lu->U_col_ptr = (size_t*)lmmc_alloc((n + 1) * sizeof(size_t));
+    lu->col_perm = (size_t*)lmmc_alloc_array(n, sizeof(size_t));
+    lu->row_perm = (size_t*)lmmc_alloc_array(n, sizeof(size_t));
+    lu->L_col_ptr = (size_t*)lmmc_alloc_array_plus(n, 1, sizeof(size_t));
+    lu->U_col_ptr = (size_t*)lmmc_alloc_array_plus(n, 1, sizeof(size_t));
 
     if (!lu->col_perm || !lu->row_perm ||
         !lu->L_col_ptr || !lu->U_col_ptr) {
@@ -404,10 +413,14 @@ lmmc_status_t lmmc_sparse_lu_symbolic(
         /* Heuristic: expect some fill-in */
         if (initial_capacity < n) initial_capacity = n;
 
-        lu->L_row_idx = (size_t*)lmmc_alloc(initial_capacity * sizeof(size_t));
-        lu->L_values = (lmmc_real_t*)lmmc_alloc(initial_capacity * sizeof(lmmc_real_t));
-        lu->U_row_idx = (size_t*)lmmc_alloc(initial_capacity * sizeof(size_t));
-        lu->U_values = (lmmc_real_t*)lmmc_alloc(initial_capacity * sizeof(lmmc_real_t));
+        lu->L_row_idx = (size_t*)lmmc_alloc_array(
+            initial_capacity, sizeof(size_t));
+        lu->L_values = (lmmc_real_t*)lmmc_alloc_array(
+            initial_capacity, sizeof(lmmc_real_t));
+        lu->U_row_idx = (size_t*)lmmc_alloc_array(
+            initial_capacity, sizeof(size_t));
+        lu->U_values = (lmmc_real_t*)lmmc_alloc_array(
+            initial_capacity, sizeof(lmmc_real_t));
 
         if (!lu->L_row_idx || !lu->L_values ||
             !lu->U_row_idx || !lu->U_values) {
@@ -456,8 +469,8 @@ lmmc_status_t lmmc_sparse_lu_numeric(
     if (status != LMMC_STATUS_OK) return status;
 
     /* 稠密数值工作区与逆行置换. */
-    col_dense = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
-    piv_inv = (size_t*)lmmc_alloc(n * sizeof(size_t));
+    col_dense = (lmmc_real_t*)lmmc_alloc_array(n, sizeof(lmmc_real_t));
+    piv_inv = (size_t*)lmmc_alloc_array(n, sizeof(size_t));
 
     if (!col_dense || !piv_inv) {
         status = LMMC_STATUS_ALLOCATION_FAILED;
@@ -629,7 +642,7 @@ lmmc_status_t lmmc_sparse_lu_solve(
     n = lu->n;
     if (b->size != n || x->size != n) return LMMC_STATUS_DIMENSION_MISMATCH;
 
-    work = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
+    work = (lmmc_real_t*)lmmc_alloc_array(n, sizeof(lmmc_real_t));
     if (work == NULL) return LMMC_STATUS_ALLOCATION_FAILED;
 
     /* Apply row permutation: work = P * b */
@@ -733,9 +746,9 @@ lmmc_status_t lmmc_sparse_chol_symbolic(
     chol->n = n;
 
     /* 分配置换与因子索引数组. */
-    chol->perm = (size_t*)lmmc_alloc(n * sizeof(size_t));
-    chol->perm_inv = (size_t*)lmmc_alloc(n * sizeof(size_t));
-    chol->L_col_ptr = (size_t*)lmmc_alloc((n + 1) * sizeof(size_t));
+    chol->perm = (size_t*)lmmc_alloc_array(n, sizeof(size_t));
+    chol->perm_inv = (size_t*)lmmc_alloc_array(n, sizeof(size_t));
+    chol->L_col_ptr = (size_t*)lmmc_alloc_array_plus(n, 1, sizeof(size_t));
 
     if (!chol->perm || !chol->perm_inv || !chol->L_col_ptr) {
         lmmc_sparse_chol_destroy(chol);
@@ -781,8 +794,10 @@ lmmc_status_t lmmc_sparse_chol_symbolic(
         size_t initial_capacity = (a->nnz > 64) ? a->nnz : 64;
         if (initial_capacity < n) initial_capacity = n;
 
-        chol->L_row_idx = (size_t*)lmmc_alloc(initial_capacity * sizeof(size_t));
-        chol->L_values = (lmmc_real_t*)lmmc_alloc(initial_capacity * sizeof(lmmc_real_t));
+        chol->L_row_idx = (size_t*)lmmc_alloc_array(
+            initial_capacity, sizeof(size_t));
+        chol->L_values = (lmmc_real_t*)lmmc_alloc_array(
+            initial_capacity, sizeof(lmmc_real_t));
 
         if (!chol->L_row_idx || !chol->L_values) {
             lmmc_sparse_chol_destroy(chol);
@@ -819,7 +834,7 @@ lmmc_status_t lmmc_sparse_chol_numeric(
     status = ensure_csc(a, &csc, &csc_needs_free);
     if (status != LMMC_STATUS_OK) return status;
 
-    col_dense = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
+    col_dense = (lmmc_real_t*)lmmc_alloc_array(n, sizeof(lmmc_real_t));
     if (col_dense == NULL) {
         if (csc_needs_free) lmmc_sparse_destroy(&csc);
         return LMMC_STATUS_ALLOCATION_FAILED;
@@ -936,7 +951,7 @@ lmmc_status_t lmmc_sparse_chol_solve(
     n = chol->n;
     if (b->size != n || x->size != n) return LMMC_STATUS_DIMENSION_MISMATCH;
 
-    work = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
+    work = (lmmc_real_t*)lmmc_alloc_array(n, sizeof(lmmc_real_t));
     if (work == NULL) return LMMC_STATUS_ALLOCATION_FAILED;
 
     /* Apply permutation: work = P * b */

@@ -20,6 +20,11 @@ extern "C" {
  * @brief 获取当前线程的 LMMC 生命周期租约.
  *
  * 调用支持嵌套;首次获取时初始化当前线程的 LMMP 资源.
+ * LMMP temporary-stack allocation follows LMMP's fail-fast contract and
+ * therefore cannot be translated into @c LMMC_STATUS_ALLOCATION_FAILED.
+ *
+ * @return @c LMMC_STATUS_OK on success or @c LMMC_STATUS_REFERENCE_LIMIT
+ *         when the current thread's lease count cannot be incremented.
  */
 lmmc_status_t lmmc_init(void);
 
@@ -45,7 +50,10 @@ lmmc_status_t lmmc_deinit(void);
  *
  * @param pool_size Requested LMMP temporary-pool size in bytes.
  * @return @c LMMC_STATUS_OK on success, @c LMMC_STATUS_NOT_INITIALIZED
- *         without an active lease, or @c LMMC_STATUS_BUSY for a nested lease.
+ *         without an active lease or when the lower-level stack cannot be
+ *         reinitialized, or @c LMMC_STATUS_BUSY for a nested lease.
+ * @note LMMP allocation failure remains fail-fast and does not return a
+ *       recoverable LMMC status.
  */
 lmmc_status_t lmmc_stack_reset(size_t pool_size);
 

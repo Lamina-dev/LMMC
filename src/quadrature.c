@@ -7,6 +7,29 @@
 #include "lmmc/status.h"
 #include "internal.h"
 
+static void lmmc_quad_center_half_length(
+    lmmc_real_t a,
+    lmmc_real_t b,
+    lmmc_real_t* center,
+    lmmc_real_t* half_length)
+{
+    if (a < 0.0 && b > 0.0) {
+        *center = a * 0.5 + b * 0.5;
+        *half_length = b * 0.5 - a * 0.5;
+        return;
+    }
+    *half_length = (b - a) * 0.5;
+    *center = a + *half_length;
+}
+
+static lmmc_real_t lmmc_quad_midpoint(lmmc_real_t a, lmmc_real_t b)
+{
+    lmmc_real_t center;
+    lmmc_real_t half_length;
+    lmmc_quad_center_half_length(a, b, &center, &half_length);
+    return center;
+}
+
 
 lmmc_status_t lmmc_quad_trapezoid(
     lmmc_quad_func_t func,
@@ -16,26 +39,32 @@ lmmc_status_t lmmc_quad_trapezoid(
     size_t n,
     lmmc_real_t* out_result)
 {
-    lmmc_real_t h, left, right, sum;
+    lmmc_real_t center, half_length, normalized_h, left, right, sum;
     size_t i;
-    if (func == NULL || out_result == NULL || n == 0 || a >= b) {
+    if (func == NULL || out_result == NULL || n == 0 || a >= b ||
+        !lmmc_is_finite(&a) || !lmmc_is_finite(&b)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    h = (b - a) / (lmmc_real_t)n;
+    lmmc_quad_center_half_length(a, b, &center, &half_length);
+    normalized_h = 2.0 / (lmmc_real_t)n;
     left = func(a, user_data);
     right = func(b, user_data);
-    if (!lmmc_is_finite(&h) || !lmmc_is_finite(&left) ||
-        !lmmc_is_finite(&right)) {
+    if (!lmmc_is_finite(&center) || !lmmc_is_finite(&half_length) ||
+        !lmmc_is_finite(&left) || !lmmc_is_finite(&right)) {
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }
     sum = left + right;
     for (i = 1; i < n; ++i) {
-        lmmc_real_t value = func(a + (lmmc_real_t)i * h, user_data);
-        if (!lmmc_is_finite(&value)) return LMMC_STATUS_NUMERICAL_FAILURE;
+        const lmmc_real_t normalized_x =
+            -1.0 + (lmmc_real_t)i * normalized_h;
+        const lmmc_real_t x = fma(half_length, normalized_x, center);
+        const lmmc_real_t value = func(x, user_data);
+        if (!lmmc_is_finite(&x) || !lmmc_is_finite(&value))
+            return LMMC_STATUS_NUMERICAL_FAILURE;
         sum += 2.0 * value;
         if (!lmmc_is_finite(&sum)) return LMMC_STATUS_NUMERICAL_FAILURE;
     }
-    *out_result = (h / 2.0) * sum;
+    *out_result = half_length * (normalized_h * 0.5 * sum);
     return lmmc_is_finite(out_result) ? LMMC_STATUS_OK
                                       : LMMC_STATUS_NUMERICAL_FAILURE;
 }
@@ -49,27 +78,32 @@ lmmc_status_t lmmc_quad_simpson(
     size_t n,
     lmmc_real_t* out_result)
 {
-    lmmc_real_t h, left, right, sum;
+    lmmc_real_t center, half_length, normalized_h, left, right, sum;
     size_t i;
     if (func == NULL || out_result == NULL || n == 0 || n % 2 != 0 ||
         a >= b) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    h = (b - a) / (lmmc_real_t)n;
+    lmmc_quad_center_half_length(a, b, &center, &half_length);
+    normalized_h = 2.0 / (lmmc_real_t)n;
     left = func(a, user_data);
     right = func(b, user_data);
-    if (!lmmc_is_finite(&h) || !lmmc_is_finite(&left) ||
-        !lmmc_is_finite(&right)) {
+    if (!lmmc_is_finite(&center) || !lmmc_is_finite(&half_length) ||
+        !lmmc_is_finite(&left) || !lmmc_is_finite(&right)) {
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }
     sum = left + right;
     for (i = 1; i < n; ++i) {
-        lmmc_real_t value = func(a + (lmmc_real_t)i * h, user_data);
-        if (!lmmc_is_finite(&value)) return LMMC_STATUS_NUMERICAL_FAILURE;
+        const lmmc_real_t normalized_x =
+            -1.0 + (lmmc_real_t)i * normalized_h;
+        const lmmc_real_t x = fma(half_length, normalized_x, center);
+        const lmmc_real_t value = func(x, user_data);
+        if (!lmmc_is_finite(&x) || !lmmc_is_finite(&value))
+            return LMMC_STATUS_NUMERICAL_FAILURE;
         sum += (i % 2 == 1 ? 4.0 : 2.0) * value;
         if (!lmmc_is_finite(&sum)) return LMMC_STATUS_NUMERICAL_FAILURE;
     }
-    *out_result = (h / 3.0) * sum;
+    *out_result = half_length * (normalized_h / 3.0 * sum);
     return lmmc_is_finite(out_result) ? LMMC_STATUS_OK
                                       : LMMC_STATUS_NUMERICAL_FAILURE;
 }
@@ -361,14 +395,15 @@ lmmc_status_t lmmc_quad_gauss_legendre(
     }
     nodes = gl_nodes_table[order - LMMC_GL_MIN_ORDER];
     weights = gl_weights_table[order - LMMC_GL_MIN_ORDER];
-    half_len = (b - a) / 2.0;
-    midpoint = a / 2.0 + b / 2.0;
+    lmmc_quad_center_half_length(a, b, &midpoint, &half_len);
     if (!lmmc_is_finite(&half_len) || !lmmc_is_finite(&midpoint)) {
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }
     for (i = 0; i < order; ++i) {
-        lmmc_real_t value = func(half_len * nodes[i] + midpoint, user_data);
-        if (!lmmc_is_finite(&value)) return LMMC_STATUS_NUMERICAL_FAILURE;
+        const lmmc_real_t x = fma(half_len, nodes[i], midpoint);
+        lmmc_real_t value = func(x, user_data);
+        if (!lmmc_is_finite(&x) || !lmmc_is_finite(&value))
+            return LMMC_STATUS_NUMERICAL_FAILURE;
         sum += weights[i] * value;
         if (!lmmc_is_finite(&sum)) return LMMC_STATUS_NUMERICAL_FAILURE;
     }
@@ -381,7 +416,10 @@ static lmmc_real_t lmmc_simpson_segment(
     lmmc_real_t a, lmmc_real_t b,
     lmmc_real_t fa, lmmc_real_t fb, lmmc_real_t fm)
 {
-    return ((b - a) / 6.0) * (fa + 4.0 * fm + fb);
+    lmmc_real_t center, half_length;
+    lmmc_quad_center_half_length(a, b, &center, &half_length);
+    (void)center;
+    return (half_length / 3.0) * (fa + 4.0 * fm + fb);
 }
 
 static lmmc_status_t lmmc_simpson_adaptive_recursive(
@@ -392,9 +430,9 @@ static lmmc_status_t lmmc_simpson_adaptive_recursive(
     size_t depth, size_t max_depth,
     lmmc_real_t* out_value, lmmc_real_t* out_error, size_t* out_evals)
 {
-    lmmc_real_t mid = a / 2.0 + b / 2.0;
-    lmmc_real_t left_mid = a / 2.0 + mid / 2.0;
-    lmmc_real_t right_mid = mid / 2.0 + b / 2.0;
+    lmmc_real_t mid = lmmc_quad_midpoint(a, b);
+    lmmc_real_t left_mid = lmmc_quad_midpoint(a, mid);
+    lmmc_real_t right_mid = lmmc_quad_midpoint(mid, b);
     lmmc_real_t f_left_mid = func(left_mid, user_data);
     lmmc_real_t f_right_mid = func(right_mid, user_data);
     lmmc_real_t left, right, delta, corrected, error, tolerance;
@@ -473,7 +511,7 @@ lmmc_status_t lmmc_quad_adaptive(
     out_result->value = 0.0;
     out_result->error = 0.0;
     out_result->num_evals = 0;
-    mid = a / 2.0 + b / 2.0;
+    mid = lmmc_quad_midpoint(a, b);
     fa = func(a, user_data);
     fb = func(b, user_data);
     fm = func(mid, user_data);
@@ -499,79 +537,102 @@ lmmc_status_t lmmc_quad_romberg(
     lmmc_real_t abs_tol, size_t max_iter,
     lmmc_quad_result_t* out)
 {
-    if (f == NULL || out == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (a >= b) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (abs_tol < 1e-15 || abs_tol > 1e-1) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (max_iter < 1 || max_iter > 1000000) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
-    /* Cap Romberg table rows to avoid huge stack allocation */
-    size_t max_rows = max_iter;
-    if (max_rows > 30) max_rows = 30;
-
-    /* Two-row Romberg table */
     lmmc_real_t prev[30];
     lmmc_real_t curr[30];
     size_t num_evals = 0;
+    lmmc_real_t fa;
+    lmmc_real_t fb;
+    lmmc_real_t center;
+    lmmc_real_t half_length;
 
-    /* R[0][0] = trapezoidal rule with 1 interval */
-    lmmc_real_t h = b - a;
-    prev[0] = h * (f(a, ud) + f(b, ud)) / 2.0;
-    num_evals = 2;
-
-    out->value = prev[0];
-    out->error = lmmc_abs(prev[0]);
-    out->num_evals = num_evals;
-
-    if (max_rows == 1) {
-        return LMMC_STATUS_OK;
+    if (f == NULL || out == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    out->value = 0.0;
+    out->error = INFINITY;
+    out->num_evals = 0;
+    if (!isfinite(a) || !isfinite(b) || a >= b ||
+        !isfinite(abs_tol) || abs_tol < 1e-15 || abs_tol > 1e-1 ||
+        max_iter < 1 || max_iter > 30) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    for (size_t i = 1; i < max_rows; i++) {
-        /* Trapezoidal rule with 2^i intervals */
-        size_t n = (size_t)1 << i;
-        h = (b - a) / (lmmc_real_t)n;
+    lmmc_quad_center_half_length(a, b, &center, &half_length);
+    if (!isfinite(center) || !isfinite(half_length)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    fa = f(a, ud);
+    fb = f(b, ud);
+    num_evals = 2;
+    out->num_evals = num_evals;
+    if (!isfinite(fa) || !isfinite(fb)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
 
-        /* Add new midpoints (only the odd-indexed points are new) */
+    prev[0] = half_length * (fa + fb);
+    if (!isfinite(prev[0])) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    out->value = prev[0];
+
+    if (max_iter == 1) {
+        return LMMC_STATUS_CONVERGENCE_FAILED;
+    }
+
+    for (size_t i = 1; i < max_iter; i++) {
+        const size_t n = (size_t)1 << i;
         lmmc_real_t sum_new = 0.0;
-        for (size_t k = 1; k <= n / 2; k++) {
-            lmmc_real_t x = a + (2.0 * (lmmc_real_t)k - 1.0) * h;
-            sum_new += f(x, ud);
-            num_evals++;
-        }
-        curr[0] = prev[0] / 2.0 + h * sum_new;
-
-        /* Richardson extrapolation */
         lmmc_real_t pow4 = 1.0;
+
+        const lmmc_real_t normalized_h =
+            2.0 / (lmmc_real_t)n;
+
+        for (size_t k = 1; k <= n / 2; k++) {
+            const lmmc_real_t normalized_x =
+                -1.0 + (2.0 * (lmmc_real_t)k - 1.0) * normalized_h;
+            const lmmc_real_t x =
+                fma(half_length, normalized_x, center);
+            const lmmc_real_t value = f(x, ud);
+            ++num_evals;
+            out->num_evals = num_evals;
+            if (!isfinite(value)) {
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
+            sum_new += value;
+            if (!isfinite(sum_new)) {
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
+        }
+        curr[0] =
+            prev[0] / 2.0 + half_length * normalized_h * sum_new;
+        if (!isfinite(curr[0])) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+
         for (size_t j = 1; j <= i; j++) {
             pow4 *= 4.0;
-            curr[j] = (pow4 * curr[j - 1] - prev[j - 1]) / (pow4 - 1.0);
+            curr[j] = curr[j - 1] +
+                (curr[j - 1] - prev[j - 1]) / (pow4 - 1.0);
+            if (!isfinite(curr[j])) {
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
         }
 
-        /* Error estimate */
-        lmmc_real_t err = lmmc_abs(curr[i] - prev[i - 1]);
         out->value = curr[i];
-        out->error = err;
+        out->error = lmmc_abs(curr[i] - prev[i - 1]);
         out->num_evals = num_evals;
-
-        if (err <= abs_tol) {
+        if (!isfinite(out->error)) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+        if (out->error <= abs_tol) {
             return LMMC_STATUS_OK;
         }
 
-        /* Copy curr to prev */
         for (size_t j = 0; j <= i; j++) {
             prev[j] = curr[j];
         }
     }
 
-    /* Reached max iterations - return best estimate */
     return LMMC_STATUS_CONVERGENCE_FAILED;
 }
 
@@ -595,104 +656,111 @@ lmmc_status_t lmmc_quad_tanh_sinh(
     lmmc_real_t abs_tol, size_t max_nodes,
     lmmc_quad_result_t* out)
 {
+    const lmmc_real_t pi_half = LMMC_CONST_PI / 2.0;
+    size_t num_evals = 0;
+    lmmc_real_t prev_integral = 0.0;
+    lmmc_real_t integral = 0.0;
+    lmmc_real_t last_error = INFINITY;
+    lmmc_real_t h = 0.03125;
+    const size_t max_levels = 10;
+
     if (f == NULL || out == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (a >= b) {
+    out->value = 0.0;
+    out->error = INFINITY;
+    out->num_evals = 0;
+    if (!isfinite(a) || !isfinite(b) || a >= b ||
+        !isfinite(abs_tol) || abs_tol < 1e-15 || abs_tol > 1e-1 ||
+        max_nodes < 1 || max_nodes > 1000000) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (abs_tol < 1e-15 || abs_tol > 1e-1) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
+
+    const lmmc_real_t mid = a / 2.0 + b / 2.0;
+    const lmmc_real_t half_len = b / 2.0 - a / 2.0;
+    if (!isfinite(mid) || !isfinite(half_len)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
     }
-    if (max_nodes < 1 || max_nodes > 1000000) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
 
-    lmmc_real_t mid = (a + b) / 2.0;
-    lmmc_real_t half_len = (b - a) / 2.0;
-    lmmc_real_t pi_half = LMMC_CONST_PI / 2.0;
-
-    size_t num_evals = 0;
-    int converged = 0;
-
-    /*
-     * Tanh-Sinh quadrature: compute the integral using progressively
-     * smaller step sizes. At each level, compute the full trapezoidal
-     * sum from scratch (simple but correct approach).
-     */
-    lmmc_real_t prev_integral = 0.0;
-    lmmc_real_t integral = 0.0;
-    size_t max_levels = 10;
-
-    /* Step sizes: start small for good coverage near singularities */
-    lmmc_real_t h = 0.03125;  /* 1/32 */
-
-    for (size_t level = 0; level < max_levels && num_evals < max_nodes; level++) {
+    for (size_t level = 0;
+         level < max_levels && num_evals < max_nodes;
+         level++) {
         lmmc_real_t sum = 0.0;
-
-        /* t = 0: midpoint contribution */
-        {
-            lmmc_real_t fmid = f(mid, ud);
-            num_evals++;
-            if (!isfinite(fmid)) fmid = 0.0;
-            sum += fmid * pi_half;
+        const lmmc_real_t fmid = f(mid, ud);
+        ++num_evals;
+        if (!isfinite(fmid)) {
+            out->num_evals = num_evals;
+            return LMMC_STATUS_NUMERICAL_FAILURE;
         }
+        sum = fmid * pi_half;
 
-        /* Symmetric pairs t = +/- j*h for j = 1, 2, 3, ... */
-        for (size_t j = 1; num_evals < max_nodes; j++) {
-            lmmc_real_t t = (lmmc_real_t)j * h;
-            lmmc_real_t sinh_t = sinh(t);
-            lmmc_real_t cosh_t = cosh(t);
-            lmmc_real_t u = pi_half * sinh_t;
+        for (size_t j = 1; max_nodes - num_evals >= 2; j++) {
+            const lmmc_real_t t = (lmmc_real_t)j * h;
+            const lmmc_real_t sinh_t = sinh(t);
+            const lmmc_real_t cosh_t = cosh(t);
+            const lmmc_real_t u = pi_half * sinh_t;
+            lmmc_real_t w;
+            lmmc_real_t tanh_u;
+            lmmc_real_t xp;
+            lmmc_real_t xn;
+            lmmc_real_t fp;
+            lmmc_real_t fn_val;
 
             if (u > 20.0) break;
-
-            /* For large u, cosh(u) ≈ exp(u)/2, so
-             * w = pi/2 * cosh_t / cosh^2(u) ≈ pi/2 * cosh_t * 4 * exp(-2u)
-             * Use this to avoid overflow in cosh(u) for large u.
-             */
-            lmmc_real_t w;
             if (u > 6.0) {
-                /* Use exponential form to avoid overflow */
-                lmmc_real_t exp_neg_2u = exp(-2.0 * u);
-                w = pi_half * cosh_t * 4.0 * exp_neg_2u;
+                w = pi_half * cosh_t * 4.0 * exp(-2.0 * u);
             } else {
-                lmmc_real_t cosh_u = cosh(u);
+                const lmmc_real_t cosh_u = cosh(u);
                 w = pi_half * cosh_t / (cosh_u * cosh_u);
             }
-
+            if (!isfinite(w)) {
+                out->num_evals = num_evals;
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
             if (w < 1e-50) break;
 
-            lmmc_real_t tanh_u;
-            if (u > 6.0) {
-                tanh_u = 1.0 - 2.0 * exp(-2.0 * u);
-            } else {
-                tanh_u = tanh(u);
+            tanh_u =
+                u > 6.0 ? 1.0 - 2.0 * exp(-2.0 * u) : tanh(u);
+            xp = fma(half_len, tanh_u, mid);
+            xn = fma(-half_len, tanh_u, mid);
+            fp = 0.0;
+            fn_val = 0.0;
+            if (xp != b) {
+                fp = f(xp, ud);
+                ++num_evals;
             }
-            lmmc_real_t xp = mid + half_len * tanh_u;
-            lmmc_real_t xn = mid - half_len * tanh_u;
-
-            lmmc_real_t fp = f(xp, ud);
-            lmmc_real_t fn_val = f(xn, ud);
-            num_evals += 2;
-
-            if (!isfinite(fp)) fp = 0.0;
-            if (!isfinite(fn_val)) fn_val = 0.0;
+            if (xn != a) {
+                fn_val = f(xn, ud);
+                ++num_evals;
+            }
+            if (!isfinite(fp) || !isfinite(fn_val)) {
+                out->num_evals = num_evals;
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
 
             sum += (fp + fn_val) * w;
+            if (!isfinite(sum)) {
+                out->num_evals = num_evals;
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
         }
 
         integral = half_len * h * sum;
-
-        /* Check convergence (need at least 2 levels) */
-        if (level >= 1) {
-            lmmc_real_t error = lmmc_abs(integral - prev_integral);
-            out->value = integral;
-            out->error = error;
+        if (!isfinite(integral)) {
             out->num_evals = num_evals;
-            if (error <= abs_tol) {
-                converged = 1;
-                break;
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+        if (level >= 1) {
+            last_error = lmmc_abs(integral - prev_integral);
+            if (!isfinite(last_error)) {
+                out->num_evals = num_evals;
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
+            if (last_error <= abs_tol) {
+                out->value = integral;
+                out->error = last_error;
+                out->num_evals = num_evals;
+                return LMMC_STATUS_OK;
             }
         }
 
@@ -700,13 +768,10 @@ lmmc_status_t lmmc_quad_tanh_sinh(
         h /= 2.0;
     }
 
-    if (!converged) {
-        out->value = integral;
-        out->error = lmmc_abs(integral - prev_integral);
-        out->num_evals = num_evals;
-        return LMMC_STATUS_CONVERGENCE_FAILED;
-    }
-    return LMMC_STATUS_OK;
+    out->value = integral;
+    out->error = last_error;
+    out->num_evals = num_evals;
+    return LMMC_STATUS_CONVERGENCE_FAILED;
 }
 
 
@@ -809,38 +874,38 @@ lmmc_status_t lmmc_quad_gauss_hermite(
     lmmc_quad_func_t f, void* ud,
     size_t order, lmmc_real_t* out)
 {
+    lmmc_real_t diag[LMMC_GH_MAX_ORDER];
+    lmmc_real_t subdiag[LMMC_GH_MAX_ORDER];
+    lmmc_real_t weights[LMMC_GH_MAX_ORDER];
+    lmmc_real_t sum = 0.0;
+
     if (f == NULL || out == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
+    *out = 0.0;
     if (order < 1 || order > LMMC_GH_MAX_ORDER) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    /* Build Jacobi matrix for physicist's Hermite polynomials.
-     * Three-term recurrence: x H_n(x) = H_{n+1}(x)/2 + n*H_{n-1}(x)
-     * Normalized: p_n = H_n / ||H_n||, ||H_n||^2 = sqrt(pi) * 2^n * n!
-     * Jacobi matrix: alpha_i = 0, beta_i = sqrt(i/2) for i = 1..n-1
-     */
-    lmmc_real_t diag[LMMC_GH_MAX_ORDER];
-    lmmc_real_t subdiag[LMMC_GH_MAX_ORDER];
-    lmmc_real_t weights[LMMC_GH_MAX_ORDER];
-
     for (size_t i = 0; i < order; i++) {
-        diag[i] = 0.0;  /* alpha_i = 0 for Hermite */
+        diag[i] = 0.0;
     }
     for (size_t i = 0; i < order - 1; i++) {
         subdiag[i] = sqrt((lmmc_real_t)(i + 1) / 2.0);
     }
 
-    /* mu_0 = integral of exp(-x^2) over (-inf, inf) = sqrt(pi) */
-    lmmc_real_t mu0 = sqrt(LMMC_CONST_PI);
+    tridiag_eigvals_weights(
+        diag, subdiag, weights, order, sqrt(LMMC_CONST_PI));
 
-    tridiag_eigvals_weights(diag, subdiag, weights, order, mu0);
-
-    /* Compute the quadrature sum: sum_i w_i * f(x_i) */
-    lmmc_real_t sum = 0.0;
     for (size_t i = 0; i < order; i++) {
-        sum += weights[i] * f(diag[i], ud);
+        const lmmc_real_t value = f(diag[i], ud);
+        if (!isfinite(value)) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+        sum += weights[i] * value;
+        if (!isfinite(sum)) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
     }
 
     *out = sum;
@@ -864,37 +929,37 @@ lmmc_status_t lmmc_quad_gauss_laguerre(
     lmmc_quad_func_t f, void* ud,
     size_t order, lmmc_real_t* out)
 {
-    if (f == NULL || out == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (order < 1 || order > LMMC_GL_LAG_MAX_ORDER) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
-    /* Build Jacobi matrix for Laguerre polynomials.
-     * alpha_i = 2*i + 1 (i = 0..n-1)
-     * beta_i = i (i = 1..n-1), so sqrt(beta_i) = sqrt(i)
-     */
     lmmc_real_t diag[LMMC_GL_LAG_MAX_ORDER];
     lmmc_real_t subdiag[LMMC_GL_LAG_MAX_ORDER];
     lmmc_real_t weights[LMMC_GL_LAG_MAX_ORDER];
+    lmmc_real_t sum = 0.0;
+
+    if (f == NULL || out == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    *out = 0.0;
+    if (order < 1 || order > LMMC_GL_LAG_MAX_ORDER) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
 
     for (size_t i = 0; i < order; i++) {
         diag[i] = 2.0 * (lmmc_real_t)i + 1.0;
     }
     for (size_t i = 0; i < order - 1; i++) {
-        subdiag[i] = (lmmc_real_t)(i + 1);  /* sqrt(beta_{i+1}) = sqrt((i+1)^2) = i+1 */
+        subdiag[i] = (lmmc_real_t)(i + 1);
     }
 
-    /* mu_0 = integral of exp(-x) over [0, inf) = 1 */
-    lmmc_real_t mu0 = 1.0;
+    tridiag_eigvals_weights(diag, subdiag, weights, order, 1.0);
 
-    tridiag_eigvals_weights(diag, subdiag, weights, order, mu0);
-
-    /* Compute the quadrature sum: sum_i w_i * f(x_i) */
-    lmmc_real_t sum = 0.0;
     for (size_t i = 0; i < order; i++) {
-        sum += weights[i] * f(diag[i], ud);
+        const lmmc_real_t value = f(diag[i], ud);
+        if (!isfinite(value)) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+        sum += weights[i] * value;
+        if (!isfinite(sum)) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
     }
 
     *out = sum;

@@ -14,17 +14,15 @@
 
 
 static inline lmmc_status_t lmmc_validate_vec(const lmmc_vec_t* x) {
-    if (x == NULL || x->data == NULL || x->size == 0) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    return LMMC_STATUS_OK;
+    return lmmc_vec_descriptor_is_valid(x)
+        ? LMMC_STATUS_OK
+        : LMMC_STATUS_INVALID_ARGUMENT;
 }
 
 static inline lmmc_status_t lmmc_validate_mat(const lmmc_mat_t* x) {
-    if (x == NULL || x->data == NULL || x->rows == 0 || x->cols == 0 || x->stride < x->cols) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    return LMMC_STATUS_OK;
+    return lmmc_mat_descriptor_is_valid(x)
+        ? LMMC_STATUS_OK
+        : LMMC_STATUS_INVALID_ARGUMENT;
 }
 
 static inline lmmc_status_t lmmc_finalize_nonnegative(lmmc_real_t value, lmmc_real_t* out_value) {
@@ -65,10 +63,23 @@ static inline lmmc_status_t lmmc_finalize_nonnegative(lmmc_real_t value, lmmc_re
 #define LMMC_LOG_SQRT_2PI 0.9189385332046727
 #endif
 
-/* Regularized incomplete gamma/beta helpers (defined in statistics_internal.c). */
-lmmc_real_t regularized_gamma_lower(lmmc_real_t a, lmmc_real_t x);
-lmmc_real_t regularized_gamma_upper_cf(lmmc_real_t a, lmmc_real_t x);
-lmmc_real_t regularized_beta_cf(lmmc_real_t x, lmmc_real_t a, lmmc_real_t b);
-lmmc_real_t regularized_beta(lmmc_real_t x, lmmc_real_t a, lmmc_real_t b);
+/* Stable log-factorial/log-gamma corrections and Poisson deviance primitives
+ * shared by discrete and continuous distribution kernels. */
+lmmc_real_t lmmc_stirling_error(lmmc_real_t x);
+lmmc_real_t lmmc_log_gamma_stirling_error(lmmc_real_t x);
+lmmc_real_t lmmc_deviance_part(lmmc_real_t x, lmmc_real_t mean);
+
+/* Regularized incomplete gamma/beta helpers (defined in statistics_internal.c).
+ * Results are written only after a finite, in-range value has converged. */
+lmmc_status_t regularized_gamma_lower(
+    lmmc_real_t a, lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t regularized_gamma_upper_cf(
+    lmmc_real_t a, lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t regularized_gamma_upper(
+    lmmc_real_t a, lmmc_real_t x, lmmc_real_t* out);
+lmmc_status_t regularized_beta_cf(
+    lmmc_real_t x, lmmc_real_t a, lmmc_real_t b, lmmc_real_t* out);
+lmmc_status_t regularized_beta(
+    lmmc_real_t x, lmmc_real_t a, lmmc_real_t b, lmmc_real_t* out);
 
 #endif

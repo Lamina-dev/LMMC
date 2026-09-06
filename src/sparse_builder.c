@@ -153,7 +153,7 @@ lmmc_status_t lmmc_sparse_builder_build(lmmc_sparse_builder_t* b, lmmc_sparse_fo
     }
 
 
-    size_t* next = (size_t*)lmmc_alloc(outer_dim * sizeof(size_t));
+    size_t* next = (size_t*)lmmc_alloc_array(outer_dim, sizeof(size_t));
     if (next == NULL) {
         lmmc_sparse_destroy(out);
         return LMMC_STATUS_ALLOCATION_FAILED;

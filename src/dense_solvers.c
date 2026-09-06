@@ -13,7 +13,7 @@
 #include "lmmc/eigen.h"
 
 lmmc_status_t lmmc_mat_det(const lmmc_mat_t* a, lmmc_real_t* out_det) {
-    if (a == NULL || out_det == NULL || a->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(a) || out_det == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->rows != a->cols) {
@@ -46,8 +46,12 @@ lmmc_status_t lmmc_mat_det(const lmmc_mat_t* a, lmmc_real_t* out_det) {
     }
 
 
-    size_t n_elem = n * n;
-    size_t n_bytes = n_elem * sizeof(lmmc_real_t);
+    size_t n_elem;
+    size_t n_bytes;
+    if (!lmmc_safe_mul_size(n, n, &n_elem) ||
+        !lmmc_safe_mul_size(n_elem, sizeof(lmmc_real_t), &n_bytes)) {
+        return LMMC_STATUS_ALLOCATION_FAILED;
+    }
     lmmc_real_t* lu = (lmmc_real_t*)lmmc_alloc(n_bytes);
     if (lu == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
@@ -151,7 +155,8 @@ lmmc_status_t lmmc_mat_inv(const lmmc_mat_t* A, lmmc_mat_t* A_inv) {
     size_t n, i, j;
     lmmc_status_t status;
 
-    if (A == NULL || A_inv == NULL || A->data == NULL || A_inv->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(A) ||
+        !lmmc_mat_descriptor_is_valid(A_inv)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (A->rows != A->cols) {
@@ -175,7 +180,7 @@ lmmc_status_t lmmc_mat_inv(const lmmc_mat_t* A, lmmc_mat_t* A_inv) {
     }
 
     /* Allocate pivot array */
-    pivots = (size_t*)lmmc_alloc(n * sizeof(size_t));
+    pivots = (size_t*)lmmc_alloc_array(n, sizeof(size_t));
     if (pivots == NULL) {
         lmmc_mat_destroy(&lu_mat);
         return LMMC_STATUS_ALLOCATION_FAILED;
@@ -241,7 +246,9 @@ lmmc_status_t lmmc_solve_triangular(const lmmc_mat_t* T, int upper, int diag_uni
     size_t n, i, j;
     lmmc_real_t sum, tmp, diag_val, abs_diag, eps;
 
-    if (T == NULL || b == NULL || x == NULL || T->data == NULL || b->data == NULL || x->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(T) ||
+        !lmmc_vec_descriptor_is_valid(b) ||
+        !lmmc_vec_descriptor_is_valid(x)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (T->rows != T->cols) {
@@ -329,7 +336,7 @@ lmmc_status_t lmmc_mat_rank(const lmmc_mat_t* a, lmmc_real_t tol, size_t* out_ra
     lmmc_real_t dim_val;
     lmmc_real_t tmp;
 
-    if (a == NULL || out_rank == NULL || a->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(a) || out_rank == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -387,7 +394,8 @@ lmmc_status_t lmmc_mat_pow(const lmmc_mat_t* a, int n, lmmc_mat_t* out)
     size_t total;
     unsigned int exp;
 
-    if (a == NULL || out == NULL || a->data == NULL || out->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(a) ||
+        !lmmc_mat_descriptor_is_valid(out)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->rows != a->cols) {
@@ -543,8 +551,9 @@ lmmc_status_t lmmc_mat_rdiv(const lmmc_mat_t* B, const lmmc_mat_t* A, lmmc_mat_t
     size_t nn, m, i, j;
     size_t pivot_bytes;
 
-    if (B == NULL || A == NULL || X == NULL ||
-        B->data == NULL || A->data == NULL || X->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(B) ||
+        !lmmc_mat_descriptor_is_valid(A) ||
+        !lmmc_mat_descriptor_is_valid(X)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     /* A must be square */

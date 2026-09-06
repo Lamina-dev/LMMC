@@ -2,6 +2,7 @@
  * @file test_quadrature.c
  * 针对 LMMC 中 quadrature 相关接口的单元测试。
  */
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include "lmmc/lmmc.h"
@@ -11,6 +12,11 @@
 static lmmc_real_t fn_const(lmmc_real_t x, void* ud) {
     (void)x; (void)ud;
     return 1.0;
+}
+
+static lmmc_real_t fn_scaled_const(lmmc_real_t x, void* ud) {
+    (void)x;
+    return *(const lmmc_real_t*)ud;
 }
 
 static lmmc_real_t fn_x1(lmmc_real_t x, void* ud) {
@@ -179,6 +185,17 @@ int main(void) {
 
         if (!lmmc_test_nearly_equal(adaptive_result.value, exact_inv_sqrt, 1e-2)) {
             rc = 1; goto done;
+        }
+    }
+
+    {
+        const lmmc_real_t scale = 1.0 / DBL_MAX;
+        st = lmmc_quad_trapezoid(
+            fn_scaled_const, (void*)&scale, -DBL_MAX, DBL_MAX, 8, &result);
+        if (st != LMMC_STATUS_OK ||
+            !lmmc_test_nearly_equal(result, 2.0, 1e-12)) {
+            rc = 1;
+            goto done;
         }
     }
 

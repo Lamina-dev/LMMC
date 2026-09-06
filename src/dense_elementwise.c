@@ -13,8 +13,9 @@ lmmc_status_t lmmc_vec_hadamard(const lmmc_vec_t* a, const lmmc_vec_t* b, lmmc_v
     size_t i;
     lmmc_real_t tmp_mul;
 
-    if (a == NULL || b == NULL || c == NULL ||
-        a->data == NULL || b->data == NULL || c->data == NULL) {
+    if (!lmmc_vec_descriptor_is_valid(a) ||
+        !lmmc_vec_descriptor_is_valid(b) ||
+        !lmmc_vec_descriptor_is_valid(c)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->size != b->size || a->size != c->size) {
@@ -37,8 +38,9 @@ lmmc_status_t lmmc_vec_elementwise_div(const lmmc_vec_t* a, const lmmc_vec_t* b,
     lmmc_real_t zero;
     lmmc_real_t tmp_div;
 
-    if (a == NULL || b == NULL || c == NULL ||
-        a->data == NULL || b->data == NULL || c->data == NULL) {
+    if (!lmmc_vec_descriptor_is_valid(a) ||
+        !lmmc_vec_descriptor_is_valid(b) ||
+        !lmmc_vec_descriptor_is_valid(c)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->size != b->size || a->size != c->size) {
@@ -70,8 +72,9 @@ lmmc_status_t lmmc_vec_elementwise_div(const lmmc_vec_t* a, const lmmc_vec_t* b,
 lmmc_status_t lmmc_vec_elementwise_pow(const lmmc_vec_t* a, const lmmc_vec_t* b, lmmc_vec_t* c) {
     size_t i;
 
-    if (a == NULL || b == NULL || c == NULL ||
-        a->data == NULL || b->data == NULL || c->data == NULL) {
+    if (!lmmc_vec_descriptor_is_valid(a) ||
+        !lmmc_vec_descriptor_is_valid(b) ||
+        !lmmc_vec_descriptor_is_valid(c)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->size != b->size || a->size != c->size) {
@@ -89,8 +92,9 @@ lmmc_status_t lmmc_mat_hadamard(const lmmc_mat_t* a, const lmmc_mat_t* b, lmmc_m
     size_t i, j;
     lmmc_real_t tmp_mul;
 
-    if (a == NULL || b == NULL || c == NULL ||
-        a->data == NULL || b->data == NULL || c->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(a) ||
+        !lmmc_mat_descriptor_is_valid(b) ||
+        !lmmc_mat_descriptor_is_valid(c)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->rows != b->rows || a->cols != b->cols ||
@@ -118,8 +122,9 @@ lmmc_status_t lmmc_mat_elementwise_div(const lmmc_mat_t* a, const lmmc_mat_t* b,
     lmmc_real_t zero;
     lmmc_real_t tmp_div;
 
-    if (a == NULL || b == NULL || c == NULL ||
-        a->data == NULL || b->data == NULL || c->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(a) ||
+        !lmmc_mat_descriptor_is_valid(b) ||
+        !lmmc_mat_descriptor_is_valid(c)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->rows != b->rows || a->cols != b->cols ||
@@ -158,8 +163,9 @@ lmmc_status_t lmmc_mat_elementwise_div(const lmmc_mat_t* a, const lmmc_mat_t* b,
 lmmc_status_t lmmc_mat_elementwise_pow(const lmmc_mat_t* a, const lmmc_mat_t* b, lmmc_mat_t* c) {
     size_t i, j;
 
-    if (a == NULL || b == NULL || c == NULL ||
-        a->data == NULL || b->data == NULL || c->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(a) ||
+        !lmmc_mat_descriptor_is_valid(b) ||
+        !lmmc_mat_descriptor_is_valid(c)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->rows != b->rows || a->cols != b->cols ||
@@ -181,8 +187,8 @@ lmmc_status_t lmmc_mat_elementwise_pow(const lmmc_mat_t* a, const lmmc_mat_t* b,
 lmmc_status_t lmmc_vec_cmp_gt(const lmmc_vec_t* a, const lmmc_vec_t* b, int* out) {
     size_t i;
 
-    if (a == NULL || b == NULL || out == NULL ||
-        a->data == NULL || b->data == NULL) {
+    if (!lmmc_vec_descriptor_is_valid(a) ||
+        !lmmc_vec_descriptor_is_valid(b) || out == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->size != b->size) {
@@ -199,8 +205,8 @@ lmmc_status_t lmmc_vec_cmp_gt(const lmmc_vec_t* a, const lmmc_vec_t* b, int* out
 lmmc_status_t lmmc_vec_cmp_lt(const lmmc_vec_t* a, const lmmc_vec_t* b, int* out) {
     size_t i;
 
-    if (a == NULL || b == NULL || out == NULL ||
-        a->data == NULL || b->data == NULL) {
+    if (!lmmc_vec_descriptor_is_valid(a) ||
+        !lmmc_vec_descriptor_is_valid(b) || out == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->size != b->size) {
@@ -217,8 +223,8 @@ lmmc_status_t lmmc_vec_cmp_lt(const lmmc_vec_t* a, const lmmc_vec_t* b, int* out
 lmmc_status_t lmmc_vec_cmp_ge(const lmmc_vec_t* a, const lmmc_vec_t* b, int* out) {
     size_t i;
 
-    if (a == NULL || b == NULL || out == NULL ||
-        a->data == NULL || b->data == NULL) {
+    if (!lmmc_vec_descriptor_is_valid(a) ||
+        !lmmc_vec_descriptor_is_valid(b) || out == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->size != b->size) {
@@ -235,8 +241,8 @@ lmmc_status_t lmmc_vec_cmp_ge(const lmmc_vec_t* a, const lmmc_vec_t* b, int* out
 lmmc_status_t lmmc_vec_cmp_le(const lmmc_vec_t* a, const lmmc_vec_t* b, int* out) {
     size_t i;
 
-    if (a == NULL || b == NULL || out == NULL ||
-        a->data == NULL || b->data == NULL) {
+    if (!lmmc_vec_descriptor_is_valid(a) ||
+        !lmmc_vec_descriptor_is_valid(b) || out == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->size != b->size) {
@@ -255,8 +261,8 @@ lmmc_status_t lmmc_vec_cmp_eq(const lmmc_vec_t* a, const lmmc_vec_t* b, lmmc_rea
     lmmc_real_t diff;
     lmmc_real_t abs_diff;
 
-    if (a == NULL || b == NULL || out == NULL ||
-        a->data == NULL || b->data == NULL) {
+    if (!lmmc_vec_descriptor_is_valid(a) ||
+        !lmmc_vec_descriptor_is_valid(b) || out == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->size != b->size) {
@@ -282,8 +288,9 @@ lmmc_status_t lmmc_vec_cross(const lmmc_vec_t* a, const lmmc_vec_t* b, lmmc_vec_
     lmmc_real_t t0, t1, t2;
     lmmc_real_t mul1, mul2;
 
-    if (a == NULL || b == NULL || c == NULL ||
-        a->data == NULL || b->data == NULL || c->data == NULL) {
+    if (!lmmc_vec_descriptor_is_valid(a) ||
+        !lmmc_vec_descriptor_is_valid(b) ||
+        !lmmc_vec_descriptor_is_valid(c)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->size != 3 || b->size != 3 || c->size != 3) {
@@ -328,7 +335,8 @@ lmmc_status_t lmmc_vec_apply(const lmmc_vec_t* in, lmmc_real_t (*func)(lmmc_real
 {
     size_t i;
 
-    if (in == NULL || out == NULL || in->data == NULL || out->data == NULL || func == NULL) {
+    if (!lmmc_vec_descriptor_is_valid(in) ||
+        !lmmc_vec_descriptor_is_valid(out) || func == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (in->size != out->size) {
@@ -347,7 +355,8 @@ lmmc_status_t lmmc_mat_apply(const lmmc_mat_t* in, lmmc_real_t (*func)(lmmc_real
     size_t i;
     size_t j;
 
-    if (in == NULL || out == NULL || in->data == NULL || out->data == NULL || func == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(in) ||
+        !lmmc_mat_descriptor_is_valid(out) || func == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (in->rows != out->rows || in->cols != out->cols) {

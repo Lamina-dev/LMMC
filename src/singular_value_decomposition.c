@@ -63,6 +63,7 @@ static void bidiag_qr_step(lmmc_real_t *d, lmmc_real_t *e,
 }
 
 static lmmc_status_t bidiagonalize(const lmmc_mat_t *a,
+                                   lmmc_real_t input_scale,
                                    lmmc_real_t *d, lmmc_real_t *e,
                                    lmmc_mat_t *U, lmmc_mat_t *V) {
     size_t m = a->rows;
@@ -76,7 +77,7 @@ static lmmc_status_t bidiagonalize(const lmmc_mat_t *a,
     if (status != LMMC_STATUS_OK) return status;
     for (i = 0; i < m; i++)
         for (j = 0; j < n; j++)
-            MAT_ELEM(&W, i, j) = MAT_ELEM(a, i, j);
+            MAT_ELEM(&W, i, j) = MAT_ELEM(a, i, j) / input_scale;
 
 
     for (i = 0; i < m; i++)
@@ -84,7 +85,8 @@ static lmmc_status_t bidiagonalize(const lmmc_mat_t *a,
     for (i = 0; i < n; i++)
         for (j = 0; j < n; j++) MAT_ELEM(V, i, j) = (i == j) ? 1.0 : 0.0;
 
-    lmmc_real_t *vbuf = (lmmc_real_t *)lmmc_alloc(((m > n) ? m : n) * sizeof(lmmc_real_t));
+    lmmc_real_t *vbuf = (lmmc_real_t *)lmmc_alloc_array(
+        (m > n) ? m : n, sizeof(lmmc_real_t));
     if (!vbuf) { lmmc_mat_destroy(&W); return LMMC_STATUS_ALLOCATION_FAILED; }
 
     for (k = 0; k < n; k++) {
@@ -140,6 +142,7 @@ static lmmc_status_t bidiagonalize(const lmmc_mat_t *a,
 }
 
 static lmmc_status_t svd_tall(const lmmc_mat_t *a,
+                              lmmc_real_t input_scale,
                               lmmc_mat_t *out_U,
                               lmmc_vec_t *out_sigma,
                               lmmc_mat_t *out_Vt) {
@@ -166,13 +169,14 @@ static lmmc_status_t svd_tall(const lmmc_mat_t *a,
     if (status != LMMC_STATUS_OK) goto fail;
     V_init = 1;
 
-    d = (lmmc_real_t *)lmmc_alloc(n * sizeof(lmmc_real_t));
-    e = (lmmc_real_t *)lmmc_alloc(((n > 0) ? n : 1) * sizeof(lmmc_real_t));
+    d = (lmmc_real_t *)lmmc_alloc_array(n, sizeof(lmmc_real_t));
+    e = (lmmc_real_t *)lmmc_alloc_array(
+        (n > 0) ? n : 1, sizeof(lmmc_real_t));
     if (!d || !e) { status = LMMC_STATUS_ALLOCATION_FAILED; goto fail; }
     for (i = 0; i < n; i++) { d[i] = 0.0; e[i] = 0.0; }
 
 
-    status = bidiagonalize(a, d, e, out_U, &V);
+    status = bidiagonalize(a, input_scale, d, e, out_U, &V);
     if (status != LMMC_STATUS_OK) goto fail;
 
     if (n >= 1) e[n - 1] = 0.0;
@@ -247,7 +251,7 @@ static lmmc_status_t svd_tall(const lmmc_mat_t *a,
     }
 
 
-    order = (size_t *)lmmc_alloc(n * sizeof(size_t));
+    order = (size_t *)lmmc_alloc_array(n, sizeof(size_t));
     if (!order) { status = LMMC_STATUS_ALLOCATION_FAILED; goto fail; }
     for (i = 0; i < n; i++) order[i] = i;
 
@@ -269,7 +273,8 @@ static lmmc_status_t svd_tall(const lmmc_mat_t *a,
 
 
     {
-        lmmc_real_t *col_buf = (lmmc_real_t *)lmmc_alloc(m * n * sizeof(lmmc_real_t));
+        lmmc_real_t *col_buf = (lmmc_real_t *)lmmc_alloc_array_2d(
+            m, n, sizeof(lmmc_real_t));
         if (!col_buf) { status = LMMC_STATUS_ALLOCATION_FAILED; goto fail; }
         for (j = 0; j < n; j++)
             for (i = 0; i < m; i++)
@@ -299,74 +304,122 @@ fail:
     return status;
 }
 
-lmmc_status_t lmmc_svd(const lmmc_mat_t *a, lmmc_svd_result_t *out_result) {
-    if (!a || !out_result || !a->data) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (a->rows == 0 || a->cols == 0) return LMMC_STATUS_INVALID_ARGUMENT;
+static lmmc_status_t restore_singular_value_scale(
+    lmmc_vec_t *sigma,
+    lmmc_real_t input_scale)
+{
+    size_t i;
+    for (i = 0; i < sigma->size; ++i) {
+        sigma->data[i] *= input_scale;
+        if (!isfinite(sigma->data[i])) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+    }
+    return LMMC_STATUS_OK;
+}
 
-    size_t m = a->rows;
-    size_t n = a->cols;
+lmmc_status_t lmmc_svd(const lmmc_mat_t *a, lmmc_svd_result_t *out_result) {
+    size_t m;
+    size_t n;
+    size_t i;
+    size_t j;
+    lmmc_real_t input_scale = 0.0;
     lmmc_status_t status;
 
+    if (!lmmc_mat_descriptor_is_valid(a) || !out_result) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    m = a->rows;
+    n = a->cols;
+    for (i = 0; i < m; ++i) {
+        for (j = 0; j < n; ++j) {
+            const lmmc_real_t value = MAT_ELEM(a, i, j);
+            if (!isfinite(value)) {
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
+            if (lmmc_abs(value) > input_scale) {
+                input_scale = lmmc_abs(value);
+            }
+        }
+    }
+    if (input_scale == 0.0) {
+        input_scale = 1.0;
+    }
+
     if (m >= n) {
-        return svd_tall(a, &out_result->U, &out_result->sigma, &out_result->Vt);
+        status = svd_tall(
+            a, input_scale,
+            &out_result->U, &out_result->sigma, &out_result->Vt);
+        if (status != LMMC_STATUS_OK) {
+            return status;
+        }
+        status = restore_singular_value_scale(
+            &out_result->sigma, input_scale);
+        if (status != LMMC_STATUS_OK) {
+            lmmc_svd_result_destroy(out_result);
+        }
+        return status;
     }
-
-
-    lmmc_mat_t A_T;
-    status = lmmc_mat_create(n, m, &A_T);
-    if (status != LMMC_STATUS_OK) return status;
-    status = lmmc_mat_transpose_to(a, &A_T);
-    if (status != LMMC_STATUS_OK) { lmmc_mat_destroy(&A_T); return status; }
-
-    lmmc_mat_t Up;
-    lmmc_vec_t sp;
-    lmmc_mat_t Vtp;
-    status = svd_tall(&A_T, &Up, &sp, &Vtp);
-    lmmc_mat_destroy(&A_T);
-    if (status != LMMC_STATUS_OK) return status;
-
-
-    status = lmmc_mat_create(m, m, &out_result->U);
-    if (status != LMMC_STATUS_OK) goto cleanup_tmp;
-    status = lmmc_vec_create(m, &out_result->sigma);
-    if (status != LMMC_STATUS_OK) { lmmc_mat_destroy(&out_result->U); goto cleanup_tmp; }
-    status = lmmc_mat_create(n, n, &out_result->Vt);
-    if (status != LMMC_STATUS_OK) {
-        lmmc_mat_destroy(&out_result->U);
-        lmmc_vec_destroy(&out_result->sigma);
-        goto cleanup_tmp;
-    }
-
 
     {
-        size_t i, j;
-        for (i = 0; i < m; i++)
-            for (j = 0; j < m; j++)
+        lmmc_mat_t A_T;
+        lmmc_mat_t Up;
+        lmmc_vec_t sp;
+        lmmc_mat_t Vtp;
+
+        status = lmmc_mat_create(n, m, &A_T);
+        if (status != LMMC_STATUS_OK) return status;
+        status = lmmc_mat_transpose_to(a, &A_T);
+        if (status != LMMC_STATUS_OK) {
+            lmmc_mat_destroy(&A_T);
+            return status;
+        }
+
+        status = svd_tall(&A_T, input_scale, &Up, &sp, &Vtp);
+        lmmc_mat_destroy(&A_T);
+        if (status != LMMC_STATUS_OK) return status;
+        status = restore_singular_value_scale(&sp, input_scale);
+        if (status != LMMC_STATUS_OK) goto cleanup_tmp;
+
+        status = lmmc_mat_create(m, m, &out_result->U);
+        if (status != LMMC_STATUS_OK) goto cleanup_tmp;
+        status = lmmc_vec_create(m, &out_result->sigma);
+        if (status != LMMC_STATUS_OK) {
+            lmmc_mat_destroy(&out_result->U);
+            goto cleanup_tmp;
+        }
+        status = lmmc_mat_create(n, n, &out_result->Vt);
+        if (status != LMMC_STATUS_OK) {
+            lmmc_mat_destroy(&out_result->U);
+            lmmc_vec_destroy(&out_result->sigma);
+            goto cleanup_tmp;
+        }
+
+        for (i = 0; i < m; i++) {
+            for (j = 0; j < m; j++) {
                 MAT_ELEM(&out_result->U, i, j) = MAT_ELEM(&Vtp, j, i);
-    }
-
-    {
-        size_t i;
-        for (i = 0; i < m; i++) out_result->sigma.data[i] = sp.data[i];
-    }
-
-    {
-        size_t i, j;
-        for (i = 0; i < n; i++)
-            for (j = 0; j < n; j++)
+            }
+        }
+        for (i = 0; i < m; i++) {
+            out_result->sigma.data[i] = sp.data[i];
+        }
+        for (i = 0; i < n; i++) {
+            for (j = 0; j < n; j++) {
                 MAT_ELEM(&out_result->Vt, i, j) = MAT_ELEM(&Up, j, i);
-    }
+            }
+        }
 
-    lmmc_mat_destroy(&Up);
-    lmmc_vec_destroy(&sp);
-    lmmc_mat_destroy(&Vtp);
-    return LMMC_STATUS_OK;
+        lmmc_mat_destroy(&Up);
+        lmmc_vec_destroy(&sp);
+        lmmc_mat_destroy(&Vtp);
+        return LMMC_STATUS_OK;
 
 cleanup_tmp:
-    lmmc_mat_destroy(&Up);
-    lmmc_vec_destroy(&sp);
-    lmmc_mat_destroy(&Vtp);
-    return status;
+        lmmc_mat_destroy(&Up);
+        lmmc_vec_destroy(&sp);
+        lmmc_mat_destroy(&Vtp);
+        return status;
+    }
 }
 
 lmmc_status_t lmmc_pinv(const lmmc_mat_t *a, lmmc_real_t tol, lmmc_mat_t *out_pinv) {

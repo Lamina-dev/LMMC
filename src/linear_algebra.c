@@ -434,7 +434,7 @@ lmmc_status_t lmmc_qr_solve(const lmmc_mat_t* qr, const lmmc_real_t* tau, const 
         return LMMC_STATUS_DIMENSION_MISMATCH;
     }
 
-    y = (lmmc_real_t*)lmmc_alloc(m * sizeof(lmmc_real_t));
+    y = (lmmc_real_t*)lmmc_alloc_array(m, sizeof(lmmc_real_t));
     if (y == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }

@@ -13,8 +13,9 @@
 
 lmmc_status_t lmmc_mat_gemm(lmmc_real_t alpha, const lmmc_mat_t* A, int transA,
     const lmmc_mat_t* B, int transB, lmmc_real_t beta, lmmc_mat_t* C) {
-    if (A == NULL || B == NULL || C == NULL ||
-        A->data == NULL || B->data == NULL || C->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(A) ||
+        !lmmc_mat_descriptor_is_valid(B) ||
+        !lmmc_mat_descriptor_is_valid(C)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -31,6 +32,27 @@ lmmc_status_t lmmc_mat_gemm(lmmc_real_t alpha, const lmmc_mat_t* A, int transA,
     if (C->rows != M || C->cols != N) {
         return LMMC_STATUS_DIMENSION_MISMATCH;
     }
+    {
+        lmmc_storage_envelope_t a_envelope;
+        lmmc_storage_envelope_t b_envelope;
+        lmmc_storage_envelope_t c_envelope;
+        if (!lmmc_storage_envelope_checked(
+                A->data, A->rows, A->cols, A->stride,
+                sizeof(lmmc_real_t), &a_envelope) ||
+            !lmmc_storage_envelope_checked(
+                B->data, B->rows, B->cols, B->stride,
+                sizeof(lmmc_real_t), &b_envelope) ||
+            !lmmc_storage_envelope_checked(
+                C->data, C->rows, C->cols, C->stride,
+                sizeof(lmmc_real_t), &c_envelope)) {
+            return LMMC_STATUS_INVALID_ARGUMENT;
+        }
+        if (lmmc_storage_envelopes_overlap(&c_envelope, &a_envelope) ||
+            lmmc_storage_envelopes_overlap(&c_envelope, &b_envelope)) {
+            return LMMC_STATUS_INVALID_ARGUMENT;
+        }
+    }
+
 
     size_t K = K_A;
 
@@ -120,7 +142,8 @@ lmmc_status_t lmmc_mat_mul(const lmmc_mat_t* a, const lmmc_mat_t* b, lmmc_mat_t*
 
 lmmc_status_t lmmc_vec_dot(const lmmc_vec_t* a, const lmmc_vec_t* b, lmmc_real_t* out_dot) {
     size_t i = 0;
-    if (a == NULL || b == NULL || out_dot == NULL || a->data == NULL || b->data == NULL) {
+    if (!lmmc_vec_descriptor_is_valid(a) ||
+        !lmmc_vec_descriptor_is_valid(b) || out_dot == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->size != b->size) {
@@ -147,8 +170,9 @@ lmmc_status_t lmmc_vec_dot(const lmmc_vec_t* a, const lmmc_vec_t* b, lmmc_real_t
 
 lmmc_status_t lmmc_mat_gemv(lmmc_real_t alpha, const lmmc_mat_t* A, int transA,
     const lmmc_vec_t* x, lmmc_real_t beta, lmmc_vec_t* y) {
-    if (A == NULL || x == NULL || y == NULL ||
-        A->data == NULL || x->data == NULL || y->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(A) ||
+        !lmmc_vec_descriptor_is_valid(x) ||
+        !lmmc_vec_descriptor_is_valid(y)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -240,10 +264,8 @@ lmmc_status_t lmmc_mat_vec_mul(const lmmc_mat_t* a, const lmmc_vec_t* x, lmmc_ve
 }
 
 lmmc_status_t lmmc_vec_axpy(lmmc_real_t alpha, const lmmc_vec_t* x, lmmc_vec_t* y) {
-    if (x == NULL || y == NULL || x->data == NULL || y->data == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (x->size == 0 || y->size == 0) {
+    if (!lmmc_vec_descriptor_is_valid(x) ||
+        !lmmc_vec_descriptor_is_valid(y)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (x->size != y->size) {

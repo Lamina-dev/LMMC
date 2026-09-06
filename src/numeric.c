@@ -6,6 +6,7 @@
 #include <string.h>
 #include <float.h>
 #include "memory_bridge.h"
+#include "internal.h"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 
@@ -141,44 +142,95 @@ lmmc_status_t lmmc_atan2(lmmc_real_t y, lmmc_real_t x, lmmc_real_t* out_res) {
 }
 
 lmmc_status_t lmmc_sincos(lmmc_real_t x, lmmc_real_t* out_sin, lmmc_real_t* out_cos) {
-    if (out_sin == NULL || out_cos == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
-    LMMC_REAL_SET_D(out_sin, sin(x));
-    LMMC_REAL_SET_D(out_cos, cos(x));
+    double sine, cosine;
+    if (out_sin == NULL || out_cos == NULL || out_sin == out_cos || !isfinite(x)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    sine = sin(x);
+    cosine = cos(x);
+    if (!isfinite(sine) || !isfinite(cosine)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    LMMC_REAL_SET_D(out_sin, sine);
+    LMMC_REAL_SET_D(out_cos, cosine);
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_hypot(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out_res) {
-    if (out_res == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
-    LMMC_REAL_SET_D(out_res, hypot(x, y));
+    double result;
+    if (out_res == NULL || !isfinite(x) || !isfinite(y)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    result = hypot(x, y);
+    if (!isfinite(result)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    LMMC_REAL_SET_D(out_res, result);
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_exp2(lmmc_real_t x, lmmc_real_t* out_res) {
-    if (out_res == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
-    LMMC_REAL_SET_D(out_res, exp2(x));
+    double result;
+    if (out_res == NULL || !isfinite(x)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    result = exp2(x);
+    if (!isfinite(result)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    LMMC_REAL_SET_D(out_res, result);
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_log2(lmmc_real_t x, lmmc_real_t* out_res) {
-    if (out_res == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
-    LMMC_REAL_SET_D(out_res, log2(x));
+    double result;
+    if (out_res == NULL || !isfinite(x)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (x <= 0.0) {
+        return LMMC_STATUS_OUT_OF_RANGE;
+    }
+    result = log2(x);
+    if (!isfinite(result)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    LMMC_REAL_SET_D(out_res, result);
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_expm1(lmmc_real_t x, lmmc_real_t* out_res) {
-    if (out_res == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
-    LMMC_REAL_SET_D(out_res, expm1(x));
+    double result;
+    if (out_res == NULL || !isfinite(x)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    result = expm1(x);
+    if (!isfinite(result)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    LMMC_REAL_SET_D(out_res, result);
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_log1p(lmmc_real_t x, lmmc_real_t* out_res) {
-    if (out_res == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
-    LMMC_REAL_SET_D(out_res, log1p(x));
+    double result;
+    if (out_res == NULL || !isfinite(x)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (x <= -1.0) {
+        return LMMC_STATUS_OUT_OF_RANGE;
+    }
+    result = log1p(x);
+    if (!isfinite(result)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    LMMC_REAL_SET_D(out_res, result);
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_split_int_frac(lmmc_real_t x, lmmc_real_t* out_iptr, lmmc_real_t* out_frac) {
-    if (out_iptr == NULL || out_frac == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (out_iptr == NULL || out_frac == NULL || out_iptr == out_frac) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
     {
         double ip;
         double fr = modf(x, &ip);
@@ -189,14 +241,27 @@ lmmc_status_t lmmc_split_int_frac(lmmc_real_t x, lmmc_real_t* out_iptr, lmmc_rea
 }
 
 lmmc_status_t lmmc_fmod(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out_res) {
-    if (out_res == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
-    LMMC_REAL_SET_D(out_res, fmod(x, y));
+    double result;
+    if (out_res == NULL || isnan(x) || isnan(y)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (isinf(x) || y == 0.0) return LMMC_STATUS_OUT_OF_RANGE;
+    result = fmod(x, y);
+    if (!isfinite(result)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    LMMC_REAL_SET_D(out_res, result);
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_ldexp(lmmc_real_t x, int exp, lmmc_real_t* out_res) {
-    if (out_res == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
-    LMMC_REAL_SET_D(out_res, ldexp(x, exp));
+    double result;
+    if (out_res == NULL || !isfinite(x)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    result = ldexp(x, exp);
+    if (!isfinite(result) || (x != 0.0 && result == 0.0)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    LMMC_REAL_SET_D(out_res, result);
     return LMMC_STATUS_OK;
 }
 
@@ -209,6 +274,9 @@ lmmc_status_t lmmc_nextafter(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out_res)
 lmmc_status_t lmmc_approx_eq(lmmc_real_t a, lmmc_real_t b, lmmc_real_t epsilon, int* out_equal) {
     lmmc_real_t diff, zero;
     if (out_equal == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!isfinite(epsilon) || epsilon < 0.0) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
     if (isnan(a) || isnan(b)) {
         *out_equal = 0;
         return LMMC_STATUS_OK;
@@ -399,17 +467,24 @@ static lmmc_status_t lmmc_fft_radix4_core(lmmc_real_t* real, lmmc_real_t* imag, 
 
 lmmc_status_t lmmc_fft_radix4(lmmc_real_t* real, lmmc_real_t* imag, size_t n, int inverse) {
     unsigned digits = 0;
+    lmmc_storage_envelope_t real_envelope;
+    lmmc_storage_envelope_t imag_envelope;
 
-    if (real == NULL || imag == NULL || (inverse != 0 && inverse != 1)) {
+    if (real == NULL || imag == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
     /* Strict radix-4: n must be an exact power of 4 */
-    if (!lmmc_is_power_of_four(n, &digits)) {
+    if (!lmmc_is_power_of_four(n, &digits) ||
+        !lmmc_storage_envelope_checked(
+            real, 1, n, n, sizeof(lmmc_real_t), &real_envelope) ||
+        !lmmc_storage_envelope_checked(
+            imag, 1, n, n, sizeof(lmmc_real_t), &imag_envelope) ||
+        lmmc_storage_envelopes_overlap(&real_envelope, &imag_envelope)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    return lmmc_fft_radix4_core(real, imag, n, inverse);
+    return lmmc_fft_radix4_core(real, imag, n, inverse ? 1 : 0);
 }
 
 lmmc_status_t lmmc_fft_radix4_forward(lmmc_real_t* real, lmmc_real_t* imag, size_t n) {
@@ -747,7 +822,7 @@ lmmc_status_t lmmc_double_nearly_equal_tol(
     lmmc_max_inplace(&scale, &tmp1, &tmp2);
 
     LMMC_REAL_MUL(&tmp1, &rel_tol, &scale);
-    LMMC_REAL_ADD(&threshold, &abs_tol, &tmp1);
+    lmmc_max_inplace(&threshold, &abs_tol, &tmp1);
 
     if (isnan(diff) || isnan(threshold)) {
         LMMC_REAL_CLEAR(&diff); LMMC_REAL_CLEAR(&scale); LMMC_REAL_CLEAR(&threshold);
@@ -786,91 +861,88 @@ lmmc_status_t lmmc_double_nearly_equal(lmmc_real_t a, lmmc_real_t b, int* out_eq
     return st;
 }
 
-lmmc_status_t lmmc_asin(lmmc_real_t x, lmmc_real_t* out) {
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (x < -1.0 || x > 1.0) return LMMC_STATUS_OUT_OF_RANGE;
-    *out = asin(x);
+static lmmc_status_t store_finite_scalar_result(
+    lmmc_real_t value, lmmc_real_t* out) {
+    if (!isfinite(value)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    *out = value;
     return LMMC_STATUS_OK;
+}
+
+lmmc_status_t lmmc_asin(lmmc_real_t x, lmmc_real_t* out) {
+    if (!out || !isfinite(x)) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (x < -1.0 || x > 1.0) return LMMC_STATUS_OUT_OF_RANGE;
+    return store_finite_scalar_result(asin(x), out);
 }
 
 lmmc_status_t lmmc_acos(lmmc_real_t x, lmmc_real_t* out) {
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!out || !isfinite(x)) return LMMC_STATUS_INVALID_ARGUMENT;
     if (x < -1.0 || x > 1.0) return LMMC_STATUS_OUT_OF_RANGE;
-    *out = acos(x);
-    return LMMC_STATUS_OK;
+    return store_finite_scalar_result(acos(x), out);
 }
 
 lmmc_status_t lmmc_atan(lmmc_real_t x, lmmc_real_t* out) {
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    *out = atan(x);
-    return LMMC_STATUS_OK;
+    if (!out || !isfinite(x)) return LMMC_STATUS_INVALID_ARGUMENT;
+    return store_finite_scalar_result(atan(x), out);
 }
 
 lmmc_status_t lmmc_sinh(lmmc_real_t x, lmmc_real_t* out) {
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    *out = sinh(x);
-    return LMMC_STATUS_OK;
+    if (!out || !isfinite(x)) return LMMC_STATUS_INVALID_ARGUMENT;
+    return store_finite_scalar_result(sinh(x), out);
 }
 
 lmmc_status_t lmmc_cosh(lmmc_real_t x, lmmc_real_t* out) {
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    *out = cosh(x);
-    return LMMC_STATUS_OK;
+    if (!out || !isfinite(x)) return LMMC_STATUS_INVALID_ARGUMENT;
+    return store_finite_scalar_result(cosh(x), out);
 }
 
 lmmc_status_t lmmc_tanh(lmmc_real_t x, lmmc_real_t* out) {
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    *out = tanh(x);
-    return LMMC_STATUS_OK;
+    if (!out || !isfinite(x)) return LMMC_STATUS_INVALID_ARGUMENT;
+    return store_finite_scalar_result(tanh(x), out);
 }
 
 lmmc_status_t lmmc_asinh(lmmc_real_t x, lmmc_real_t* out) {
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    *out = asinh(x);
-    return LMMC_STATUS_OK;
+    if (!out || !isfinite(x)) return LMMC_STATUS_INVALID_ARGUMENT;
+    return store_finite_scalar_result(asinh(x), out);
 }
 
 lmmc_status_t lmmc_acosh(lmmc_real_t x, lmmc_real_t* out) {
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!out || !isfinite(x)) return LMMC_STATUS_INVALID_ARGUMENT;
     if (x < 1.0) return LMMC_STATUS_OUT_OF_RANGE;
-    *out = acosh(x);
-    return LMMC_STATUS_OK;
+    return store_finite_scalar_result(acosh(x), out);
 }
 
 lmmc_status_t lmmc_atanh(lmmc_real_t x, lmmc_real_t* out) {
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!out || !isfinite(x)) return LMMC_STATUS_INVALID_ARGUMENT;
     if (x <= -1.0 || x >= 1.0) return LMMC_STATUS_OUT_OF_RANGE;
-    *out = atanh(x);
-    return LMMC_STATUS_OK;
+    return store_finite_scalar_result(atanh(x), out);
 }
 
 lmmc_status_t lmmc_pow(lmmc_real_t x, lmmc_real_t y, lmmc_real_t* out) {
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (x < 0.0 && floor(y) != y) return LMMC_STATUS_OUT_OF_RANGE;
-    *out = pow(x, y);
-    return LMMC_STATUS_OK;
+    if (!out || !isfinite(x) || !isfinite(y))
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    if ((x == 0.0 && y < 0.0) ||
+        (x < 0.0 && trunc(y) != y)) {
+        return LMMC_STATUS_OUT_OF_RANGE;
+    }
+    return store_finite_scalar_result(pow(x, y), out);
 }
 
 lmmc_status_t lmmc_ceil(lmmc_real_t x, lmmc_real_t* out) {
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    *out = ceil(x);
-    return LMMC_STATUS_OK;
+    if (!out || !isfinite(x)) return LMMC_STATUS_INVALID_ARGUMENT;
+    return store_finite_scalar_result(ceil(x), out);
 }
 
 lmmc_status_t lmmc_floor(lmmc_real_t x, lmmc_real_t* out) {
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    *out = floor(x);
-    return LMMC_STATUS_OK;
+    if (!out || !isfinite(x)) return LMMC_STATUS_INVALID_ARGUMENT;
+    return store_finite_scalar_result(floor(x), out);
 }
 
 lmmc_status_t lmmc_round(lmmc_real_t x, lmmc_real_t* out) {
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    *out = round(x);
-    return LMMC_STATUS_OK;
+    if (!out || !isfinite(x)) return LMMC_STATUS_INVALID_ARGUMENT;
+    return store_finite_scalar_result(round(x), out);
 }
 
 lmmc_status_t lmmc_trunc(lmmc_real_t x, lmmc_real_t* out) {
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    *out = trunc(x);
-    return LMMC_STATUS_OK;
+    if (!out || !isfinite(x)) return LMMC_STATUS_INVALID_ARGUMENT;
+    return store_finite_scalar_result(trunc(x), out);
 }

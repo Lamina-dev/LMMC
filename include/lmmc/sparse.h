@@ -564,7 +564,11 @@ lmmc_status_t lmmc_sparse_scale(
     lmmc_real_t alpha
 );
 
-/** @brief 计算稀疏矩阵的 Frobenius 范数. */
+/**
+ * @brief 计算稀疏矩阵的 Frobenius 范数.
+ *
+ * 使用缩放平方和累加，避免存储值平方造成的中间溢出或下溢。
+ */
 lmmc_status_t lmmc_sparse_norm_fro(
     const lmmc_sparse_mat_t* a,
     lmmc_real_t* out_norm

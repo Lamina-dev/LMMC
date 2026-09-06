@@ -156,7 +156,11 @@ lmmc_status_t lmmc_tensor_set(lmmc_tensor_t* tensor, size_t i, size_t j, size_t 
 /** @brief 读取元素 (i,j,k) . */
 lmmc_status_t lmmc_tensor_get(const lmmc_tensor_t* tensor, size_t i, size_t j, size_t k, lmmc_real_t* out_value);
 
-/** @brief 计算张量 Frobenius 范数. */
+/**
+ * @brief 计算张量 Frobenius 范数.
+ *
+ * 使用缩放平方和累加，避免元素平方造成的中间溢出或下溢。
+ */
 lmmc_status_t lmmc_tensor_norm_fro(const lmmc_tensor_t* tensor, lmmc_real_t* out_norm);
 
 /** @brief 同形状张量逐元素加法. */

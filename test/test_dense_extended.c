@@ -523,6 +523,56 @@ int main(void) {
         }
         lmmc_mat_destroy(&m);
     }
+    {
+        lmmc_vec_t extreme = {0};
+        lmmc_mat_t extreme_matrix = {0};
+        lmmc_real_t norm = -1.0;
+        const lmmc_real_t large = 1.0e308;
+        const lmmc_real_t small = 1.0e-300;
+
+        st = lmmc_vec_create(2, &extreme);
+        if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
+        extreme.data[0] = large;
+        extreme.data[1] = large;
+        st = lmmc_vec_norm2(&extreme, &norm);
+        if (st != LMMC_STATUS_OK ||
+            !isfinite(norm) ||
+            fabs(norm / large - sqrt(2.0)) > 1.0e-15) {
+            printf("5.12 FAIL: large finite vector norm=%g\n", norm);
+            rc = 1; lmmc_vec_destroy(&extreme); goto done;
+        }
+        extreme.data[0] = small;
+        extreme.data[1] = small;
+        st = lmmc_vec_norm2(&extreme, &norm);
+        if (st != LMMC_STATUS_OK ||
+            fabs(norm / small - sqrt(2.0)) > 1.0e-15) {
+            printf("5.12 FAIL: small nonzero vector norm=%g\n", norm);
+            rc = 1; lmmc_vec_destroy(&extreme); goto done;
+        }
+        lmmc_vec_destroy(&extreme);
+
+        st = lmmc_mat_create(1, 2, &extreme_matrix);
+        if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
+        extreme_matrix.data[0] = large;
+        extreme_matrix.data[1] = large;
+        st = lmmc_mat_norm_fro(&extreme_matrix, &norm);
+        if (st != LMMC_STATUS_OK ||
+            !isfinite(norm) ||
+            fabs(norm / large - sqrt(2.0)) > 1.0e-15) {
+            printf("5.12 FAIL: large finite matrix norm=%g\n", norm);
+            rc = 1; lmmc_mat_destroy(&extreme_matrix); goto done;
+        }
+        extreme_matrix.data[0] = small;
+        extreme_matrix.data[1] = small;
+        st = lmmc_mat_norm_fro(&extreme_matrix, &norm);
+        if (st != LMMC_STATUS_OK ||
+            fabs(norm / small - sqrt(2.0)) > 1.0e-15) {
+            printf("5.12 FAIL: small nonzero matrix norm=%g\n", norm);
+            rc = 1; lmmc_mat_destroy(&extreme_matrix); goto done;
+        }
+        lmmc_mat_destroy(&extreme_matrix);
+    }
+
 
 
     {
@@ -564,6 +614,19 @@ int main(void) {
             printf("5.13 FAIL: GEMV dimension precedence or atomicity mismatch\n");
             rc = 1; goto done;
         }
+        {
+            lmmc_mat_t b = {2, 2, 2, vector_data, 0};
+            lmmc_mat_t c_over_a = a;
+            st = lmmc_mat_gemm(
+                1.0, &a, 0, &b, 0, 0.0, &c_over_a);
+            if (st != LMMC_STATUS_INVALID_ARGUMENT ||
+                memcmp(matrix_before, matrix_data, sizeof(matrix_data)) != 0 ||
+                memcmp(vector_before, vector_data, sizeof(vector_data)) != 0) {
+                printf("5.13 FAIL: GEMM A/C overlap was not rejected atomically\n");
+                rc = 1; goto done;
+            }
+        }
+
     }
 
     {

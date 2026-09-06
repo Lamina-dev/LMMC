@@ -77,17 +77,17 @@ static int rng_concurrency_body(rng_concurrency_arg_t* argument) {
     while (atomic_load(&argument->state->go) == 0) {
     }
     if (!failed &&
-        lmmc_lsr_random_default_rand(&uniform) != LMMC_STATUS_OK) failed = 1;
+        lmmc_std_random_default_rand(&uniform) != LMMC_STATUS_OK) failed = 1;
     if (!failed &&
-        lmmc_lsr_random_default_normal(0.0, 1.0, &normal) !=
+        lmmc_std_random_default_normal(0.0, 1.0, &normal) !=
             LMMC_STATUS_OK) failed = 1;
     if (!failed && (!(uniform >= 0.0 && uniform < 1.0) ||
                     !isfinite(normal))) failed = 1;
     if (!failed &&
-        lmmc_lsr_random_default_seed(
+        lmmc_std_random_default_seed(
             UINT64_C(0x123456789abcdef0) +
             (uint64_t)argument->index) != LMMC_STATUS_OK) failed = 1;
-    lmmc_lsr_random_default_deinit();
+    lmmc_std_random_default_deinit();
     if (lmmc_deinit() != LMMC_STATUS_OK) failed = 1;
     argument->state->results[argument->index] = failed;
     return failed;
@@ -325,6 +325,20 @@ int main(void) {
                             lmmc_interp_cspline_create(xs, ys, 3, &spline),
                             LMMC_STATUS_OK)) return 1;
         lmmc_interp_cspline_destroy(spline);
+    }
+    {
+        lmmc_real_t data[4] = {1.0, 0.0, 0.0, 1.0};
+        lmmc_mat_t matrix = {2, 2, 2, data, 0};
+        size_t rank = 0;
+        lmmc_memory_fail_after_for_test(0);
+        if (!require_status("LMMC standard-library rank allocation failure",
+                            lmmc_std_linalg_rank(&matrix, &rank),
+                            LMMC_STATUS_ALLOCATION_FAILED)) return 1;
+        lmmc_memory_fail_reset_for_test();
+        if (!require_status("LMMC standard-library rank allocation retry",
+                            lmmc_std_linalg_rank(&matrix, &rank),
+                            LMMC_STATUS_OK)) return 1;
+        if (rank != 2) return 1;
     }
 #ifdef LMMC_DEBUG_LEAKS
     {

@@ -3,6 +3,7 @@
  * 针对 LMMC 中 interp linear 相关接口的单元测试。
  */
 #include <math.h>
+#include <float.h>
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"
@@ -75,6 +76,19 @@ int main(void) {
         st = lmmc_interp_linear(xs, ys, n, 3.0, &out_y);
         if (st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(out_y, 11.0, 1e-14)) {
             printf("interp_linear test failed: two-point right endpoint\n");
+            rc = 1;
+            goto done;
+        }
+    }
+
+    {
+        const lmmc_real_t xs[] = {-DBL_MAX, DBL_MAX};
+        const lmmc_real_t ys[] = {-DBL_MAX, DBL_MAX};
+
+        st = lmmc_interp_linear(xs, ys, 2, 0.0, &out_y);
+        if (st != LMMC_STATUS_OK || out_y != 0.0) {
+            printf("interp_linear test failed: finite extreme midpoint got %.17g\n",
+                   out_y);
             rc = 1;
             goto done;
         }
@@ -195,24 +209,47 @@ int main(void) {
 
 
     {
-
         lmmc_real_t xs_dup[] = {1.0, 2.0, 2.0, 3.0};
         lmmc_real_t ys_dup[] = {1.0, 2.0, 3.0, 4.0};
-
-
         lmmc_real_t xs_dec[] = {3.0, 2.0, 1.0};
         lmmc_real_t ys_dec[] = {6.0, 4.0, 2.0};
-
+        lmmc_real_t xs_valid[] = {1.0, 2.0, 3.0};
+        lmmc_real_t xs_nan[] = {1.0, NAN, 3.0};
+        lmmc_real_t ys_nan[] = {1.0, NAN, 3.0};
 
         st = lmmc_interp_linear(xs_dup, ys_dup, 4, 2.5, &out_y);
-
-        (void)st;
+        if (st != LMMC_STATUS_INVALID_ARGUMENT) {
+            printf("interp_linear test failed: duplicate xs should return INVALID_ARGUMENT\n");
+            rc = 1;
+            goto done;
+        }
 
         st = lmmc_interp_linear(xs_dec, ys_dec, 3, 2.0, &out_y);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT) {
+            printf("interp_linear test failed: decreasing xs should return INVALID_ARGUMENT\n");
+            rc = 1;
+            goto done;
+        }
 
-        if (st != LMMC_STATUS_OUT_OF_RANGE) {
+        st = lmmc_interp_linear(xs_nan, ys_dup, 3, 2.0, &out_y);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT) {
+            printf("interp_linear test failed: NaN xs should return INVALID_ARGUMENT\n");
+            rc = 1;
+            goto done;
+        }
 
-            (void)st;
+        st = lmmc_interp_linear(xs_valid, ys_nan, 3, 2.0, &out_y);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT) {
+            printf("interp_linear test failed: NaN ys should return INVALID_ARGUMENT\n");
+            rc = 1;
+            goto done;
+        }
+
+        st = lmmc_interp_linear(xs_dup, ys_dup, 4, NAN, &out_y);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT) {
+            printf("interp_linear test failed: NaN query should return INVALID_ARGUMENT\n");
+            rc = 1;
+            goto done;
         }
     }
 

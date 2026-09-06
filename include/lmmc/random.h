@@ -87,7 +87,17 @@ lmmc_status_t lmmc_rng_long_jump(lmmc_rng_t* rng);
 uint64_t lmmc_rng_next_u64(lmmc_rng_t* rng);
 
 /**
+ * @brief 实数分布参数的公共约束。
+ *
+ * 所有实数参数必须有限；尺度、形状、速率和自由度参数还必须为正数。
+ * 违反约束时返回 LMMC_STATUS_INVALID_ARGUMENT，且不会进入拒绝采样循环。
+ */
+
+/**
  * @brief 在 @f$[a,b)@f$ 区间内生成均匀分布样本。
+ *
+ * 使用防溢出的仿射插值；有限端点即使跨越完整 double 范围也不会因
+ * 计算 b-a 而产生无穷值。
  */
 lmmc_status_t lmmc_rng_uniform(
     lmmc_rng_t* rng,
@@ -107,7 +117,8 @@ lmmc_status_t lmmc_rng_uniform(
  * @param[out]    out_value 输出样本值。
  *
  * @return ::LMMC_STATUS_OK 成功；
- *         ::LMMC_STATUS_INVALID_ARGUMENT 若 stddev <= 0 或指针为 NULL。
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若参数非有限、stddev <= 0
+ *         或指针为 NULL。
  *
  * @par 副作用
  * - 就地修改 @p rng 的内部状态（消耗随机数）。
@@ -168,7 +179,8 @@ lmmc_status_t lmmc_rng_shuffle(
  * @param[out] out    输出样本值。
  *
  * @return ::LMMC_STATUS_OK 成功；
- *         ::LMMC_STATUS_INVALID_ARGUMENT 若 shape <= 0、scale <= 0 或指针为 NULL。
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若参数非有限、shape <= 0、
+ *         scale <= 0 或指针为 NULL。
  *
  * @par 副作用
  * - 就地修改 @p rng 的内部状态（消耗多个随机数，次数不确定）。

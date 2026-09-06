@@ -2,7 +2,7 @@
  * @file interp.h
  * @brief 一维插值算法:线性,三次样条,Lagrange 多项式,PCHIP,Akima,二维插值.
  *
- * 节点数组 @c xs 必须严格升序排列.
+ * 参与插值的节点和值必须有限；分段插值坐标须严格升序，Lagrange 节点须互异。
  */
 #ifndef LMMC_INTERP_H
 #define LMMC_INTERP_H
@@ -18,11 +18,16 @@ extern "C" {
 /**
  * @brief 在节点 @c (xs[i], ys[i]) 间做分段线性插值.
  *
+ * 内部对横坐标归一化，并按符号选择溢出安全的仿射组合；因此有限端点
+ * 跨越完整浮点范围时仍可计算有限的区间内插值。
  * @param[in]  xs       严格升序的节点 x 数组.
  * @param[in]  ys       对应的 y 值数组.
  * @param[in]  n        节点数,至少 2 .
  * @param[in]  query_x  查询点.
  * @param[out] out_y    输出插值结果.超出 @c [xs[0], xs[n-1]] 范围返回 ::LMMC_STATUS_OUT_OF_RANGE .
+ *
+ * @return 非有限输入或非严格升序节点返回 ::LMMC_STATUS_INVALID_ARGUMENT；
+ *         算术溢出返回 ::LMMC_STATUS_NUMERICAL_FAILURE。
  */
 lmmc_status_t lmmc_interp_linear(
     const lmmc_real_t* xs,
@@ -54,7 +59,9 @@ typedef enum {
  * @param[out] out_spline  返回的样条句柄.
  *
  * @return ::LMMC_STATUS_OK 成功;
- *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n < 3 或指针为 NULL;
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若输入非有限、n < 3、节点非严格
+ *         升序或指针为 NULL;
+ *         ::LMMC_STATUS_NUMERICAL_FAILURE 若系数计算产生非有限值;
  *         ::LMMC_STATUS_ALLOCATION_FAILED 若内存分配失败.
  *
  * @par 副作用
@@ -84,8 +91,9 @@ lmmc_status_t lmmc_interp_cspline_create(
  * @param[out] out_spline  返回的样条句柄.
  *
  * @return ::LMMC_STATUS_OK 成功;
- *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n < 3,xs 非严格升序,
- *         PERIODIC 模式下首尾 y 值不匹配,或指针为 NULL;
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若输入非有限、边界条件枚举无效、
+ *         n < 3、xs 非严格升序、PERIODIC 模式下首尾 y 值不匹配或指针为 NULL;
+ *         ::LMMC_STATUS_NUMERICAL_FAILURE 若系数计算产生非有限值;
  *         ::LMMC_STATUS_ALLOCATION_FAILED 若内存分配失败.
  *
  * @note 对于 LMMC_SPLINE_PERIODIC,要求 |ys[0] - ys[n-1]| <= 1e-12,否则返回
@@ -133,7 +141,8 @@ typedef struct lmmc_interp_pchip_t lmmc_interp_pchip_t;
  * @param[out] out  返回的 PCHIP 句柄.
  *
  * @return ::LMMC_STATUS_OK 成功;
- *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n < 2,xs 非严格升序或指针为 NULL;
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若输入非有限、n < 2、xs 非严格升序或指针为 NULL;
+ *         ::LMMC_STATUS_NUMERICAL_FAILURE 若系数计算产生非有限值;
  *         ::LMMC_STATUS_ALLOCATION_FAILED 若内存分配失败.
  *
  * @par 副作用
@@ -175,7 +184,8 @@ typedef struct lmmc_interp_akima_t lmmc_interp_akima_t;
  * @param[out] out  返回的 Akima 句柄.
  *
  * @return ::LMMC_STATUS_OK 成功;
- *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n < 5,xs 非严格升序或指针为 NULL;
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若输入非有限、n < 5、xs 非严格升序或指针为 NULL;
+ *         ::LMMC_STATUS_NUMERICAL_FAILURE 若系数计算产生非有限值;
  *         ::LMMC_STATUS_ALLOCATION_FAILED 若内存分配失败.
  *
  * @par 副作用
@@ -204,6 +214,8 @@ typedef struct lmmc_interp_lagrange_t lmmc_interp_lagrange_t;
 
 /**
  * @brief 由节点构造 Lagrange 插值多项式(基于重心权重).
+ *
+ * 输入节点和值必须有限，xs 节点须互异但可采用任意顺序。求值点必须有限。
  */
 lmmc_status_t lmmc_interp_lagrange_create(
     const lmmc_real_t* xs,

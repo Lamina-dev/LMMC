@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <stdint.h>
 
 #include "lmmc/config.h"
 #include "lmmc/dense.h"
@@ -263,6 +264,41 @@ static int test_identity_det(void)
 }
 
 
+static int test_invalid_descriptors_are_rejected(void)
+{
+    lmmc_real_t storage[4] = {1.0, 2.0, 3.0, 4.0};
+    lmmc_mat_t valid = {2, 2, 2, storage, 0};
+    lmmc_mat_t invalid_stride = valid;
+    lmmc_mat_t overflowing = valid;
+    lmmc_mat_t wrapped;
+    lmmc_real_t scalar = 0.0;
+
+    invalid_stride.stride = 1;
+    CHECK(lmmc_mat_fill(&invalid_stride, 0.0) ==
+              LMMC_STATUS_INVALID_ARGUMENT,
+          "mat_fill accepted stride smaller than column count");
+    CHECK(lmmc_mat_add(&invalid_stride, &valid, &valid) ==
+              LMMC_STATUS_INVALID_ARGUMENT,
+          "mat_add accepted an invalid matrix descriptor");
+    CHECK(lmmc_mat_gemm(1.0, &valid, 0, &valid, 0, 0.0,
+                        &invalid_stride) ==
+              LMMC_STATUS_INVALID_ARGUMENT,
+          "mat_gemm accepted an invalid output descriptor");
+    CHECK(lmmc_mat_det(&invalid_stride, &scalar) ==
+              LMMC_STATUS_INVALID_ARGUMENT,
+          "mat_det accepted an invalid matrix descriptor");
+
+    overflowing.stride = SIZE_MAX;
+    CHECK(lmmc_mat_fill(&overflowing, 0.0) ==
+              LMMC_STATUS_INVALID_ARGUMENT,
+          "mat_fill accepted overflowing address arithmetic");
+    CHECK(lmmc_mat_wrap(2, 2, SIZE_MAX, storage, &wrapped) ==
+              LMMC_STATUS_INVALID_ARGUMENT,
+          "mat_wrap accepted overflowing address arithmetic");
+    return 0;
+}
+
+
 int main(void)
 {
     int rc = 0;
@@ -288,6 +324,13 @@ int main(void)
 
     if (test_identity_det()) { rc = 1; printf("  [FAIL] identity det\n"); }
     else { printf("  [PASS] identity det\n"); }
+
+    if (test_invalid_descriptors_are_rejected()) {
+        rc = 1;
+        printf("  [FAIL] invalid descriptor rejection\n");
+    } else {
+        printf("  [PASS] invalid descriptor rejection\n");
+    }
 
     printf("\n");
     if (rc == 0) {

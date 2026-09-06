@@ -23,11 +23,24 @@ static size_t interp_find_interval(const lmmc_real_t* xs, size_t n,
     return lo;
 }
 
-static int interp_check_strictly_increasing(const lmmc_real_t* xs, size_t n)
+static int interp_check_strictly_increasing(
+    const lmmc_real_t* xs, size_t n)
 {
     size_t i;
-    for (i = 0; i < n - 1; i++) {
-        if (xs[i + 1] <= xs[i]) return 0;
+    if (!xs || n == 0 || !isfinite(xs[0])) return 0;
+    for (i = 1; i < n; ++i) {
+        if (!isfinite(xs[i]) || !(xs[i] > xs[i - 1])) return 0;
+    }
+    return 1;
+}
+
+static int interp_check_finite_values(
+    const lmmc_real_t* values, size_t n)
+{
+    size_t i;
+    if (!values && n != 0) return 0;
+    for (i = 0; i < n; ++i) {
+        if (!isfinite(values[i])) return 0;
     }
     return 1;
 }
@@ -38,13 +51,50 @@ lmmc_status_t lmmc_interp_linear(
 {
     size_t lo;
     lmmc_real_t t;
-    if (!xs || !ys || !out_y) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (n < 2) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (query_x < xs[0] || query_x > xs[n - 1]) return LMMC_STATUS_OUT_OF_RANGE;
-    if (query_x == xs[n - 1]) { *out_y = ys[n - 1]; return LMMC_STATUS_OK; }
+    lmmc_real_t result;
+    if (!xs || !ys || !out_y || n < 2 ||
+        !isfinite(query_x) ||
+        !interp_check_strictly_increasing(xs, n) ||
+        !interp_check_finite_values(ys, n)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (query_x < xs[0] || query_x > xs[n - 1]) {
+        return LMMC_STATUS_OUT_OF_RANGE;
+    }
+    if (query_x == xs[n - 1]) {
+        *out_y = ys[n - 1];
+        return LMMC_STATUS_OK;
+    }
     lo = interp_find_interval(xs, n, query_x);
-    t = (query_x - xs[lo]) / (xs[lo + 1] - xs[lo]);
-    *out_y = ys[lo] + (ys[lo + 1] - ys[lo]) * t;
+    {
+        const lmmc_real_t left_x = xs[lo];
+        const lmmc_real_t right_x = xs[lo + 1];
+        const lmmc_real_t span = right_x - left_x;
+        if (isfinite(span)) {
+            t = (query_x - left_x) / span;
+        } else {
+            const lmmc_real_t scale =
+                fmax(fabs(left_x), fabs(right_x));
+            const lmmc_real_t scaled_left = left_x / scale;
+            const lmmc_real_t scaled_right = right_x / scale;
+            t = (query_x / scale - scaled_left) /
+                (scaled_right - scaled_left);
+        }
+    }
+    if (t == 0.0) {
+        result = ys[lo];
+    } else if (t == 1.0) {
+        result = ys[lo + 1];
+    } else if ((ys[lo] <= 0.0 && ys[lo + 1] >= 0.0) ||
+               (ys[lo] >= 0.0 && ys[lo + 1] <= 0.0)) {
+        result = (1.0 - t) * ys[lo] + t * ys[lo + 1];
+    } else {
+        result = ys[lo] + t * (ys[lo + 1] - ys[lo]);
+    }
+    if (!isfinite(t) || !isfinite(result)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    *out_y = result;
     return LMMC_STATUS_OK;
 }
 
@@ -69,10 +119,13 @@ lmmc_status_t lmmc_interp_cspline_eval(
     lmmc_real_t query_x, lmmc_real_t* out_y)
 {
     size_t seg;
-    lmmc_real_t dx, a, b, c, d;
-    if (!spline || !out_y) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (query_x < spline->xs[0] || query_x > spline->xs[spline->n - 1])
+    lmmc_real_t dx, a, b, c, d, result;
+    if (!spline || !out_y || !isfinite(query_x)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (query_x < spline->xs[0] || query_x > spline->xs[spline->n - 1]) {
         return LMMC_STATUS_OUT_OF_RANGE;
+    }
     if (query_x == spline->xs[spline->n - 1]) {
         *out_y = spline->ys[spline->n - 1];
         return LMMC_STATUS_OK;
@@ -83,7 +136,9 @@ lmmc_status_t lmmc_interp_cspline_eval(
     b = spline->coeffs[4 * seg + 1];
     c = spline->coeffs[4 * seg + 2];
     d = spline->coeffs[4 * seg + 3];
-    *out_y = a + dx * (b + dx * (c + dx * d));
+    result = a + dx * (b + dx * (c + dx * d));
+    if (!isfinite(result)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    *out_y = result;
     return LMMC_STATUS_OK;
 }
 
@@ -150,10 +205,16 @@ lmmc_status_t lmmc_interp_cspline_create_ex(
     lmmc_real_t* rhs_arr = NULL;
     size_t i, nm1, sys_n;
 
-    if (!xs || !ys || !out_spline) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (n < 3) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (!interp_check_strictly_increasing(xs, n))
+    if (!out_spline) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_spline = NULL;
+    if (!xs || !ys || n < 3 ||
+        bc < LMMC_SPLINE_NATURAL || bc > LMMC_SPLINE_PERIODIC ||
+        !interp_check_strictly_increasing(xs, n) ||
+        !interp_check_finite_values(ys, n) ||
+        (bc == LMMC_SPLINE_CLAMPED &&
+         (!isfinite(deriv_left) || !isfinite(deriv_right)))) {
         return LMMC_STATUS_INVALID_ARGUMENT;
+    }
 
     /* Periodic BC validation */
     if (bc == LMMC_SPLINE_PERIODIC) {
@@ -169,9 +230,10 @@ lmmc_status_t lmmc_interp_cspline_create_ex(
     spline->n = n;
     spline->xs = NULL; spline->ys = NULL; spline->coeffs = NULL;
 
-    spline->xs = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
-    spline->ys = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
-    spline->coeffs = (lmmc_real_t*)lmmc_alloc(4 * nm1 * sizeof(lmmc_real_t));
+    spline->xs = (lmmc_real_t*)lmmc_alloc_array(n, sizeof(lmmc_real_t));
+    spline->ys = (lmmc_real_t*)lmmc_alloc_array(n, sizeof(lmmc_real_t));
+    spline->coeffs = (lmmc_real_t*)lmmc_alloc_array_2d(
+        nm1, 4, sizeof(lmmc_real_t));
     if (!spline->xs || !spline->ys || !spline->coeffs) {
         lmmc_interp_cspline_destroy(spline);
         return LMMC_STATUS_ALLOCATION_FAILED;
@@ -180,8 +242,8 @@ lmmc_status_t lmmc_interp_cspline_create_ex(
     memcpy(spline->ys, ys, n * sizeof(lmmc_real_t));
 
     /* Compute h[i] = xs[i+1] - xs[i] */
-    h = (lmmc_real_t*)lmmc_alloc(nm1 * sizeof(lmmc_real_t));
-    M = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
+    h = (lmmc_real_t*)lmmc_alloc_array(nm1, sizeof(lmmc_real_t));
+    M = (lmmc_real_t*)lmmc_alloc_array(n, sizeof(lmmc_real_t));
     if (!h || !M) {
         lmmc_free(h); lmmc_free(M);
         lmmc_interp_cspline_destroy(spline);
@@ -193,10 +255,11 @@ lmmc_status_t lmmc_interp_cspline_create_ex(
     if (bc == LMMC_SPLINE_NATURAL || bc == LMMC_SPLINE_CLAMPED) {
         /* System size = n. Natural: M[0]=M[n-1]=0. Clamped: boundary eqs. */
         sys_n = n;
-        sub = (lmmc_real_t*)lmmc_alloc(sys_n * sizeof(lmmc_real_t));
-        dia = (lmmc_real_t*)lmmc_alloc(sys_n * sizeof(lmmc_real_t));
-        sup = (lmmc_real_t*)lmmc_alloc(sys_n * sizeof(lmmc_real_t));
-        rhs_arr = (lmmc_real_t*)lmmc_alloc(sys_n * sizeof(lmmc_real_t));
+        sub = (lmmc_real_t*)lmmc_alloc_array(sys_n, sizeof(lmmc_real_t));
+        dia = (lmmc_real_t*)lmmc_alloc_array(sys_n, sizeof(lmmc_real_t));
+        sup = (lmmc_real_t*)lmmc_alloc_array(sys_n, sizeof(lmmc_real_t));
+        rhs_arr = (lmmc_real_t*)lmmc_alloc_array(
+            sys_n, sizeof(lmmc_real_t));
         if (!sub || !dia || !sup || !rhs_arr) {
             lmmc_free(sub); lmmc_free(dia); lmmc_free(sup); lmmc_free(rhs_arr);
             lmmc_free(h); lmmc_free(M);
@@ -246,10 +309,11 @@ lmmc_status_t lmmc_interp_cspline_create_ex(
          * Row n-1: not-a-knot right condition
          */
         sys_n = n;
-        sub = (lmmc_real_t*)lmmc_alloc(sys_n * sizeof(lmmc_real_t));
-        dia = (lmmc_real_t*)lmmc_alloc(sys_n * sizeof(lmmc_real_t));
-        sup = (lmmc_real_t*)lmmc_alloc(sys_n * sizeof(lmmc_real_t));
-        rhs_arr = (lmmc_real_t*)lmmc_alloc(sys_n * sizeof(lmmc_real_t));
+        sub = (lmmc_real_t*)lmmc_alloc_array(sys_n, sizeof(lmmc_real_t));
+        dia = (lmmc_real_t*)lmmc_alloc_array(sys_n, sizeof(lmmc_real_t));
+        sup = (lmmc_real_t*)lmmc_alloc_array(sys_n, sizeof(lmmc_real_t));
+        rhs_arr = (lmmc_real_t*)lmmc_alloc_array(
+            sys_n, sizeof(lmmc_real_t));
         if (!sub || !dia || !sup || !rhs_arr) {
             lmmc_free(sub); lmmc_free(dia); lmmc_free(sup); lmmc_free(rhs_arr);
             lmmc_free(h); lmmc_free(M);
@@ -302,10 +366,11 @@ lmmc_status_t lmmc_interp_cspline_create_ex(
              * From not-a-knot right: M[n-1] = ((h[n-3]+h[n-2])*M[n-2] - h[n-2]*M[n-3]) / h[n-3]
              */
             size_t sn = n - 2;
-            sub = (lmmc_real_t*)lmmc_alloc(sn * sizeof(lmmc_real_t));
-            dia = (lmmc_real_t*)lmmc_alloc(sn * sizeof(lmmc_real_t));
-            sup = (lmmc_real_t*)lmmc_alloc(sn * sizeof(lmmc_real_t));
-            rhs_arr = (lmmc_real_t*)lmmc_alloc(sn * sizeof(lmmc_real_t));
+            sub = (lmmc_real_t*)lmmc_alloc_array(sn, sizeof(lmmc_real_t));
+            dia = (lmmc_real_t*)lmmc_alloc_array(sn, sizeof(lmmc_real_t));
+            sup = (lmmc_real_t*)lmmc_alloc_array(sn, sizeof(lmmc_real_t));
+            rhs_arr = (lmmc_real_t*)lmmc_alloc_array(
+                sn, sizeof(lmmc_real_t));
             if (!sub || !dia || !sup || !rhs_arr) {
                 lmmc_free(sub); lmmc_free(dia); lmmc_free(sup); lmmc_free(rhs_arr);
                 lmmc_free(h); lmmc_free(M);
@@ -385,13 +450,13 @@ lmmc_status_t lmmc_interp_cspline_create_ex(
         lmmc_real_t vy, vz;
         size_t j;
 
-        a_sub = (lmmc_real_t*)lmmc_alloc(sn * sizeof(lmmc_real_t));
-        a_dia = (lmmc_real_t*)lmmc_alloc(sn * sizeof(lmmc_real_t));
-        a_sup = (lmmc_real_t*)lmmc_alloc(sn * sizeof(lmmc_real_t));
-        b_vec = (lmmc_real_t*)lmmc_alloc(sn * sizeof(lmmc_real_t));
-        u_vec = (lmmc_real_t*)lmmc_alloc(sn * sizeof(lmmc_real_t));
-        y_sol = (lmmc_real_t*)lmmc_alloc(sn * sizeof(lmmc_real_t));
-        z_sol = (lmmc_real_t*)lmmc_alloc(sn * sizeof(lmmc_real_t));
+        a_sub = (lmmc_real_t*)lmmc_alloc_array(sn, sizeof(lmmc_real_t));
+        a_dia = (lmmc_real_t*)lmmc_alloc_array(sn, sizeof(lmmc_real_t));
+        a_sup = (lmmc_real_t*)lmmc_alloc_array(sn, sizeof(lmmc_real_t));
+        b_vec = (lmmc_real_t*)lmmc_alloc_array(sn, sizeof(lmmc_real_t));
+        u_vec = (lmmc_real_t*)lmmc_alloc_array(sn, sizeof(lmmc_real_t));
+        y_sol = (lmmc_real_t*)lmmc_alloc_array(sn, sizeof(lmmc_real_t));
+        z_sol = (lmmc_real_t*)lmmc_alloc_array(sn, sizeof(lmmc_real_t));
         if (!a_sub || !a_dia || !a_sup || !b_vec || !u_vec || !y_sol || !z_sol) {
             lmmc_free(a_sub); lmmc_free(a_dia); lmmc_free(a_sup);
             lmmc_free(b_vec); lmmc_free(u_vec); lmmc_free(y_sol); lmmc_free(z_sol);
@@ -455,9 +520,12 @@ lmmc_status_t lmmc_interp_cspline_create_ex(
         memcpy(y_sol, b_vec, sn * sizeof(lmmc_real_t));
         {
             /* Need copies of a_sub, a_dia, a_sup for Thomas algorithm */
-            lmmc_real_t* ts = (lmmc_real_t*)lmmc_alloc(sn * sizeof(lmmc_real_t));
-            lmmc_real_t* td = (lmmc_real_t*)lmmc_alloc(sn * sizeof(lmmc_real_t));
-            lmmc_real_t* tu = (lmmc_real_t*)lmmc_alloc(sn * sizeof(lmmc_real_t));
+            lmmc_real_t* ts = (lmmc_real_t*)lmmc_alloc_array(
+                sn, sizeof(lmmc_real_t));
+            lmmc_real_t* td = (lmmc_real_t*)lmmc_alloc_array(
+                sn, sizeof(lmmc_real_t));
+            lmmc_real_t* tu = (lmmc_real_t*)lmmc_alloc_array(
+                sn, sizeof(lmmc_real_t));
             if (!ts || !td || !tu) {
                 lmmc_free(ts); lmmc_free(td); lmmc_free(tu);
                 lmmc_free(a_sub); lmmc_free(a_dia); lmmc_free(a_sup);
@@ -498,6 +566,12 @@ lmmc_status_t lmmc_interp_cspline_create_ex(
 
     /* Compute polynomial coefficients from moments */
     cspline_compute_coeffs(spline, h, M);
+    if (!interp_check_finite_values(spline->coeffs, nm1 * 4)) {
+        lmmc_free(h);
+        lmmc_free(M);
+        lmmc_interp_cspline_destroy(spline);
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
 
     lmmc_free(h);
     lmmc_free(M);
@@ -538,19 +612,22 @@ lmmc_status_t lmmc_interp_pchip_create(
     lmmc_real_t* delta = NULL; /* slopes of each segment */
     size_t i;
 
-    if (!xs || !ys || !out) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (n < 2) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (!interp_check_strictly_increasing(xs, n))
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out = NULL;
+    if (!xs || !ys || n < 2 ||
+        !interp_check_strictly_increasing(xs, n) ||
+        !interp_check_finite_values(ys, n)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
+    }
 
     p = (lmmc_interp_pchip_t*)lmmc_alloc(sizeof(*p));
     if (!p) return LMMC_STATUS_ALLOCATION_FAILED;
     p->n = n; p->xs = NULL; p->ys = NULL; p->d = NULL;
 
-    p->xs = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
-    p->ys = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
-    p->d = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
-    delta = (lmmc_real_t*)lmmc_alloc((n - 1) * sizeof(lmmc_real_t));
+    p->xs = (lmmc_real_t*)lmmc_alloc_array(n, sizeof(lmmc_real_t));
+    p->ys = (lmmc_real_t*)lmmc_alloc_array(n, sizeof(lmmc_real_t));
+    p->d = (lmmc_real_t*)lmmc_alloc_array(n, sizeof(lmmc_real_t));
+    delta = (lmmc_real_t*)lmmc_alloc_array(n - 1, sizeof(lmmc_real_t));
     if (!p->xs || !p->ys || !p->d || !delta) {
         lmmc_free(delta);
         lmmc_interp_pchip_destroy(p);
@@ -605,6 +682,12 @@ lmmc_status_t lmmc_interp_pchip_create(
             p->d[n - 1] = 3.0 * delta[n - 2];
         }
     }
+    if (!interp_check_finite_values(delta, n - 1) ||
+        !interp_check_finite_values(p->d, n)) {
+        lmmc_free(delta);
+        lmmc_interp_pchip_destroy(p);
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
 
     lmmc_free(delta);
     *out = p;
@@ -615,25 +698,28 @@ lmmc_status_t lmmc_interp_pchip_eval(
     const lmmc_interp_pchip_t* p, lmmc_real_t x, lmmc_real_t* out_y)
 {
     size_t seg;
-    lmmc_real_t h, t, a, b;
-    if (!p || !out_y) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (x < p->xs[0] || x > p->xs[p->n - 1]) return LMMC_STATUS_OUT_OF_RANGE;
-    if (x == p->xs[p->n - 1]) { *out_y = p->ys[p->n - 1]; return LMMC_STATUS_OK; }
+    lmmc_real_t h, t, a, b, result;
+    if (!p || !out_y || !isfinite(x)) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (x < p->xs[0] || x > p->xs[p->n - 1]) {
+        return LMMC_STATUS_OUT_OF_RANGE;
+    }
+    if (x == p->xs[p->n - 1]) {
+        *out_y = p->ys[p->n - 1];
+        return LMMC_STATUS_OK;
+    }
 
     seg = interp_find_interval(p->xs, p->n, x);
     h = p->xs[seg + 1] - p->xs[seg];
     t = (x - p->xs[seg]) / h;
 
-    /* Hermite basis evaluation:
-     * p(t) = (1-t)^2*(1+2t)*y0 + t^2*(3-2t)*y1
-     *       + t*(1-t)^2*h*d0 - t^2*(1-t)*h*d1
-     */
-    a = (1.0 - t);
+    a = 1.0 - t;
     b = t;
-    *out_y = a * a * (1.0 + 2.0 * t) * p->ys[seg]
+    result = a * a * (1.0 + 2.0 * t) * p->ys[seg]
            + b * b * (3.0 - 2.0 * t) * p->ys[seg + 1]
            + t * a * a * h * p->d[seg]
            - b * b * a * h * p->d[seg + 1];
+    if (!isfinite(result)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    *out_y = result;
     return LMMC_STATUS_OK;
 }
 
@@ -659,12 +745,18 @@ lmmc_status_t lmmc_interp_akima_create(
 {
     lmmc_interp_akima_t* a = NULL;
     lmmc_real_t* m = NULL; /* extended slopes: m[-2]..m[n] stored as m[0..n+3] */
-    size_t i, nm1;
+    size_t i, nm1, slope_count;
 
-    if (!xs || !ys || !out) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (n < 5) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (!interp_check_strictly_increasing(xs, n))
+    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out = NULL;
+    if (!xs || !ys || n < 5 ||
+        !interp_check_strictly_increasing(xs, n) ||
+        !interp_check_finite_values(ys, n)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (!lmmc_safe_add_size(n, 3, &slope_count)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
 
     nm1 = n - 1;
 
@@ -672,11 +764,11 @@ lmmc_status_t lmmc_interp_akima_create(
     if (!a) return LMMC_STATUS_ALLOCATION_FAILED;
     a->n = n; a->xs = NULL; a->ys = NULL; a->d = NULL;
 
-    a->xs = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
-    a->ys = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
-    a->d = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
+    a->xs = (lmmc_real_t*)lmmc_alloc_array(n, sizeof(lmmc_real_t));
+    a->ys = (lmmc_real_t*)lmmc_alloc_array(n, sizeof(lmmc_real_t));
+    a->d = (lmmc_real_t*)lmmc_alloc_array(n, sizeof(lmmc_real_t));
     /* Extended slopes: indices 0..n+2 map to m[-2]..m[n] */
-    m = (lmmc_real_t*)lmmc_alloc((n + 3) * sizeof(lmmc_real_t));
+    m = (lmmc_real_t*)lmmc_alloc_array(slope_count, sizeof(lmmc_real_t));
     if (!a->xs || !a->ys || !a->d || !m) {
         lmmc_free(m);
         lmmc_interp_akima_destroy(a);
@@ -721,6 +813,12 @@ lmmc_status_t lmmc_interp_akima_create(
             a->d[i] = (w1 * m[i + 1] + w2 * m[i + 2]) / (w1 + w2);
         }
     }
+    if (!interp_check_finite_values(m, slope_count) ||
+        !interp_check_finite_values(a->d, n)) {
+        lmmc_free(m);
+        lmmc_interp_akima_destroy(a);
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
 
     lmmc_free(m);
     *out = a;
@@ -731,21 +829,27 @@ lmmc_status_t lmmc_interp_akima_eval(
     const lmmc_interp_akima_t* a, lmmc_real_t x, lmmc_real_t* out_y)
 {
     size_t seg;
-    lmmc_real_t h, t, omt;
-    if (!a || !out_y) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (x < a->xs[0] || x > a->xs[a->n - 1]) return LMMC_STATUS_OUT_OF_RANGE;
-    if (x == a->xs[a->n - 1]) { *out_y = a->ys[a->n - 1]; return LMMC_STATUS_OK; }
+    lmmc_real_t h, t, omt, result;
+    if (!a || !out_y || !isfinite(x)) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (x < a->xs[0] || x > a->xs[a->n - 1]) {
+        return LMMC_STATUS_OUT_OF_RANGE;
+    }
+    if (x == a->xs[a->n - 1]) {
+        *out_y = a->ys[a->n - 1];
+        return LMMC_STATUS_OK;
+    }
 
     seg = interp_find_interval(a->xs, a->n, x);
     h = a->xs[seg + 1] - a->xs[seg];
     t = (x - a->xs[seg]) / h;
     omt = 1.0 - t;
 
-    /* Hermite basis */
-    *out_y = omt * omt * (1.0 + 2.0 * t) * a->ys[seg]
+    result = omt * omt * (1.0 + 2.0 * t) * a->ys[seg]
            + t * t * (3.0 - 2.0 * t) * a->ys[seg + 1]
            + t * omt * omt * h * a->d[seg]
            - t * t * omt * h * a->d[seg + 1];
+    if (!isfinite(result)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    *out_y = result;
     return LMMC_STATUS_OK;
 }
 
@@ -763,8 +867,13 @@ lmmc_status_t lmmc_interp_lagrange_create(
     lmmc_interp_lagrange_t* lag = NULL;
     size_t i, j, alloc_size;
 
-    if (!xs || !ys || !out_lagrange) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (n < 1) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!out_lagrange) return LMMC_STATUS_INVALID_ARGUMENT;
+    *out_lagrange = NULL;
+    if (!xs || !ys || n < 1 ||
+        !interp_check_finite_values(xs, n) ||
+        !interp_check_finite_values(ys, n)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
 
     lag = (lmmc_interp_lagrange_t*)lmmc_alloc(sizeof(*lag));
     if (!lag) return LMMC_STATUS_ALLOCATION_FAILED;
@@ -789,9 +898,24 @@ lmmc_status_t lmmc_interp_lagrange_create(
     for (j = 0; j < n; j++) {
         lmmc_real_t prod = 1.0;
         for (i = 0; i < n; i++) {
-            if (i != j) prod *= (xs[j] - xs[i]);
+            if (i != j) {
+                const lmmc_real_t difference = xs[j] - xs[i];
+                if (difference == 0.0) {
+                    lmmc_interp_lagrange_destroy(lag);
+                    return LMMC_STATUS_INVALID_ARGUMENT;
+                }
+                prod *= difference;
+            }
+        }
+        if (!isfinite(prod) || prod == 0.0) {
+            lmmc_interp_lagrange_destroy(lag);
+            return LMMC_STATUS_NUMERICAL_FAILURE;
         }
         lag->weights[j] = 1.0 / prod;
+    }
+    if (!interp_check_finite_values(lag->weights, n)) {
+        lmmc_interp_lagrange_destroy(lag);
+        return LMMC_STATUS_NUMERICAL_FAILURE;
     }
 
     *out_lagrange = lag;
@@ -803,10 +927,11 @@ lmmc_status_t lmmc_interp_lagrange_eval(
     lmmc_real_t query_x, lmmc_real_t* out_y)
 {
     size_t j;
-    lmmc_real_t numer, denom, diff, term;
-    if (!lagrange || !out_y) return LMMC_STATUS_INVALID_ARGUMENT;
+    lmmc_real_t numer, denom, diff, term, result;
+    if (!lagrange || !out_y || !isfinite(query_x)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
 
-    /* Check if query_x is exactly a node */
     for (j = 0; j < lagrange->n; j++) {
         if (query_x == lagrange->xs[j]) {
             *out_y = lagrange->ys[j];
@@ -822,7 +947,9 @@ lmmc_status_t lmmc_interp_lagrange_eval(
         numer += term * lagrange->ys[j];
         denom += term;
     }
-    *out_y = numer / denom;
+    result = numer / denom;
+    if (!isfinite(result)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    *out_y = result;
     return LMMC_STATUS_OK;
 }
 
@@ -842,41 +969,44 @@ lmmc_status_t lmmc_interp_bilinear(
     lmmc_real_t qx, lmmc_real_t qy,
     lmmc_real_t* out_z)
 {
-    size_t ix, iy;
+    size_t ix, iy, grid_size;
     lmmc_real_t tx, ty;
-    lmmc_real_t z00, z01, z10, z11;
+    lmmc_real_t z00, z01, z10, z11, result;
 
-    if (!xs || !ys || !zs || !out_z) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (nx < 2 || ny < 2) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (!interp_check_strictly_increasing(xs, nx))
+    if (!xs || !ys || !zs || !out_z || nx < 2 || ny < 2 ||
+        !isfinite(qx) || !isfinite(qy) ||
+        !interp_check_strictly_increasing(xs, nx) ||
+        !interp_check_strictly_increasing(ys, ny) ||
+        !lmmc_safe_mul_size(nx, ny, &grid_size)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
-    if (!interp_check_strictly_increasing(ys, ny))
-        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (qx < xs[0] || qx > xs[nx - 1] ||
+        qy < ys[0] || qy > ys[ny - 1]) {
+        return LMMC_STATUS_OUT_OF_RANGE;
+    }
 
-    if (qx < xs[0] || qx > xs[nx - 1]) return LMMC_STATUS_OUT_OF_RANGE;
-    if (qy < ys[0] || qy > ys[ny - 1]) return LMMC_STATUS_OUT_OF_RANGE;
-
-    /* Find intervals */
     ix = interp_find_interval(xs, nx, qx);
     iy = interp_find_interval(ys, ny, qy);
-
-    /* Clamp to last valid interval */
     if (ix >= nx - 1) ix = nx - 2;
     if (iy >= ny - 1) iy = ny - 2;
 
     tx = (qx - xs[ix]) / (xs[ix + 1] - xs[ix]);
     ty = (qy - ys[iy]) / (ys[iy + 1] - ys[iy]);
-
-    /* Grid values: zs[i*ny + j] = f(xs[i], ys[j]) */
     z00 = zs[ix * ny + iy];
     z01 = zs[ix * ny + (iy + 1)];
     z10 = zs[(ix + 1) * ny + iy];
     z11 = zs[(ix + 1) * ny + (iy + 1)];
+    if (!isfinite(z00) || !isfinite(z01) ||
+        !isfinite(z10) || !isfinite(z11)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
 
-    *out_z = (1.0 - tx) * (1.0 - ty) * z00
+    result = (1.0 - tx) * (1.0 - ty) * z00
            + (1.0 - tx) * ty * z01
            + tx * (1.0 - ty) * z10
            + tx * ty * z11;
+    if (!isfinite(result)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    *out_z = result;
     return LMMC_STATUS_OK;
 }
 
@@ -906,24 +1036,25 @@ lmmc_status_t lmmc_interp_bicubic(
     lmmc_real_t qx, lmmc_real_t qy,
     lmmc_real_t* out_z)
 {
-    size_t ix, iy;
-    lmmc_real_t tx, ty;
+    size_t ix, iy, grid_size;
+    lmmc_real_t tx, ty, result;
     int i, j;
     size_t xi, yj;
     lmmc_real_t col_vals[4];
     lmmc_real_t row_vals[4];
 
-    if (!xs || !ys || !zs || !out_z) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (nx < 4 || ny < 4) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (!interp_check_strictly_increasing(xs, nx))
+    if (!xs || !ys || !zs || !out_z || nx < 4 || ny < 4 ||
+        !isfinite(qx) || !isfinite(qy) ||
+        !interp_check_strictly_increasing(xs, nx) ||
+        !interp_check_strictly_increasing(ys, ny) ||
+        !lmmc_safe_mul_size(nx, ny, &grid_size)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
-    if (!interp_check_strictly_increasing(ys, ny))
-        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (qx < xs[0] || qx > xs[nx - 1] ||
+        qy < ys[0] || qy > ys[ny - 1]) {
+        return LMMC_STATUS_OUT_OF_RANGE;
+    }
 
-    if (qx < xs[0] || qx > xs[nx - 1]) return LMMC_STATUS_OUT_OF_RANGE;
-    if (qy < ys[0] || qy > ys[ny - 1]) return LMMC_STATUS_OUT_OF_RANGE;
-
-    /* Find intervals */
     ix = interp_find_interval(xs, nx, qx);
     iy = interp_find_interval(ys, ny, qy);
     if (ix >= nx - 1) ix = nx - 2;
@@ -932,13 +1063,7 @@ lmmc_status_t lmmc_interp_bicubic(
     tx = (qx - xs[ix]) / (xs[ix + 1] - xs[ix]);
     ty = (qy - ys[iy]) / (ys[iy + 1] - ys[iy]);
 
-    /* For bicubic, we need a 4x4 neighborhood.
-     * Center the stencil: use indices ix-1, ix, ix+1, ix+2 (clamped).
-     * Similarly for iy.
-     */
-    /* Interpolate along y for each of the 4 x-rows */
     for (i = -1; i <= 2; i++) {
-        /* Clamp x index */
         if (i == -1) {
             xi = (ix > 0) ? ix - 1 : 0;
         } else {
@@ -946,7 +1071,6 @@ lmmc_status_t lmmc_interp_bicubic(
             if (xi >= nx) xi = nx - 1;
         }
 
-        /* Get 4 y-values for this x-row */
         for (j = -1; j <= 2; j++) {
             if (j == -1) {
                 yj = (iy > 0) ? iy - 1 : 0;
@@ -955,14 +1079,18 @@ lmmc_status_t lmmc_interp_bicubic(
                 if (yj >= ny) yj = ny - 1;
             }
             row_vals[j + 1] = zs[xi * ny + yj];
+            if (!isfinite(row_vals[j + 1])) {
+                return LMMC_STATUS_INVALID_ARGUMENT;
+            }
         }
 
-        /* Cubic interpolation along y */
-        col_vals[i + 1] = cubic_interp_1d(row_vals[0], row_vals[1],
-                                           row_vals[2], row_vals[3], ty);
+        col_vals[i + 1] = cubic_interp_1d(
+            row_vals[0], row_vals[1], row_vals[2], row_vals[3], ty);
     }
 
-    /* Cubic interpolation along x */
-    *out_z = cubic_interp_1d(col_vals[0], col_vals[1], col_vals[2], col_vals[3], tx);
+    result = cubic_interp_1d(
+        col_vals[0], col_vals[1], col_vals[2], col_vals[3], tx);
+    if (!isfinite(result)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    *out_z = result;
     return LMMC_STATUS_OK;
 }

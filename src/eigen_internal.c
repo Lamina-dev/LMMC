@@ -14,24 +14,37 @@
 #include "lmmc/linear_algebra.h"
 
 void householder_make(lmmc_real_t *x, size_t len, lmmc_real_t *tau_out,
-                             lmmc_real_t *beta_out) {
-    size_t i;
+                      lmmc_real_t *beta_out) {
+    lmmc_scaled_sumsq_t acc;
+    lmmc_real_t alpha;
+    lmmc_real_t tail_norm;
+    lmmc_real_t norm;
+    lmmc_real_t beta;
+    lmmc_real_t denominator_scaled;
+
     if (len == 0) { *tau_out = 0.0; *beta_out = 0.0; return; }
     if (len == 1) { *tau_out = 0.0; *beta_out = x[0]; return; }
-    lmmc_real_t sigma = 0.0;
-    for (i = 1; i < len; i++) sigma += x[i] * x[i];
-    lmmc_real_t alpha = x[0];
-    if (sigma == 0.0) { *tau_out = 0.0; *beta_out = alpha; return; }
-    lmmc_real_t mu = sqrt(alpha * alpha + sigma);
 
-    lmmc_real_t beta = (alpha >= 0.0) ? -mu : mu;
-    lmmc_real_t v0 = alpha - beta;
+    lmmc_scaled_sumsq_init(&acc);
+    for (size_t i = 1; i < len; ++i) {
+        lmmc_scaled_sumsq_add(&acc, x[i]);
+    }
+    tail_norm = lmmc_scaled_sumsq_norm(&acc);
+    alpha = x[0];
+    if (tail_norm == 0.0) {
+        *tau_out = 0.0;
+        *beta_out = alpha;
+        return;
+    }
+
+    norm = hypot(alpha, tail_norm);
+    beta = -copysign(norm, alpha);
     *beta_out = beta;
-
-    lmmc_real_t v0_sq = v0 * v0;
-    *tau_out = 2.0 * v0_sq / (sigma + v0_sq);
-    lmmc_real_t inv = 1.0 / v0;
-    for (i = 1; i < len; i++) x[i] *= inv;
+    *tau_out = 1.0 - alpha / beta;
+    denominator_scaled = alpha / norm - beta / norm;
+    for (size_t i = 1; i < len; ++i) {
+        x[i] = (x[i] / norm) / denominator_scaled;
+    }
     x[0] = 1.0;
 }
 
@@ -79,7 +92,7 @@ void givens_compute(lmmc_real_t a, lmmc_real_t b,
     if (b == 0.0) { *c = (a >= 0.0) ? 1.0 : -1.0; *s = 0.0; *r = lmmc_abs(a); }
     else if (a == 0.0) { *c = 0.0; *s = (b >= 0.0) ? 1.0 : -1.0; *r = lmmc_abs(b); }
     else {
-        lmmc_real_t h = sqrt(a * a + b * b);
+        lmmc_real_t h = hypot(a, b);
         *r = h;
         *c = a / h;
         *s = b / h;

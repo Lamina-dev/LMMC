@@ -12,67 +12,40 @@
 #include "lmmc/linear_algebra.h"
 
 lmmc_status_t lmmc_mat_norm_fro(const lmmc_mat_t* a, lmmc_real_t* out_norm) {
-    size_t i = 0;
-    size_t j = 0;
-    lmmc_real_t sum;
-    lmmc_real_t tmp_mul;
-    lmmc_real_t tmp_sum;
+    lmmc_scaled_sumsq_t acc;
 
-    if (a == NULL || out_norm == NULL || a->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(a) || out_norm == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    LMMC_REAL_INIT(&sum);
-    LMMC_REAL_INIT(&tmp_mul);
-    LMMC_REAL_INIT(&tmp_sum);
-    LMMC_REAL_SET_D(&sum, 0.0);
-
-    for (i = 0; i < a->rows; ++i) {
-        for (j = 0; j < a->cols; ++j) {
-            LMMC_REAL_MUL(&tmp_mul, &a->data[i * a->stride + j], &a->data[i * a->stride + j]);
-            LMMC_REAL_ADD(&tmp_sum, &sum, &tmp_mul);
-            LMMC_REAL_SET(&sum, &tmp_sum);
+    lmmc_scaled_sumsq_init(&acc);
+    for (size_t i = 0; i < a->rows; ++i) {
+        for (size_t j = 0; j < a->cols; ++j) {
+            lmmc_scaled_sumsq_add(
+                &acc, a->data[i * a->stride + j]);
         }
     }
-    LMMC_REAL_SQRT(out_norm, &sum);
-
-    LMMC_REAL_CLEAR(&sum);
-    LMMC_REAL_CLEAR(&tmp_mul);
-    LMMC_REAL_CLEAR(&tmp_sum);
+    *out_norm = lmmc_scaled_sumsq_norm(&acc);
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_vec_norm2(const lmmc_vec_t* x, lmmc_real_t* out_norm) {
-    if (x == NULL || out_norm == NULL || x->data == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (x->size == 0) {
+    lmmc_scaled_sumsq_t acc;
+
+    if (!lmmc_vec_descriptor_is_valid(x) || out_norm == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    lmmc_real_t sum; LMMC_REAL_INIT(&sum);
-    lmmc_real_t tmp_mul; LMMC_REAL_INIT(&tmp_mul);
-    lmmc_real_t tmp_sum; LMMC_REAL_INIT(&tmp_sum);
-    LMMC_REAL_SET_D(&sum, 0.0);
-
+    lmmc_scaled_sumsq_init(&acc);
     for (size_t i = 0; i < x->size; ++i) {
-        LMMC_REAL_MUL(&tmp_mul, &x->data[i], &x->data[i]);
-        LMMC_REAL_ADD(&tmp_sum, &sum, &tmp_mul);
-        LMMC_REAL_SET(&sum, &tmp_sum);
+        lmmc_scaled_sumsq_add(&acc, x->data[i]);
     }
-    LMMC_REAL_SQRT(out_norm, &sum);
-
-    LMMC_REAL_CLEAR(&sum);
-    LMMC_REAL_CLEAR(&tmp_mul);
-    LMMC_REAL_CLEAR(&tmp_sum);
+    *out_norm = lmmc_scaled_sumsq_norm(&acc);
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_vec_norm_inf(const lmmc_vec_t* x, lmmc_real_t* out_norm) {
-    if (x == NULL || out_norm == NULL || x->data == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (x->size == 0) {
+    if (!lmmc_vec_descriptor_is_valid(x) || out_norm == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -92,10 +65,7 @@ lmmc_status_t lmmc_vec_norm_inf(const lmmc_vec_t* x, lmmc_real_t* out_norm) {
 }
 
 lmmc_status_t lmmc_vec_scale(lmmc_vec_t* x, lmmc_real_t alpha) {
-    if (x == NULL || x->data == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (x->size == 0) {
+    if (!lmmc_vec_descriptor_is_valid(x)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -111,10 +81,7 @@ lmmc_status_t lmmc_vec_scale(lmmc_vec_t* x, lmmc_real_t alpha) {
 }
 
 lmmc_status_t lmmc_vec_asum(const lmmc_vec_t* x, lmmc_real_t* out_asum) {
-    if (x == NULL || out_asum == NULL || x->data == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (x->size == 0) {
+    if (!lmmc_vec_descriptor_is_valid(x) || out_asum == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -137,10 +104,7 @@ lmmc_status_t lmmc_vec_asum(const lmmc_vec_t* x, lmmc_real_t* out_asum) {
 }
 
 lmmc_status_t lmmc_vec_iamax(const lmmc_vec_t* x, size_t* out_idx) {
-    if (x == NULL || out_idx == NULL || x->data == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (x->size == 0) {
+    if (!lmmc_vec_descriptor_is_valid(x) || out_idx == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -165,8 +129,9 @@ lmmc_status_t lmmc_vec_iamax(const lmmc_vec_t* x, size_t* out_idx) {
 }
 
 lmmc_status_t lmmc_mat_add(const lmmc_mat_t* a, const lmmc_mat_t* b, lmmc_mat_t* c) {
-    if (a == NULL || b == NULL || c == NULL ||
-        a->data == NULL || b->data == NULL || c->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(a) ||
+        !lmmc_mat_descriptor_is_valid(b) ||
+        !lmmc_mat_descriptor_is_valid(c)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->rows != b->rows || a->cols != b->cols ||
@@ -190,8 +155,9 @@ lmmc_status_t lmmc_mat_add(const lmmc_mat_t* a, const lmmc_mat_t* b, lmmc_mat_t*
 }
 
 lmmc_status_t lmmc_mat_sub(const lmmc_mat_t* a, const lmmc_mat_t* b, lmmc_mat_t* c) {
-    if (a == NULL || b == NULL || c == NULL ||
-        a->data == NULL || b->data == NULL || c->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(a) ||
+        !lmmc_mat_descriptor_is_valid(b) ||
+        !lmmc_mat_descriptor_is_valid(c)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->rows != b->rows || a->cols != b->cols ||
@@ -215,7 +181,7 @@ lmmc_status_t lmmc_mat_sub(const lmmc_mat_t* a, const lmmc_mat_t* b, lmmc_mat_t*
 }
 
 lmmc_status_t lmmc_mat_scale(lmmc_mat_t* a, lmmc_real_t alpha) {
-    if (a == NULL || a->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(a)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -254,7 +220,7 @@ lmmc_status_t lmmc_mat_identity(size_t n, lmmc_mat_t* out_mat) {
 }
 
 lmmc_status_t lmmc_mat_trace(const lmmc_mat_t* a, lmmc_real_t* out_trace) {
-    if (a == NULL || out_trace == NULL || a->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(a) || out_trace == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (a->rows != a->cols) {
@@ -283,7 +249,7 @@ lmmc_status_t lmmc_mat_norm1(const lmmc_mat_t* a, lmmc_real_t* out_norm) {
     lmmc_real_t tmp_sum;
     lmmc_real_t max_val;
 
-    if (a == NULL || out_norm == NULL || a->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(a) || out_norm == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -321,7 +287,7 @@ lmmc_status_t lmmc_mat_norm_inf(const lmmc_mat_t* a, lmmc_real_t* out_norm) {
     lmmc_real_t tmp_sum;
     lmmc_real_t max_val;
 
-    if (a == NULL || out_norm == NULL || a->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(a) || out_norm == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 

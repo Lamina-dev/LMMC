@@ -650,6 +650,78 @@ static int test_error_handling(void)
 }
 
 
+static int test_symmetric_eigen_extreme_householder_scale(void)
+{
+    lmmc_mat_t mat = {0};
+    lmmc_eigen_sym_result_t result = {0};
+    const double scale = 1.0e200;
+    const double expected = sqrt(2.0);
+
+    lmmc_status_t s = lmmc_mat_create(3, 3, &mat);
+    CHECK(s == LMMC_STATUS_OK,
+          "extreme-scale symmetric matrix creation failed");
+    lmmc_mat_fill(&mat, 0.0);
+    MAT_ELEM(&mat, 0, 1) = scale;
+    MAT_ELEM(&mat, 1, 0) = scale;
+    MAT_ELEM(&mat, 0, 2) = scale;
+    MAT_ELEM(&mat, 2, 0) = scale;
+
+    s = lmmc_eigen_symmetric(&mat, &result);
+    CHECK(s == LMMC_STATUS_OK,
+          "symmetric eigen should survive representable Householder scale, got %d",
+          (int)s);
+    CHECK(isfinite(result.eigenvalues.data[0]) &&
+              isfinite(result.eigenvalues.data[1]) &&
+              isfinite(result.eigenvalues.data[2]),
+          "extreme-scale symmetric eigenvalues must be finite");
+    CHECK(fabs(result.eigenvalues.data[0] / scale + expected) < 1.0e-10 &&
+              fabs(result.eigenvalues.data[1] / scale) < 1.0e-10 &&
+              fabs(result.eigenvalues.data[2] / scale - expected) < 1.0e-10,
+          "extreme-scale symmetric matrix preserves analytic eigenvalues");
+
+    lmmc_eigen_sym_result_destroy(&result);
+    lmmc_mat_destroy(&mat);
+    return 0;
+}
+
+static int test_general_eigen_extreme_householder_scale(void)
+{
+    lmmc_mat_t mat = {0};
+    lmmc_eigen_gen_result_t result = {0};
+    const double scale = 1.0e200;
+    int found_one = 0, found_two = 0, found_three = 0;
+
+    lmmc_status_t s = lmmc_mat_create(3, 3, &mat);
+    CHECK(s == LMMC_STATUS_OK, "extreme-scale matrix creation failed");
+    lmmc_mat_fill(&mat, 0.0);
+    MAT_ELEM(&mat, 0, 0) = scale;
+    MAT_ELEM(&mat, 1, 0) = scale;
+    MAT_ELEM(&mat, 1, 1) = 2.0 * scale;
+    MAT_ELEM(&mat, 2, 0) = scale;
+    MAT_ELEM(&mat, 2, 2) = 3.0 * scale;
+
+    s = lmmc_eigen_general(&mat, &result);
+    CHECK(s == LMMC_STATUS_OK,
+          "general eigen should survive representable Householder scale, got %d",
+          (int)s);
+    for (size_t i = 0; i < 3; ++i) {
+        CHECK(isfinite(result.real_parts.data[i]) &&
+                  isfinite(result.imag_parts.data[i]),
+              "extreme-scale general eigenvalue must be finite");
+        CHECK(fabs(result.imag_parts.data[i]) < 1.0e-12 * scale,
+              "lower-triangular matrix eigenvalues must be real");
+        found_one |= fabs(result.real_parts.data[i] / scale - 1.0) < 1.0e-10;
+        found_two |= fabs(result.real_parts.data[i] / scale - 2.0) < 1.0e-10;
+        found_three |= fabs(result.real_parts.data[i] / scale - 3.0) < 1.0e-10;
+    }
+    CHECK(found_one && found_two && found_three,
+          "lower-triangular extreme-scale matrix preserves diagonal eigenvalues");
+
+    lmmc_eigen_gen_result_destroy(&result);
+    lmmc_mat_destroy(&mat);
+    return 0;
+}
+
 typedef int (*test_func_t)(void);
 
 typedef struct {
@@ -667,6 +739,8 @@ int main(void)
         {"eigenvector_orthogonality",  test_eigenvector_orthogonality},
         {"repeated_eigenvalues",       test_repeated_eigenvalues},
         {"nonsymmetric_eigenvalues",   test_nonsymmetric_eigenvalues},
+        {"general_eigen_extreme_scale", test_general_eigen_extreme_householder_scale},
+        {"symmetric_eigen_extreme_scale", test_symmetric_eigen_extreme_householder_scale},
         {"svd_reconstruction",         test_svd_reconstruction},
         {"svd_reconstruction_4x3",     test_svd_reconstruction_4x3},
         {"pinv_moore_penrose",         test_pinv_moore_penrose},

@@ -43,14 +43,19 @@ lmmc_status_t lmmc_mat_create(size_t rows, size_t cols, lmmc_mat_t* out_mat) {
 }
 
 lmmc_status_t lmmc_mat_wrap(size_t rows, size_t cols, size_t stride, lmmc_real_t* data, lmmc_mat_t* out_mat) {
-    if (out_mat == NULL || data == NULL || rows == 0 || cols == 0 || stride < cols) {
+    lmmc_mat_t candidate;
+    if (out_mat == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    out_mat->rows = rows;
-    out_mat->cols = cols;
-    out_mat->stride = stride;
-    out_mat->data = data;
-    out_mat->owns_data = 0;
+    candidate.rows = rows;
+    candidate.cols = cols;
+    candidate.stride = stride;
+    candidate.data = data;
+    candidate.owns_data = 0;
+    if (!lmmc_mat_descriptor_is_valid(&candidate)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    *out_mat = candidate;
     return LMMC_STATUS_OK;
 }
 
@@ -74,7 +79,7 @@ void lmmc_mat_destroy(lmmc_mat_t* mat) {
 lmmc_status_t lmmc_mat_fill(lmmc_mat_t* mat, lmmc_real_t value) {
     size_t i = 0;
     size_t j = 0;
-    if (mat == NULL || mat->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(mat)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     for (i = 0; i < mat->rows; ++i) {
@@ -88,7 +93,8 @@ lmmc_status_t lmmc_mat_fill(lmmc_mat_t* mat, lmmc_real_t value) {
 lmmc_status_t lmmc_mat_copy(const lmmc_mat_t* src, lmmc_mat_t* dst) {
     size_t i = 0;
     size_t j = 0;
-    if (src == NULL || dst == NULL || src->data == NULL || dst->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(src) ||
+        !lmmc_mat_descriptor_is_valid(dst)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (src->rows != dst->rows || src->cols != dst->cols) {
@@ -105,7 +111,8 @@ lmmc_status_t lmmc_mat_copy(const lmmc_mat_t* src, lmmc_mat_t* dst) {
 lmmc_status_t lmmc_mat_transpose_to(const lmmc_mat_t* src, lmmc_mat_t* dst) {
     size_t i = 0;
     size_t j = 0;
-    if (src == NULL || dst == NULL || src->data == NULL || dst->data == NULL) {
+    if (!lmmc_mat_descriptor_is_valid(src) ||
+        !lmmc_mat_descriptor_is_valid(dst)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (dst->rows != src->cols || dst->cols != src->rows) {
@@ -160,12 +167,17 @@ lmmc_status_t lmmc_vec_create(size_t size, lmmc_vec_t* out_vec) {
 }
 
 lmmc_status_t lmmc_vec_wrap(size_t size, lmmc_real_t* data, lmmc_vec_t* out_vec) {
-    if (out_vec == NULL || data == NULL || size == 0) {
+    lmmc_vec_t candidate;
+    if (out_vec == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    out_vec->size = size;
-    out_vec->data = data;
-    out_vec->owns_data = 0;
+    candidate.size = size;
+    candidate.data = data;
+    candidate.owns_data = 0;
+    if (!lmmc_vec_descriptor_is_valid(&candidate)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    *out_vec = candidate;
     return LMMC_STATUS_OK;
 }
 
@@ -186,7 +198,7 @@ void lmmc_vec_destroy(lmmc_vec_t* vec) {
 
 lmmc_status_t lmmc_vec_fill(lmmc_vec_t* vec, lmmc_real_t value) {
     size_t i = 0;
-    if (vec == NULL || vec->data == NULL) {
+    if (!lmmc_vec_descriptor_is_valid(vec)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     for (i = 0; i < vec->size; ++i) {
@@ -196,10 +208,8 @@ lmmc_status_t lmmc_vec_fill(lmmc_vec_t* vec, lmmc_real_t value) {
 }
 
 lmmc_status_t lmmc_vec_copy(const lmmc_vec_t* src, lmmc_vec_t* dst) {
-    if (src == NULL || dst == NULL || src->data == NULL || dst->data == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (src->size == 0 || dst->size == 0) {
+    if (!lmmc_vec_descriptor_is_valid(src) ||
+        !lmmc_vec_descriptor_is_valid(dst)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (src->size != dst->size) {
@@ -213,10 +223,8 @@ lmmc_status_t lmmc_vec_copy(const lmmc_vec_t* src, lmmc_vec_t* dst) {
 }
 
 lmmc_status_t lmmc_vec_swap(lmmc_vec_t* x, lmmc_vec_t* y) {
-    if (x == NULL || y == NULL || x->data == NULL || y->data == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (x->size == 0 || y->size == 0) {
+    if (!lmmc_vec_descriptor_is_valid(x) ||
+        !lmmc_vec_descriptor_is_valid(y)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (x->size != y->size) {

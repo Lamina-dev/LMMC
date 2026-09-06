@@ -63,7 +63,7 @@ typedef struct {
  *
  * @return
  * - ::LMMC_STATUS_OK - 成功.
- * - ::LMMC_STATUS_INVALID_ARGUMENT - out 为 NULL.
+ * - ::LMMC_STATUS_INVALID_ARGUMENT - 输入非有限或 out 为 NULL.
  */
 lmmc_status_t lmmc_complex_create(lmmc_real_t real, lmmc_real_t imag, lmmc_complex_t* out);
 
@@ -71,15 +71,17 @@ lmmc_status_t lmmc_complex_create(lmmc_real_t real, lmmc_real_t imag, lmmc_compl
  * @brief 从极坐标构造复数.
  *
  * 计算 @f$ z = r \cdot (\cos\theta + i \cdot \sin\theta) @f$.
- * 当 @p r 为 0 时,无论 @p theta 取何值,结果均为 0+0i.
+ * @p r 必须为有限非负数,@p theta 必须有限.
+ * 当 @p r 为 0 时,结果为 0+0i.
  *
- * @param[in]  r     模(非负).
- * @param[in]  theta 辐角(弧度).
+ * @param[in]  r     有限非负的模.
+ * @param[in]  theta 有限辐角(弧度).
  * @param[out] out   输出复数.
  *
  * @return
  * - ::LMMC_STATUS_OK - 成功.
- * - ::LMMC_STATUS_INVALID_ARGUMENT - out 为 NULL.
+ * - ::LMMC_STATUS_INVALID_ARGUMENT - 输入非有限、r 为负数或 out 为 NULL.
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 结果无法表示为有限值.
  */
 lmmc_status_t lmmc_complex_from_polar(lmmc_real_t r, lmmc_real_t theta, lmmc_complex_t* out);
 
@@ -93,6 +95,7 @@ lmmc_status_t lmmc_complex_from_polar(lmmc_real_t r, lmmc_real_t theta, lmmc_com
  * @return
  * - ::LMMC_STATUS_OK - 成功.
  * - ::LMMC_STATUS_INVALID_ARGUMENT - 任一指针为 NULL.
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入或结果非有限.
  */
 lmmc_status_t lmmc_complex_add(const lmmc_complex_t* a, const lmmc_complex_t* b, lmmc_complex_t* out);
 
@@ -106,14 +109,16 @@ lmmc_status_t lmmc_complex_add(const lmmc_complex_t* a, const lmmc_complex_t* b,
  * @return
  * - ::LMMC_STATUS_OK - 成功.
  * - ::LMMC_STATUS_INVALID_ARGUMENT - 任一指针为 NULL.
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入或结果非有限.
  */
 lmmc_status_t lmmc_complex_sub(const lmmc_complex_t* a, const lmmc_complex_t* b, lmmc_complex_t* out);
 
 /**
  * @brief 复数乘法:@f$ \text{out} = a \cdot b @f$.
  *
- * 使用公式 @f$ (ac - bd) + i(ad + bc) @f$,其中 @f$ a = a_r + i \cdot a_i @f$,
- * @f$ b = b_r + i \cdot b_i @f$.
+ * 实部和虚部分别计算二项乘积和，普通幅值使用 FMA 与乘积残差保留消减余量；
+ * 乘积或结果位于指数边界时，使用尾数与公共二进制指数完成运算。
+ * 两个结果均为有限值时写入 @p out；输出可以与任一输入共用存储。
  *
  * @param[in]  a   乘数.
  * @param[in]  b   乘数.
@@ -122,25 +127,25 @@ lmmc_status_t lmmc_complex_sub(const lmmc_complex_t* a, const lmmc_complex_t* b,
  * @return
  * - ::LMMC_STATUS_OK - 成功.
  * - ::LMMC_STATUS_INVALID_ARGUMENT - 任一指针为 NULL.
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入或结果非有限.
  */
 lmmc_status_t lmmc_complex_mul(const lmmc_complex_t* a, const lmmc_complex_t* b, lmmc_complex_t* out);
 
 /**
  * @brief 复数除法:@f$ \text{out} = a / b @f$.
  *
- * 使用 Smith 缩放除法控制中间结果幅值.除数 @p b 的模为零时返回错误.
+ * 分子实部、虚部及分母平方模分别按二进制指数缩放，在尾数除法后恢复尺度。
+ * 除数 @p b 的两个分量均为零时返回错误。
+ * 支持 @p out 与任一输入重合；失败时保持输出不变。
  *
- * @see Robert L. Smith, "Algorithm 116: Complex Division,"
- *      Communications of the ACM 5(8), 1962.
- *
- * @param[in]  a   被除数.
- * @param[in]  b   除数(模不可为零).
+ * @param[in]  a   有限被除数.
+ * @param[in]  b   有限除数(模不可为零).
  * @param[out] out 输出商.
  *
  * @return
  * - ::LMMC_STATUS_OK - 成功.
  * - ::LMMC_STATUS_INVALID_ARGUMENT - 任一指针为 NULL.
- * - ::LMMC_STATUS_NUMERICAL_FAILURE - 除数模为零(除零错误).
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入非有限、除数为零或有限结果不可表示.
  */
 lmmc_status_t lmmc_complex_div(const lmmc_complex_t* a, const lmmc_complex_t* b, lmmc_complex_t* out);
 
@@ -153,18 +158,20 @@ lmmc_status_t lmmc_complex_div(const lmmc_complex_t* a, const lmmc_complex_t* b,
  * @return
  * - ::LMMC_STATUS_OK - 成功.
  * - ::LMMC_STATUS_INVALID_ARGUMENT - 任一指针为 NULL.
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入或结果非有限.
  */
 lmmc_status_t lmmc_complex_conj(const lmmc_complex_t* z, lmmc_complex_t* out);
 
 /**
- * @brief 复数模:@f$ |z| = \sqrt{\text{real}^2 + \text{imag}^2} @f$.
+ * @brief 采用缩放计算复数模:@f$ |z| = \sqrt{\text{real}^2 + \text{imag}^2} @f$.
  *
- * @param[in]  z   输入复数.
+ * @param[in]  z   有限复数.
  * @param[out] out 输出模值(非负实数).
  *
  * @return
  * - ::LMMC_STATUS_OK - 成功.
  * - ::LMMC_STATUS_INVALID_ARGUMENT - 任一指针为 NULL.
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入或结果非有限.
  */
 lmmc_status_t lmmc_complex_modulus(const lmmc_complex_t* z, lmmc_real_t* out);
 
@@ -179,11 +186,19 @@ lmmc_status_t lmmc_complex_modulus(const lmmc_complex_t* z, lmmc_real_t* out);
  * @return
  * - ::LMMC_STATUS_OK - 成功.
  * - ::LMMC_STATUS_INVALID_ARGUMENT - 任一指针为 NULL.
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入或结果非有限.
  */
 lmmc_status_t lmmc_complex_arg(const lmmc_complex_t* z, lmmc_real_t* out);
 
 /**
  * @brief 复数指数函数:@f$ e^z = e^x (\cos y + i \sin y) @f$,其中 @f$ z = x + iy @f$.
+ *
+ * 正常幅值直接计算；当实指数落在溢出或次正规数范围时，使用两个
+ * @f$e^{x/2}@f$ 因子，将三角因子纳入最终乘积后形成结果分量。
+ * 输出可以与输入共用存储；成功时写入完整结果，失败时保持输出不变。
+ *
+ * @see ISO C11 committee draft N1570, 7.3.7.1 (cexp).
+ * https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf
  *
  * @param[in]  z   输入复数.
  * @param[out] out 输出 @f$ e^z @f$.
@@ -191,38 +206,69 @@ lmmc_status_t lmmc_complex_arg(const lmmc_complex_t* z, lmmc_real_t* out);
  * @return
  * - ::LMMC_STATUS_OK - 成功.
  * - ::LMMC_STATUS_INVALID_ARGUMENT - 任一指针为 NULL.
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入或结果非有限.
  */
 lmmc_status_t lmmc_complex_exp(const lmmc_complex_t* z, lmmc_complex_t* out);
 
 /**
- * @brief 复数主值对数:@f$ \ln z = \ln|z| + i \arg(z) @f$.
+ * @brief 复数主值对数:@f$ \ln z = \ln(\operatorname{hypot}(x,y)) + i \arg(z) @f$.
+ *
+ * 最大分量绝对值位于 [0.5, 1] 时，实部通过补偿平方和计算
+ * `log1p(x*x + y*y - 1)/2`，保留单位模附近的小量。
+ * 其他幅值使用 `log(max(|x|,|y|)) + log1p(ratio^2)/2`；
+ * 有限输入即使数学模超出 `double` 范围仍可返回有限对数。
  *
  * 当 @p z 的模为零时(即 z = 0+0i),返回域错误.
+ * 负实轴两侧由虚部的有符号零区分，主辐角分别为 @f$+\pi@f$ 和 @f$-\pi@f$。
+ * 输出可以与输入共用存储；成功时写入完整结果，失败时保持输出不变。
  *
- * @param[in]  z   输入复数(模不可为零).
+ * @see ISO C11 committee draft N1570, 7.3.7.2 (clog).
+ * https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf
+ *
+ * @param[in]  z   有限复数(模不可为零).
  * @param[out] out 输出主值对数.
  *
  * @return
  * - ::LMMC_STATUS_OK - 成功.
  * - ::LMMC_STATUS_INVALID_ARGUMENT - 任一指针为 NULL.
  * - ::LMMC_STATUS_OUT_OF_RANGE - z 的模为零(对数无定义).
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入或结果非有限.
  */
 lmmc_status_t lmmc_complex_log(const lmmc_complex_t* z, lmmc_complex_t* out);
 
 /**
- * @brief 复数主值平方根:@f$ \sqrt{z} = \sqrt{|z|} \cdot (\cos(\arg(z)/2) + i \sin(\arg(z)/2)) @f$.
+ * @brief 采用缩放算法计算复数主值平方根.
  *
- * @param[in]  z   输入复数.
+ * 即使有限实部与虚部对应的数学模超过可表示范围，只要平方根的两个
+ * 分量仍可表示，算法也通过输入尺度分解返回有限结果；同时避免
+ * @f$x^2+y^2@f$ 和 @f$|z| \pm x@f$ 的中间溢出与相消。
+ * 虚部非零时，以其幅值除以大分量幅值的两倍得到小分量幅值。
+ * 该分母保持有限且非零；缩放因子在除法前合并，使次正规小分量只经历一次除法舍入。
+ * 结果实部为非负值（零取正零），虚部保留输入虚部的符号，包括有符号零。
+ * 输出可以与输入共用存储；成功时写入完整结果，失败时保持输出不变。
+ *
+ * @see ISO C11 committee draft N1570, 7.3.8.3 (csqrt).
+ * https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf
+ *
+ * @param[in]  z   有限复数.
  * @param[out] out 输出主值平方根.
  *
  * @return
  * - ::LMMC_STATUS_OK - 成功.
  * - ::LMMC_STATUS_INVALID_ARGUMENT - 任一指针为 NULL.
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入或结果非有限.
  */
 lmmc_status_t lmmc_complex_sqrt(const lmmc_complex_t* z, lmmc_complex_t* out);
 
 /**
  * @brief 复数正弦:@f$ \sin(z) = \sin(x)\cosh(y) + i\cos(x)\sinh(y) @f$.
+ *
+ * 有限双曲因子使用直接乘积；双曲因子溢出时，将主导指数项
+ * 分解为两个 @f$e^{|y|/2}@f$ 因子，与三角因子共同形成结果分量。
+ * 输出可以与输入共用存储；成功时写入完整结果，失败时保持输出不变。
+ *
+ * @see NIST DLMF, 4.28.1 and 4.28.2, hyperbolic exponential identities.
+ * https://dlmf.nist.gov/4.28
  *
  * @param[in]  z   输入复数.
  * @param[out] out 输出复数正弦值.
@@ -230,11 +276,17 @@ lmmc_status_t lmmc_complex_sqrt(const lmmc_complex_t* z, lmmc_complex_t* out);
  * @return
  * - ::LMMC_STATUS_OK - 成功.
  * - ::LMMC_STATUS_INVALID_ARGUMENT - 任一指针为 NULL.
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入或结果非有限.
  */
 lmmc_status_t lmmc_complex_sin(const lmmc_complex_t* z, lmmc_complex_t* out);
 
 /**
  * @brief 复数余弦:@f$ \cos(z) = \cos(x)\cosh(y) - i\sin(x)\sinh(y) @f$.
+ *
+ * 与复数正弦共用双曲乘积缩放算法，在最终分量的幅值范围内完成计算。
+ * 输出可以与输入共用存储；成功时写入完整结果，失败时保持输出不变。
+ *
+ * @see lmmc_complex_sin
  *
  * @param[in]  z   输入复数.
  * @param[out] out 输出复数余弦值.
@@ -242,24 +294,31 @@ lmmc_status_t lmmc_complex_sin(const lmmc_complex_t* z, lmmc_complex_t* out);
  * @return
  * - ::LMMC_STATUS_OK - 成功.
  * - ::LMMC_STATUS_INVALID_ARGUMENT - 任一指针为 NULL.
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入或结果非有限.
  */
 lmmc_status_t lmmc_complex_cos(const lmmc_complex_t* z, lmmc_complex_t* out);
 
 /**
  * @brief 复数幂:@f$ \text{base}^{\text{exp}} = e^{\text{exp} \cdot \ln(\text{base})} @f$.
  *
- * 当 base 的模为零且 exp 的实部为负时,返回域错误.
- * 当 base = 0+0i 且 exp = 0+0i 时,按 cpow 惯例返回 1+0i.
- * 当 base = 0+0i 且 exp 实部 > 0 时,返回 0+0i.
+ * 先验证两个输入均为有限复数。非零底数的实整数指数使用二进制平方求幂，
+ * 负整数指数先取倒数；其他指数使用主值对数计算。
+ * 对零底数，本接口定义零次幂为 1+0i；指数实部为正时返回 0+0i；
+ * 指数实部为负或指数为非零纯虚数时返回域错误。
+ * 输出可以与任一输入共用存储；成功时写入完整结果，失败时保持输出不变。
  *
- * @param[in]  base 底数(当模为零且指数实部为负时返回错误).
- * @param[in]  exp  指数.
+ * @see ISO C11 committee draft N1570, 7.3.8.2 (cpow), principal branch.
+ * https://www.open-std.org/jtc1/sc22/wg14/www/docs/n1570.pdf
+ *
+ * @param[in]  base 有限底数.
+ * @param[in]  exp  有限指数.
  * @param[out] out  输出幂值.
  *
  * @return
  * - ::LMMC_STATUS_OK - 成功.
  * - ::LMMC_STATUS_INVALID_ARGUMENT - 任一指针为 NULL.
- * - ::LMMC_STATUS_OUT_OF_RANGE - base 模为零且 exp 实部为负.
+ * - ::LMMC_STATUS_OUT_OF_RANGE - 零底数的指数实部为负，或指数为非零纯虚数.
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入非有限，或数值运算失败（包括中间结果或输出溢出）.
  */
 lmmc_status_t lmmc_complex_pow(const lmmc_complex_t* base, const lmmc_complex_t* exp, lmmc_complex_t* out);
 

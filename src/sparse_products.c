@@ -230,8 +230,9 @@ lmmc_status_t lmmc_sparse_mat_mat_mul_sparse(const lmmc_sparse_mat_t* a, const l
         pb = &b_csr;
     }
 
-    marker = (size_t*)lmmc_alloc(pb->cols * sizeof(size_t));
-    c_row_ptr = (size_t*)lmmc_alloc((pa->rows + 1) * sizeof(size_t));
+    marker = (size_t*)lmmc_alloc_array(pb->cols, sizeof(size_t));
+    c_row_ptr = (size_t*)lmmc_alloc_array_plus(
+        pa->rows, 1, sizeof(size_t));
     if (marker == NULL || c_row_ptr == NULL) {
         st = LMMC_STATUS_ALLOCATION_FAILED;
         goto cleanup;
@@ -254,9 +255,11 @@ lmmc_status_t lmmc_sparse_mat_mat_mul_sparse(const lmmc_sparse_mat_t* a, const l
         c_row_ptr[i + 1] = nnz_est;
     }
 
-    c_col_idx = (size_t*)lmmc_alloc(nnz_est * sizeof(size_t));
-    c_values = (lmmc_real_t*)lmmc_alloc(nnz_est * sizeof(lmmc_real_t));
-    accumulator = (lmmc_real_t*)lmmc_alloc(pb->cols * sizeof(lmmc_real_t));
+    c_col_idx = (size_t*)lmmc_alloc_array(nnz_est, sizeof(size_t));
+    c_values = (lmmc_real_t*)lmmc_alloc_array(
+        nnz_est, sizeof(lmmc_real_t));
+    accumulator = (lmmc_real_t*)lmmc_alloc_array(
+        pb->cols, sizeof(lmmc_real_t));
     if ((nnz_est > 0 && (c_col_idx == NULL || c_values == NULL)) || accumulator == NULL) {
         st = LMMC_STATUS_ALLOCATION_FAILED;
         goto cleanup;

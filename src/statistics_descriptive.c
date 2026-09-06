@@ -1,3 +1,4 @@
+#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 
@@ -7,6 +8,37 @@
 #include "lmmc/stats.h"
 
 #include "statistics_internal.h"
+
+static lmmc_status_t lmmc_mean_strided(
+    const lmmc_real_t* data,
+    size_t count,
+    size_t stride,
+    lmmc_real_t* out_mean
+) {
+    lmmc_real_t mean;
+    size_t i;
+
+    if (data == NULL || count == 0 || out_mean == NULL)
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    mean = data[0];
+    if (!isfinite(mean)) return LMMC_STATUS_NUMERICAL_FAILURE;
+
+    for (i = 1; i < count; ++i) {
+        const lmmc_real_t value = data[i * stride];
+        const lmmc_real_t sample_count = (lmmc_real_t)(i + 1);
+        const lmmc_real_t delta = value - mean;
+        if (!isfinite(value)) return LMMC_STATUS_NUMERICAL_FAILURE;
+        if (isfinite(delta)) {
+            mean = fma(delta, 1.0 / sample_count, mean);
+        } else {
+            mean = mean * ((sample_count - 1.0) / sample_count) +
+                   value / sample_count;
+        }
+        if (!isfinite(mean)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    *out_mean = mean;
+    return LMMC_STATUS_OK;
+}
 
 static lmmc_status_t lmmc_vec_mean_m2(const lmmc_vec_t* x, lmmc_real_t* out_mean, lmmc_real_t* out_m2) {
     size_t i = 0;
@@ -312,429 +344,201 @@ static lmmc_status_t lmmc_vec_covariance_common(
     return LMMC_STATUS_OK;
 }
 
+static lmmc_status_t lmmc_correlation_scaled(
+    const lmmc_real_t* x,
+    size_t x_stride,
+    const lmmc_real_t* y,
+    size_t y_stride,
+    size_t count,
+    lmmc_real_t* out_correlation
+) {
+    lmmc_real_t scale_x = 0.0;
+    lmmc_real_t scale_y = 0.0;
+    lmmc_real_t mean_x = 0.0;
+    lmmc_real_t mean_y = 0.0;
+    lmmc_real_t c = 0.0;
+    lmmc_real_t m2x = 0.0;
+    lmmc_real_t m2y = 0.0;
+    lmmc_real_t correlation;
+    size_t i;
+
+    for (i = 0; i < count; ++i) {
+        const lmmc_real_t value_x = x[i * x_stride];
+        const lmmc_real_t value_y = y[i * y_stride];
+        if (!isfinite(value_x) || !isfinite(value_y))
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        scale_x = fmax(scale_x, fabs(value_x));
+        scale_y = fmax(scale_y, fabs(value_y));
+    }
+    if (scale_x == 0.0 || scale_y == 0.0)
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+
+    for (i = 0; i < count; ++i) {
+        const lmmc_real_t sample_count = (lmmc_real_t)(i + 1);
+        const lmmc_real_t value_x = x[i * x_stride] / scale_x;
+        const lmmc_real_t value_y = y[i * y_stride] / scale_y;
+        const lmmc_real_t delta_x = value_x - mean_x;
+        const lmmc_real_t delta_y = value_y - mean_y;
+
+        mean_x += delta_x / sample_count;
+        mean_y += delta_y / sample_count;
+        c += delta_x * (value_y - mean_y);
+        m2x += delta_x * (value_x - mean_x);
+        m2y += delta_y * (value_y - mean_y);
+    }
+    if (!(m2x > 0.0) || !(m2y > 0.0) ||
+        !isfinite(c) || !isfinite(m2x) || !isfinite(m2y))
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+
+    correlation = (c / sqrt(m2x)) / sqrt(m2y);
+    if (!isfinite(correlation)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    if (correlation > 1.0 && correlation < 1.0 + 1e-12)
+        correlation = 1.0;
+    if (correlation < -1.0 && correlation > -1.0 - 1e-12)
+        correlation = -1.0;
+    if (correlation < -1.0 || correlation > 1.0)
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+
+    *out_correlation = correlation;
+    return LMMC_STATUS_OK;
+}
+
 static lmmc_status_t lmmc_vec_correlation_common(
     const lmmc_vec_t* x,
     const lmmc_vec_t* y,
     int sample,
     lmmc_real_t* out_correlation
 ) {
-    lmmc_real_t c, m2x, m2y, corr, tmp, zero, one, min_one, tol, upper, lower;
-    lmmc_status_t st = LMMC_STATUS_OK;
+    lmmc_status_t status_x;
+    lmmc_status_t status_y;
 
-    if (out_correlation == NULL) {
+    if (out_correlation == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    status_x = lmmc_validate_vec(x);
+    status_y = lmmc_validate_vec(y);
+    if (status_x != LMMC_STATUS_OK || status_y != LMMC_STATUS_OK)
         return LMMC_STATUS_INVALID_ARGUMENT;
-    }
+    if (x->size != y->size) return LMMC_STATUS_DIMENSION_MISMATCH;
+    if (sample && x->size < 2) return LMMC_STATUS_INVALID_ARGUMENT;
 
-    LMMC_REAL_INIT(&c);
-    LMMC_REAL_INIT(&m2x);
-    LMMC_REAL_INIT(&m2y);
-    LMMC_REAL_INIT(&corr);
-    LMMC_REAL_INIT(&tmp);
-    LMMC_REAL_INIT(&zero);
-    LMMC_REAL_INIT(&one);
-    LMMC_REAL_INIT(&min_one);
-    LMMC_REAL_INIT(&tol);
-    LMMC_REAL_INIT(&upper);
-    LMMC_REAL_INIT(&lower);
-
-    LMMC_REAL_SET_D(&c, 0.0);
-    LMMC_REAL_SET_D(&m2x, 0.0);
-    LMMC_REAL_SET_D(&m2y, 0.0);
-    LMMC_REAL_SET_D(&corr, 0.0);
-    LMMC_REAL_SET_D(&zero, 0.0);
-    LMMC_REAL_SET_D(&one, 1.0);
-    LMMC_REAL_SET_D(&min_one, -1.0);
-    LMMC_REAL_SET_D(&tol, 1e-12);
-
-    st = lmmc_vec_cov_accumulate(x, y, &c, &m2x, &m2y);
-    if (st != LMMC_STATUS_OK) {
-        goto cleanup;
-    }
-
-    if (sample && x->size < 2) {
-        st = LMMC_STATUS_INVALID_ARGUMENT;
-        goto cleanup;
-    }
-
-    if (LMMC_REAL_CMP(&m2x, &zero) <= 0 || LMMC_REAL_CMP(&m2y, &zero) <= 0) {
-        st = LMMC_STATUS_NUMERICAL_FAILURE;
-        goto cleanup;
-    }
-
-    LMMC_REAL_MUL(&tmp, &m2x, &m2y);
-    LMMC_REAL_SQRT(&tmp, &tmp);
-    LMMC_REAL_DIV(&corr, &c, &tmp);
-
-    if (!lmmc_is_finite(&corr)) {
-        st = LMMC_STATUS_NUMERICAL_FAILURE;
-        goto cleanup;
-    }
-
-    LMMC_REAL_ADD(&upper, &one, &tol);
-    if (LMMC_REAL_CMP(&corr, &one) > 0 && LMMC_REAL_CMP(&corr, &upper) < 0) {
-        LMMC_REAL_SET(&corr, &one);
-    }
-
-    LMMC_REAL_SUB(&lower, &min_one, &tol);
-    if (LMMC_REAL_CMP(&corr, &min_one) < 0 && LMMC_REAL_CMP(&corr, &lower) > 0) {
-        LMMC_REAL_SET(&corr, &min_one);
-    }
-
-    if (LMMC_REAL_CMP(&corr, &min_one) < 0 || LMMC_REAL_CMP(&corr, &one) > 0) {
-        st = LMMC_STATUS_NUMERICAL_FAILURE;
-        goto cleanup;
-    }
-
-    LMMC_REAL_SET(out_correlation, &corr);
-
-cleanup:
-    LMMC_REAL_CLEAR(&lower);
-    LMMC_REAL_CLEAR(&upper);
-    LMMC_REAL_CLEAR(&tol);
-    LMMC_REAL_CLEAR(&min_one);
-    LMMC_REAL_CLEAR(&one);
-    LMMC_REAL_CLEAR(&zero);
-    LMMC_REAL_CLEAR(&tmp);
-    LMMC_REAL_CLEAR(&corr);
-    LMMC_REAL_CLEAR(&m2y);
-    LMMC_REAL_CLEAR(&m2x);
-    LMMC_REAL_CLEAR(&c);
-
-    return st;
+    return lmmc_correlation_scaled(
+        x->data, 1, y->data, 1, x->size, out_correlation);
 }
 
-static lmmc_status_t lmmc_mat_column_means_to_buffer(const lmmc_mat_t* x, lmmc_real_t* means) {
-    size_t col = 0;
-    lmmc_status_t st = lmmc_validate_mat(x);
+static lmmc_status_t lmmc_mat_column_means_to_buffer(
+    const lmmc_mat_t* x, lmmc_real_t* means) {
+    lmmc_status_t status = lmmc_validate_mat(x);
+    size_t column;
 
-    if (st != LMMC_STATUS_OK || means == NULL) {
+    if (status != LMMC_STATUS_OK || means == NULL)
         return LMMC_STATUS_INVALID_ARGUMENT;
+    for (column = 0; column < x->cols; ++column) {
+        status = lmmc_mean_strided(
+            &x->data[column], x->rows, x->stride, &means[column]);
+        if (status != LMMC_STATUS_OK) return status;
     }
-
-    for (col = 0; col < x->cols; ++col) {
-        size_t row = 0;
-        lmmc_real_t mean;
-        LMMC_REAL_INIT(&mean);
-        LMMC_REAL_SET_D(&mean, 0.0);
-
-        for (row = 0; row < x->rows; ++row) {
-            lmmc_real_t v, n, delta, tmp;
-            LMMC_REAL_INIT(&v);
-            LMMC_REAL_INIT(&n);
-            LMMC_REAL_INIT(&delta);
-            LMMC_REAL_INIT(&tmp);
-
-            LMMC_REAL_SET(&v, &x->data[row * x->stride + col]);
-            LMMC_REAL_SET_D(&n, (double)(row + 1));
-
-            if (!lmmc_is_finite(&v)) {
-                LMMC_REAL_CLEAR(&tmp);
-                LMMC_REAL_CLEAR(&delta);
-                LMMC_REAL_CLEAR(&n);
-                LMMC_REAL_CLEAR(&v);
-                LMMC_REAL_CLEAR(&mean);
-                return LMMC_STATUS_NUMERICAL_FAILURE;
-            }
-
-            LMMC_REAL_SUB(&delta, &v, &mean);
-            LMMC_REAL_DIV(&tmp, &delta, &n);
-            LMMC_REAL_ADD(&mean, &mean, &tmp);
-
-            LMMC_REAL_CLEAR(&tmp);
-            LMMC_REAL_CLEAR(&delta);
-            LMMC_REAL_CLEAR(&n);
-            LMMC_REAL_CLEAR(&v);
-        }
-
-        if (!lmmc_is_finite(&mean)) {
-            LMMC_REAL_CLEAR(&mean);
-            return LMMC_STATUS_NUMERICAL_FAILURE;
-        }
-
-        LMMC_REAL_SET(&means[col], &mean);
-        LMMC_REAL_CLEAR(&mean);
-    }
-
     return LMMC_STATUS_OK;
 }
 
-static lmmc_status_t lmmc_mat_covariance_or_correlation(
+static lmmc_status_t lmmc_mat_covariance_common(
     const lmmc_mat_t* x,
     int sample,
-    int correlation,
     lmmc_mat_t* out_matrix
 ) {
     size_t bytes = 0;
-    size_t col_i = 0;
-    size_t col_j = 0;
-    lmmc_real_t denom;
     lmmc_real_t* means = NULL;
-    lmmc_real_t* stddev = NULL;
-    lmmc_status_t st = lmmc_validate_mat(x);
+    lmmc_status_t status = lmmc_validate_mat(x);
+    lmmc_real_t denominator;
+    size_t col_i;
+    size_t col_j;
 
-    if (st != LMMC_STATUS_OK || out_matrix == NULL || out_matrix->data == NULL) {
+    if (status != LMMC_STATUS_OK ||
+        out_matrix == NULL || out_matrix->data == NULL)
         return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (out_matrix->rows != x->cols || out_matrix->cols != x->cols) {
+    if (out_matrix->rows != x->cols || out_matrix->cols != x->cols)
         return LMMC_STATUS_DIMENSION_MISMATCH;
-    }
-    if (sample && x->rows < 2) {
+    if (sample && x->rows < 2) return LMMC_STATUS_INVALID_ARGUMENT;
+    denominator = sample ? (lmmc_real_t)(x->rows - 1)
+                         : (lmmc_real_t)x->rows;
+    if (!lmmc_safe_mul_size(x->cols, sizeof(lmmc_real_t), &bytes))
         return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
-    LMMC_REAL_INIT(&denom);
-    if (sample) {
-        LMMC_REAL_SET_D(&denom, (double)(x->rows - 1));
-    } else {
-        LMMC_REAL_SET_D(&denom, (double)x->rows);
-    }
-
-    if (!lmmc_safe_mul_size(x->cols, sizeof(lmmc_real_t), &bytes)) {
-        LMMC_REAL_CLEAR(&denom);
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
 
     means = (lmmc_real_t*)lmmc_alloc(bytes);
-    if (means == NULL) {
-        LMMC_REAL_CLEAR(&denom);
-        return LMMC_STATUS_ALLOCATION_FAILED;
-    }
-    for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_INIT(&means[k]);
-
-    if (correlation) {
-        stddev = (lmmc_real_t*)lmmc_alloc(bytes);
-        if (stddev == NULL) {
-            for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_CLEAR(&means[k]);
-            lmmc_free(means);
-            LMMC_REAL_CLEAR(&denom);
-            return LMMC_STATUS_ALLOCATION_FAILED;
-        }
-        for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_INIT(&stddev[k]);
-    }
-
-    st = lmmc_mat_column_means_to_buffer(x, means);
-    if (st != LMMC_STATUS_OK) {
-        if (correlation) {
-            for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_CLEAR(&stddev[k]);
-            lmmc_free(stddev);
-        }
-        for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_CLEAR(&means[k]);
-        lmmc_free(means);
-        LMMC_REAL_CLEAR(&denom);
-        return st;
-    }
-
-    if (correlation) {
-        for (col_i = 0; col_i < x->cols; ++col_i) {
-            size_t row = 0;
-            lmmc_real_t sumsq, variance, d, tmp;
-            LMMC_REAL_INIT(&sumsq);
-            LMMC_REAL_INIT(&variance);
-            LMMC_REAL_INIT(&d);
-            LMMC_REAL_INIT(&tmp);
-
-            LMMC_REAL_SET_D(&sumsq, 0.0);
-
-            for (row = 0; row < x->rows; ++row) {
-                LMMC_REAL_SUB(&d, &x->data[row * x->stride + col_i], &means[col_i]);
-                LMMC_REAL_MUL(&tmp, &d, &d);
-                LMMC_REAL_ADD(&sumsq, &sumsq, &tmp);
-            }
-
-            LMMC_REAL_DIV(&variance, &sumsq, &denom);
-            st = lmmc_finalize_nonnegative(variance, &variance);
-
-            lmmc_real_t zero;
-            LMMC_REAL_INIT(&zero);
-            LMMC_REAL_SET_D(&zero, 0.0);
-
-            if (st != LMMC_STATUS_OK || LMMC_REAL_CMP(&variance, &zero) <= 0) {
-                LMMC_REAL_CLEAR(&zero);
-                LMMC_REAL_CLEAR(&tmp);
-                LMMC_REAL_CLEAR(&d);
-                LMMC_REAL_CLEAR(&variance);
-                LMMC_REAL_CLEAR(&sumsq);
-                if (correlation) {
-                    for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_CLEAR(&stddev[k]);
-                    lmmc_free(stddev);
-                }
-                for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_CLEAR(&means[k]);
-                lmmc_free(means);
-                LMMC_REAL_CLEAR(&denom);
-                return LMMC_STATUS_NUMERICAL_FAILURE;
-            }
-            LMMC_REAL_CLEAR(&zero);
-
-            LMMC_REAL_SQRT(&stddev[col_i], &variance);
-
-            if (!lmmc_is_finite(&stddev[col_i])) {
-                LMMC_REAL_CLEAR(&tmp);
-                LMMC_REAL_CLEAR(&d);
-                LMMC_REAL_CLEAR(&variance);
-                LMMC_REAL_CLEAR(&sumsq);
-                for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_CLEAR(&stddev[k]);
-                lmmc_free(stddev);
-                for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_CLEAR(&means[k]);
-                lmmc_free(means);
-                LMMC_REAL_CLEAR(&denom);
-                return LMMC_STATUS_NUMERICAL_FAILURE;
-            }
-            LMMC_REAL_CLEAR(&tmp);
-            LMMC_REAL_CLEAR(&d);
-            LMMC_REAL_CLEAR(&variance);
-            LMMC_REAL_CLEAR(&sumsq);
-        }
-    }
+    if (means == NULL) return LMMC_STATUS_ALLOCATION_FAILED;
+    status = lmmc_mat_column_means_to_buffer(x, means);
+    if (status != LMMC_STATUS_OK) goto cleanup;
 
     for (col_i = 0; col_i < x->cols; ++col_i) {
         for (col_j = col_i; col_j < x->cols; ++col_j) {
-            size_t row = 0;
-            lmmc_real_t sum, cov, out_value, di, dj, tmp;
-            LMMC_REAL_INIT(&sum);
-            LMMC_REAL_INIT(&cov);
-            LMMC_REAL_INIT(&out_value);
-            LMMC_REAL_INIT(&di);
-            LMMC_REAL_INIT(&dj);
-            LMMC_REAL_INIT(&tmp);
-
-            LMMC_REAL_SET_D(&sum, 0.0);
+            lmmc_real_t sum = 0.0;
+            lmmc_real_t covariance;
+            size_t row;
 
             for (row = 0; row < x->rows; ++row) {
-                LMMC_REAL_SUB(&di, &x->data[row * x->stride + col_i], &means[col_i]);
-                LMMC_REAL_SUB(&dj, &x->data[row * x->stride + col_j], &means[col_j]);
-                LMMC_REAL_MUL(&tmp, &di, &dj);
-                LMMC_REAL_ADD(&sum, &sum, &tmp);
-            }
-
-            LMMC_REAL_DIV(&cov, &sum, &denom);
-            if (!lmmc_is_finite(&cov)) {
-                LMMC_REAL_CLEAR(&tmp);
-                LMMC_REAL_CLEAR(&dj);
-                LMMC_REAL_CLEAR(&di);
-                LMMC_REAL_CLEAR(&out_value);
-                LMMC_REAL_CLEAR(&cov);
-                LMMC_REAL_CLEAR(&sum);
-                if (correlation) {
-                    for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_CLEAR(&stddev[k]);
-                    lmmc_free(stddev);
+                const lmmc_real_t delta_i =
+                    x->data[row * x->stride + col_i] - means[col_i];
+                const lmmc_real_t delta_j =
+                    x->data[row * x->stride + col_j] - means[col_j];
+                sum += delta_i * delta_j;
+                if (!isfinite(sum)) {
+                    status = LMMC_STATUS_NUMERICAL_FAILURE;
+                    goto cleanup;
                 }
-                for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_CLEAR(&means[k]);
-                lmmc_free(means);
-                LMMC_REAL_CLEAR(&denom);
-                return LMMC_STATUS_NUMERICAL_FAILURE;
             }
-
-            if (correlation) {
-                if (col_i == col_j) {
-                    LMMC_REAL_SET_D(&out_value, 1.0);
-                } else {
-                    LMMC_REAL_MUL(&tmp, &stddev[col_i], &stddev[col_j]);
-                    LMMC_REAL_DIV(&out_value, &cov, &tmp);
-                    if (!lmmc_is_finite(&out_value)) {
-                        LMMC_REAL_CLEAR(&tmp);
-                        LMMC_REAL_CLEAR(&dj);
-                        LMMC_REAL_CLEAR(&di);
-                        LMMC_REAL_CLEAR(&out_value);
-                        LMMC_REAL_CLEAR(&cov);
-                        LMMC_REAL_CLEAR(&sum);
-                        for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_CLEAR(&stddev[k]);
-                        lmmc_free(stddev);
-                        for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_CLEAR(&means[k]);
-                        lmmc_free(means);
-                        LMMC_REAL_CLEAR(&denom);
-                        return LMMC_STATUS_NUMERICAL_FAILURE;
-                    }
-
-                    lmmc_real_t one, min_one, tol, upper, lower;
-                    LMMC_REAL_INIT(&one);
-                    LMMC_REAL_INIT(&min_one);
-                    LMMC_REAL_INIT(&tol);
-                    LMMC_REAL_INIT(&upper);
-                    LMMC_REAL_INIT(&lower);
-
-                    LMMC_REAL_SET_D(&one, 1.0);
-                    LMMC_REAL_SET_D(&min_one, -1.0);
-                    LMMC_REAL_SET_D(&tol, 1e-12);
-
-                    LMMC_REAL_ADD(&upper, &one, &tol);
-                    if (LMMC_REAL_CMP(&out_value, &one) > 0 && LMMC_REAL_CMP(&out_value, &upper) < 0) {
-                        LMMC_REAL_SET(&out_value, &one);
-                    }
-
-                    LMMC_REAL_SUB(&lower, &min_one, &tol);
-                    if (LMMC_REAL_CMP(&out_value, &min_one) < 0 && LMMC_REAL_CMP(&out_value, &lower) > 0) {
-                        LMMC_REAL_SET(&out_value, &min_one);
-                    }
-
-                    if (LMMC_REAL_CMP(&out_value, &min_one) < 0 || LMMC_REAL_CMP(&out_value, &one) > 0) {
-                        LMMC_REAL_CLEAR(&lower);
-                        LMMC_REAL_CLEAR(&upper);
-                        LMMC_REAL_CLEAR(&tol);
-                        LMMC_REAL_CLEAR(&min_one);
-                        LMMC_REAL_CLEAR(&one);
-
-                        LMMC_REAL_CLEAR(&tmp);
-                        LMMC_REAL_CLEAR(&dj);
-                        LMMC_REAL_CLEAR(&di);
-                        LMMC_REAL_CLEAR(&out_value);
-                        LMMC_REAL_CLEAR(&cov);
-                        LMMC_REAL_CLEAR(&sum);
-                        for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_CLEAR(&stddev[k]);
-                        lmmc_free(stddev);
-                        for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_CLEAR(&means[k]);
-                        lmmc_free(means);
-                        LMMC_REAL_CLEAR(&denom);
-                        return LMMC_STATUS_NUMERICAL_FAILURE;
-                    }
-
-                    LMMC_REAL_CLEAR(&lower);
-                    LMMC_REAL_CLEAR(&upper);
-                    LMMC_REAL_CLEAR(&tol);
-                    LMMC_REAL_CLEAR(&min_one);
-                    LMMC_REAL_CLEAR(&one);
-                }
-            } else {
-                LMMC_REAL_SET(&out_value, &cov);
+            covariance = sum / denominator;
+            if (!isfinite(covariance)) {
+                status = LMMC_STATUS_NUMERICAL_FAILURE;
+                goto cleanup;
             }
-
-            LMMC_REAL_SET(&out_matrix->data[col_i * out_matrix->stride + col_j], &out_value);
-            LMMC_REAL_SET(&out_matrix->data[col_j * out_matrix->stride + col_i], &out_value);
-
-            LMMC_REAL_CLEAR(&tmp);
-            LMMC_REAL_CLEAR(&dj);
-            LMMC_REAL_CLEAR(&di);
-            LMMC_REAL_CLEAR(&out_value);
-            LMMC_REAL_CLEAR(&cov);
-            LMMC_REAL_CLEAR(&sum);
+            out_matrix->data[col_i * out_matrix->stride + col_j] = covariance;
+            out_matrix->data[col_j * out_matrix->stride + col_i] = covariance;
         }
     }
 
-    if (correlation) {
-        for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_CLEAR(&stddev[k]);
-        lmmc_free(stddev);
-    }
-    for (size_t k = 0; k < x->cols; ++k) LMMC_REAL_CLEAR(&means[k]);
+cleanup:
     lmmc_free(means);
-    LMMC_REAL_CLEAR(&denom);
+    return status;
+}
+
+static lmmc_status_t lmmc_mat_correlation_common(
+    const lmmc_mat_t* x,
+    int sample,
+    lmmc_mat_t* out_matrix
+) {
+    lmmc_status_t status = lmmc_validate_mat(x);
+    size_t col_i;
+    size_t col_j;
+
+    if (status != LMMC_STATUS_OK ||
+        out_matrix == NULL || out_matrix->data == NULL)
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    if (out_matrix->rows != x->cols || out_matrix->cols != x->cols)
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    if (sample && x->rows < 2) return LMMC_STATUS_INVALID_ARGUMENT;
+
+    for (col_i = 0; col_i < x->cols; ++col_i) {
+        for (col_j = col_i; col_j < x->cols; ++col_j) {
+            lmmc_real_t correlation;
+            status = lmmc_correlation_scaled(
+                &x->data[col_i], x->stride,
+                &x->data[col_j], x->stride,
+                x->rows, &correlation);
+            if (status != LMMC_STATUS_OK) return status;
+            if (col_i == col_j) correlation = 1.0;
+            out_matrix->data[col_i * out_matrix->stride + col_j] =
+                correlation;
+            out_matrix->data[col_j * out_matrix->stride + col_i] =
+                correlation;
+        }
+    }
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_vec_mean(const lmmc_vec_t* x, lmmc_real_t* out_mean) {
-    lmmc_real_t mean = 0.0;
-    lmmc_real_t m2 = 0.0;
-    lmmc_status_t st = LMMC_STATUS_OK;
-
-    if (out_mean == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
-    st = lmmc_vec_mean_m2(x, &mean, &m2);
-    if (st != LMMC_STATUS_OK) {
-        return st;
-    }
-
-    *out_mean = mean;
-    return LMMC_STATUS_OK;
+    lmmc_status_t status;
+    if (out_mean == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    status = lmmc_validate_vec(x);
+    if (status != LMMC_STATUS_OK) return status;
+    return lmmc_mean_strided(x->data, x->size, 1, out_mean);
 }
 
 lmmc_status_t lmmc_vec_variance_population(const lmmc_vec_t* x, lmmc_real_t* out_variance) {
@@ -819,19 +623,19 @@ lmmc_status_t lmmc_mat_column_mean(const lmmc_mat_t* x, lmmc_vec_t* out_means) {
 }
 
 lmmc_status_t lmmc_mat_covariance_population(const lmmc_mat_t* x, lmmc_mat_t* out_covariance) {
-    return lmmc_mat_covariance_or_correlation(x, 0, 0, out_covariance);
+    return lmmc_mat_covariance_common(x, 0, out_covariance);
 }
 
 lmmc_status_t lmmc_mat_covariance_sample(const lmmc_mat_t* x, lmmc_mat_t* out_covariance) {
-    return lmmc_mat_covariance_or_correlation(x, 1, 0, out_covariance);
+    return lmmc_mat_covariance_common(x, 1, out_covariance);
 }
 
 lmmc_status_t lmmc_mat_correlation_population(const lmmc_mat_t* x, lmmc_mat_t* out_correlation) {
-    return lmmc_mat_covariance_or_correlation(x, 0, 1, out_correlation);
+    return lmmc_mat_correlation_common(x, 0, out_correlation);
 }
 
 lmmc_status_t lmmc_mat_correlation_sample(const lmmc_mat_t* x, lmmc_mat_t* out_correlation) {
-    return lmmc_mat_covariance_or_correlation(x, 1, 1, out_correlation);
+    return lmmc_mat_correlation_common(x, 1, out_correlation);
 }
 
 /**
@@ -845,15 +649,33 @@ static int lmmc_real_compare(const void* a, const void* b) {
     return 0;
 }
 
+static lmmc_real_t lmmc_real_midpoint(
+    lmmc_real_t a, lmmc_real_t b) {
+    if ((a < 0.0 && b > 0.0) || (a > 0.0 && b < 0.0)) {
+        return a * 0.5 + b * 0.5;
+    }
+    return a + (b - a) * 0.5;
+}
+
+static int lmmc_vec_values_are_finite(const lmmc_vec_t* x) {
+    for (size_t i = 0; i < x->size; ++i) {
+        if (!lmmc_is_finite(&x->data[i])) return 0;
+    }
+    return 1;
+}
+
 lmmc_status_t lmmc_vec_median(const lmmc_vec_t* x, lmmc_real_t* out) {
     lmmc_real_t* sorted = NULL;
     size_t n;
 
     if (out == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
     if (x == NULL || x->data == NULL || x->size == 0) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_vec_values_are_finite(x)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
 
     n = x->size;
-    sorted = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
+    sorted = (lmmc_real_t*)lmmc_alloc_array(n, sizeof(lmmc_real_t));
     if (sorted == NULL) return LMMC_STATUS_ALLOCATION_FAILED;
 
     for (size_t i = 0; i < n; ++i) {
@@ -864,7 +686,8 @@ lmmc_status_t lmmc_vec_median(const lmmc_vec_t* x, lmmc_real_t* out) {
     if (n % 2 == 1) {
         *out = sorted[n / 2];
     } else {
-        *out = (sorted[n / 2 - 1] + sorted[n / 2]) * 0.5;
+        *out = lmmc_real_midpoint(
+            sorted[n / 2 - 1], sorted[n / 2]);
     }
 
     lmmc_free(sorted);
@@ -879,10 +702,15 @@ lmmc_status_t lmmc_vec_quantile(const lmmc_vec_t* x, lmmc_real_t p, lmmc_real_t*
 
     if (out == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
     if (x == NULL || x->data == NULL || x->size == 0) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (p < 0.0 || p > 1.0) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_is_finite(&p) || p < 0.0 || p > 1.0) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (!lmmc_vec_values_are_finite(x)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
 
     n = x->size;
-    sorted = (lmmc_real_t*)lmmc_alloc(n * sizeof(lmmc_real_t));
+    sorted = (lmmc_real_t*)lmmc_alloc_array(n, sizeof(lmmc_real_t));
     if (sorted == NULL) return LMMC_STATUS_ALLOCATION_FAILED;
 
     for (size_t i = 0; i < n; ++i) {
@@ -908,14 +736,18 @@ lmmc_status_t lmmc_vec_quantile(const lmmc_vec_t* x, lmmc_real_t p, lmmc_real_t*
 
 lmmc_status_t lmmc_vec_histogram(const lmmc_vec_t* x, size_t nbins, lmmc_real_t* edges, size_t* counts) {
     size_t n, i;
-    lmmc_real_t xmin, xmax, width;
+    lmmc_real_t xmin, xmax, range_scale = 1.0;
+    lmmc_real_t scaled_min = 0.0, scaled_span = 0.0;
+    int crosses_zero;
 
     if (x == NULL || x->data == NULL || x->size == 0) return LMMC_STATUS_INVALID_ARGUMENT;
     if (nbins == 0 || edges == NULL || counts == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!lmmc_vec_values_are_finite(x)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
 
     n = x->size;
 
-    /* Find min and max */
     xmin = x->data[0];
     xmax = x->data[0];
     for (i = 1; i < n; ++i) {
@@ -923,32 +755,76 @@ lmmc_status_t lmmc_vec_histogram(const lmmc_vec_t* x, size_t nbins, lmmc_real_t*
         if (x->data[i] > xmax) xmax = x->data[i];
     }
 
-    /* Handle constant data */
     if (xmax == xmin) {
-        xmin -= 0.5;
-        xmax += 0.5;
+        const lmmc_real_t value = xmin;
+        const lmmc_real_t lower = value - 0.5;
+        const lmmc_real_t upper = value + 0.5;
+        if (lower < value && upper > value &&
+            lmmc_is_finite(&lower) && lmmc_is_finite(&upper)) {
+            xmin = lower;
+            xmax = upper;
+        } else if (value > 0.0) {
+            xmin = value * 0.5;
+            xmax = value <= DBL_MAX / 1.5 ? value * 1.5 : value;
+        } else if (value < 0.0) {
+            xmin = value >= -DBL_MAX / 1.5 ? value * 1.5 : value;
+            xmax = value * 0.5;
+        } else {
+            xmin = -0.5;
+            xmax = 0.5;
+        }
+    }
+    crosses_zero = xmin < 0.0 && xmax > 0.0;
+    if (crosses_zero) {
+        range_scale = fmax(-xmin, xmax);
+        scaled_min = xmin / range_scale;
+        scaled_span = xmax / range_scale - scaled_min;
     }
 
-    width = (xmax - xmin) / (lmmc_real_t)nbins;
 
-    /* Compute edges */
-    for (i = 0; i <= nbins; ++i) {
-        edges[i] = xmin + width * (lmmc_real_t)i;
+    edges[0] = xmin;
+    for (i = 1; i < nbins; ++i) {
+        const lmmc_real_t t =
+            (lmmc_real_t)i / (lmmc_real_t)nbins;
+        if ((xmin < 0.0 && xmax > 0.0) ||
+            (xmin > 0.0 && xmax < 0.0)) {
+            edges[i] = (1.0 - t) * xmin + t * xmax;
+        } else {
+            edges[i] = xmin + t * (xmax - xmin);
+        }
     }
+    edges[nbins] = xmax;
 
-    /* Initialize counts */
     for (i = 0; i < nbins; ++i) {
         counts[i] = 0;
     }
 
-    /* Bin the data */
     for (i = 0; i < n; ++i) {
         size_t bin;
-        if (x->data[i] >= xmax) {
-            bin = nbins - 1; /* last bin includes the right edge */
+        if (x->data[i] <= xmin) {
+            bin = 0;
+        } else if (x->data[i] >= xmax) {
+            bin = nbins - 1;
         } else {
-            bin = (size_t)((x->data[i] - xmin) / width);
-            if (bin >= nbins) bin = nbins - 1;
+            lmmc_real_t position;
+            lmmc_real_t bin_position;
+            if (crosses_zero) {
+                position =
+                    (x->data[i] / range_scale - scaled_min) /
+                    scaled_span;
+            } else {
+                position =
+                    (x->data[i] - xmin) / (xmax - xmin);
+            }
+            bin_position = position * (lmmc_real_t)nbins;
+            if (position >= 1.0 ||
+                bin_position >= (lmmc_real_t)(nbins - 1)) {
+                bin = nbins - 1;
+            } else if (position <= 0.0) {
+                bin = 0;
+            } else {
+                bin = (size_t)bin_position;
+            }
         }
         counts[bin]++;
     }

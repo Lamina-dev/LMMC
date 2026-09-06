@@ -318,6 +318,19 @@ static int test_spectral_purity(void)
     return 0;
 }
 
+static int test_fft_rejects_unrepresentable_workspace(void)
+{
+    lmmc_real_t real = 0.0;
+    lmmc_real_t imag = 0.0;
+    lmmc_status_t status = lmmc_fft_forward(&real, &imag, SIZE_MAX);
+    if (status != LMMC_STATUS_INVALID_ARGUMENT) {
+        printf("    FAIL: oversized FFT returned %d instead of INVALID_ARGUMENT\n",
+               (int)status);
+        return 1;
+    }
+    return 0;
+}
+
 /* ===================== Main ===================== */
 
 typedef int (*test_func_t)(void);
@@ -328,6 +341,7 @@ int main(void)
     test_entry_t tests[] = {
         {"FFT_roundtrip_property",      test_fft_roundtrip},
         {"FFT_spectral_purity_property", test_spectral_purity},
+        {"FFT_workspace_size_overflow", test_fft_rejects_unrepresentable_workspace},
     };
     size_t n_tests = sizeof(tests) / sizeof(tests[0]);
     size_t i;

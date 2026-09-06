@@ -12,6 +12,7 @@
 #include "lmmc/config.h"
 #include <stddef.h>
 #include <stdint.h>
+#include "lmmc/dense.h"
 #include <math.h>
 
 typedef struct lmmc_rng_t lmmc_rng_t;
@@ -95,6 +96,35 @@ static inline int lmmc_storage_envelope_checked(
     return 1;
 }
 
+/**
+ * @internal
+ * @brief Validate a public dense-matrix descriptor before indexing it.
+ *
+ * This validates descriptor shape and all address arithmetic LMMC can check;
+ * callers remain responsible for providing storage large enough for the
+ * declared envelope.
+ */
+static inline int lmmc_mat_descriptor_is_valid(const lmmc_mat_t *matrix)
+{
+    lmmc_storage_envelope_t envelope;
+    return matrix != NULL && matrix->data != NULL &&
+           matrix->rows != 0 && matrix->cols != 0 &&
+           matrix->stride >= matrix->cols &&
+           lmmc_storage_envelope_checked(
+               matrix->data, matrix->rows, matrix->cols, matrix->stride,
+               sizeof(lmmc_real_t), &envelope);
+}
+
+/** @internal @brief Validate a public dense-vector descriptor. */
+static inline int lmmc_vec_descriptor_is_valid(const lmmc_vec_t *vector)
+{
+    lmmc_storage_envelope_t envelope;
+    return vector != NULL && vector->data != NULL && vector->size != 0 &&
+           lmmc_storage_envelope_checked(
+               vector->data, 1, vector->size, vector->size,
+               sizeof(lmmc_real_t), &envelope);
+}
+
 /** @internal @brief 检查两个已验证半开包络是否重叠. */
 static inline int lmmc_storage_envelopes_overlap(
     const lmmc_storage_envelope_t *left,
@@ -107,6 +137,56 @@ static inline int lmmc_storage_envelopes_overlap(
 static inline int lmmc_is_finite(const lmmc_real_t *x)
 {
     return LMMC_REAL_IS_FINITE(x) ? 1 : 0;
+}
+
+/**
+ * @internal
+ * @brief LAPACK DLASSQ 风格的缩放平方和累加器.
+ *
+ * 保持 sum(x_i^2) = scale^2 * sumsq，避免直接平方造成的中间
+ * 溢出或下溢。最终范数超出 binary64 表示域时仍按 IEEE-754 溢出。
+ */
+typedef struct lmmc_scaled_sumsq {
+    lmmc_real_t scale;
+    lmmc_real_t sumsq;
+} lmmc_scaled_sumsq_t;
+
+static inline void lmmc_scaled_sumsq_init(lmmc_scaled_sumsq_t *acc)
+{
+    acc->scale = 0.0;
+    acc->sumsq = 1.0;
+}
+
+static inline void lmmc_scaled_sumsq_add(
+    lmmc_scaled_sumsq_t *acc, lmmc_real_t value)
+{
+    lmmc_real_t magnitude = fabs(value);
+    if (isnan(acc->scale)) return;
+    if (isnan(magnitude)) {
+        acc->scale = magnitude;
+        acc->sumsq = 1.0;
+        return;
+    }
+    if (magnitude == 0.0 || isinf(acc->scale)) return;
+    if (isinf(magnitude)) {
+        acc->scale = magnitude;
+        acc->sumsq = 1.0;
+        return;
+    }
+    if (acc->scale < magnitude) {
+        lmmc_real_t ratio = acc->scale / magnitude;
+        acc->sumsq = 1.0 + acc->sumsq * ratio * ratio;
+        acc->scale = magnitude;
+    } else {
+        lmmc_real_t ratio = magnitude / acc->scale;
+        acc->sumsq += ratio * ratio;
+    }
+}
+
+static inline lmmc_real_t lmmc_scaled_sumsq_norm(
+    const lmmc_scaled_sumsq_t *acc)
+{
+    return acc->scale == 0.0 ? 0.0 : acc->scale * sqrt(acc->sumsq);
 }
 
 /** @internal @brief 绝对值. */

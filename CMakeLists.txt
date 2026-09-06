@@ -67,15 +67,15 @@ set(LMMC_SOURCES
     src/memory_bridge.c
     src/interp.c
     src/itersolve.c
-    src/lsr_boolean_sets.c
-    src/lsr_complex_sets.c
-    src/lsr_constants_units.c
-    src/lsr_linalg_elementwise.c
-    src/lsr_linalg_structural.c
-    src/lsr_numeric_sets.c
-    src/lsr_scalar_functions.c
-    src/lsr_statistics_random.c
-    src/lsr_text_sets.c
+    src/stdlib_boolean_sets.c
+    src/stdlib_complex_sets.c
+    src/stdlib_constants_units.c
+    src/stdlib_linalg_elementwise.c
+    src/stdlib_linalg_structural.c
+    src/stdlib_numeric_sets.c
+    src/stdlib_scalar_functions.c
+    src/stdlib_statistics_random.c
+    src/stdlib_text_sets.c
     src/itersolve_minres_lsqr.c
     src/linear_algebra.c
     src/nonlinear.c
@@ -151,44 +151,22 @@ target_include_directories(lmmc SYSTEM
     PUBLIC
         $<BUILD_INTERFACE:${_lmmc_lmmp_include}>
 )
-# Export only declarations from the installed C API. Test-only hooks are
-# included only in test builds.
-file(GLOB_RECURSE _lmmc_public_headers CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/lmmc/*.h")
-set(_lmmc_export_headers ${_lmmc_public_headers})
-set(_lmmc_export_symbols)
+# Export only the explicitly maintained shared-library ABI. Test-only and
+# conditional debug hooks are appended below without making header formatting
+# part of the export contract.
+set(_lmmc_public_symbol_file
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/lmmc_public_symbols.txt")
+file(STRINGS "${_lmmc_public_symbol_file}" _lmmc_export_symbols
+    REGEX "^lmmc_[A-Za-z0-9_]+$")
+if(NOT _lmmc_export_symbols)
+    message(FATAL_ERROR
+        "LMMC public symbol list is empty: ${_lmmc_public_symbol_file}")
+endif()
 if(LMMC_BUILD_TESTS)
     list(APPEND _lmmc_export_symbols lmmc_memory_fail_after_for_test)
 endif()
-foreach(_lmmc_header IN LISTS _lmmc_export_headers)
-    file(READ "${_lmmc_header}" _lmmc_header_content)
-    string(REGEX MATCHALL "lmmc_[A-Za-z0-9_]+[ \t\r\n]*\\("
-        _lmmc_header_symbols "${_lmmc_header_content}")
-    foreach(_lmmc_symbol IN LISTS _lmmc_header_symbols)
-        string(REGEX REPLACE "[ \t\r\n]*\\($" "" _lmmc_symbol
-            "${_lmmc_symbol}")
-        list(APPEND _lmmc_export_symbols "${_lmmc_symbol}")
-    endforeach()
-    string(REGEX MATCHALL
-        "lmmc_[A-Za-z0-9_]+[ \t\r\n]*\\([ \t\r\n]*\\*"
-        _lmmc_callback_return_types "${_lmmc_header_content}")
-    foreach(_lmmc_return_type IN LISTS _lmmc_callback_return_types)
-        string(REGEX REPLACE "[ \t\r\n]*\\([ \t\r\n]*\\*$" ""
-            _lmmc_return_type "${_lmmc_return_type}")
-        list(REMOVE_ITEM _lmmc_export_symbols "${_lmmc_return_type}")
-    endforeach()
-    string(REGEX MATCHALL
-        "\\(\\*[ \t\r\n]*lmmc_[A-Za-z0-9_]+[ \t\r\n]*\\("
-        _lmmc_header_callbacks "${_lmmc_header_content}")
-    foreach(_lmmc_callback IN LISTS _lmmc_header_callbacks)
-        string(REGEX REPLACE
-            "^\\(\\*[ \t\r\n]*|[ \t\r\n]*\\($" ""
-            _lmmc_callback "${_lmmc_callback}")
-        list(REMOVE_ITEM _lmmc_export_symbols "${_lmmc_callback}")
-    endforeach()
-endforeach()
-if(NOT LMMC_DEBUG_LEAKS)
-    list(REMOVE_ITEM _lmmc_export_symbols lmmc_debug_leaks_get_count)
+if(LMMC_DEBUG_LEAKS)
+    list(APPEND _lmmc_export_symbols lmmc_debug_leaks_get_count)
 endif()
 list(REMOVE_DUPLICATES _lmmc_export_symbols)
 list(SORT _lmmc_export_symbols)

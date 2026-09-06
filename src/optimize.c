@@ -7,6 +7,7 @@
 #include <math.h>
 #include <string.h>
 #include "memory_bridge.h"
+#include "internal.h"
 #include "lmmc/config.h"
 #include "lmmc/dense.h"
 #include "lmmc/linear_algebra.h"
@@ -26,22 +27,59 @@ static void lmmc_optimize_emit(
     lmmc_diagnostic_emit(&cfg->diagnostics, &diagnostic);
 }
 
+static int lmmc_optimize_config_is_valid(
+    const lmmc_optimize_config_t* cfg)
+{
+    return cfg != NULL &&
+           isfinite(cfg->abs_tol) && cfg->abs_tol >= 0.0 &&
+           isfinite(cfg->rel_tol) &&
+           cfg->rel_tol >= 0.0 && cfg->rel_tol < 1.0 &&
+           cfg->max_iter > 0 &&
+           cfg->lbfgs_memory > 0 &&
+           isfinite(cfg->lm_damping) && cfg->lm_damping > 0.0;
+}
+
+static int lmmc_optimize_has_converged(
+    lmmc_real_t residual,
+    lmmc_real_t initial_residual,
+    const lmmc_optimize_config_t* cfg)
+{
+    return residual <= cfg->abs_tol ||
+           (initial_residual > 0.0 &&
+            residual <= cfg->rel_tol * initial_residual);
+}
+
 /**
  * @brief 计算向量的 L2 范数。
  */
 static lmmc_real_t vec_norm2(const lmmc_vec_t* v) {
-    lmmc_real_t sum = 0.0;
+    lmmc_real_t scale = 0.0;
+    lmmc_real_t sumsq = 1.0;
     size_t i;
     for (i = 0; i < v->size; ++i) {
-        sum += v->data[i] * v->data[i];
+        const lmmc_real_t value_abs = fabs(v->data[i]);
+        if (!isfinite(value_abs)) {
+            return value_abs;
+        }
+        if (value_abs == 0.0) {
+            continue;
+        }
+        if (scale < value_abs) {
+            const lmmc_real_t ratio = scale / value_abs;
+            sumsq = 1.0 + sumsq * ratio * ratio;
+            scale = value_abs;
+        } else {
+            const lmmc_real_t ratio = value_abs / scale;
+            sumsq += ratio * ratio;
+        }
     }
-    return sqrt(sum);
+    return scale == 0.0 ? 0.0 : scale * sqrt(sumsq);
 }
 
 /**
- * @brief 使用前向有限差分计算 Jacobian。
+ * @brief 使用可表示方向上的单边有限差分计算 Jacobian。
  *
- * J[:,j] ≈ (F(x + h*e_j) - F(x)) / h
+ * 优先使用前向扰动；当该扰动越过浮点有限范围时改用后向扰动。
  */
 static lmmc_status_t finite_difference_jacobian(
     lmmc_opt_func_t F, void* user_data,
@@ -53,7 +91,7 @@ static lmmc_status_t finite_difference_jacobian(
     lmmc_vec_t x_pert;
     lmmc_vec_t F_pert;
     lmmc_status_t status;
-    lmmc_real_t h;
+    lmmc_real_t h, perturbed_x;
 
     status = lmmc_vec_create(n, &x_pert);
     if (status != LMMC_STATUS_OK) return status;
@@ -68,10 +106,22 @@ static lmmc_status_t finite_difference_jacobian(
         /* Copy x into x_pert */
         memcpy(x_pert.data, x->data, n * sizeof(lmmc_real_t));
 
-        /* Perturbation step: h = sqrt(eps) * max(|x_j|, 1) */
-        h = sqrt(1.4901161193847656e-08) * fmax(fabs(x->data[j]), 1.0);
-
-        x_pert.data[j] += h;
+        /* Perturbation step: h = sqrt(eps) * max(|x_j|, 1). */
+        h = sqrt(LMMC_REAL_EPSILON) * fmax(fabs(x->data[j]), 1.0);
+        perturbed_x = x->data[j] + h;
+        if (!isfinite(perturbed_x) || perturbed_x == x->data[j]) {
+            perturbed_x = x->data[j] - h;
+        }
+        if (!isfinite(perturbed_x) || perturbed_x == x->data[j]) {
+            perturbed_x = nextafter(x->data[j], 0.0);
+        }
+        h = perturbed_x - x->data[j];
+        if (!isfinite(perturbed_x) || !isfinite(h) || h == 0.0) {
+            lmmc_vec_destroy(&x_pert);
+            lmmc_vec_destroy(&F_pert);
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+        x_pert.data[j] = perturbed_x;
 
         status = F(&x_pert, &F_pert, user_data);
         if (status != LMMC_STATUS_OK) {
@@ -80,9 +130,21 @@ static lmmc_status_t finite_difference_jacobian(
             return status;
         }
 
-        /* J[:,j] = (F_pert - Fx) / h */
+        /* J[:,j] = (F_pert - Fx) / actual representable step. */
         for (i = 0; i < n; ++i) {
-            J->data[i * J->stride + j] = (F_pert.data[i] - Fx->data[i]) / h;
+            lmmc_real_t derivative;
+            if (!isfinite(F_pert.data[i]) || !isfinite(Fx->data[i])) {
+                lmmc_vec_destroy(&x_pert);
+                lmmc_vec_destroy(&F_pert);
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
+            derivative = (F_pert.data[i] - Fx->data[i]) / h;
+            if (!isfinite(derivative)) {
+                lmmc_vec_destroy(&x_pert);
+                lmmc_vec_destroy(&F_pert);
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
+            J->data[i * J->stride + j] = derivative;
         }
     }
 
@@ -119,8 +181,10 @@ lmmc_status_t lmmc_nleq_newton(
     size_t* pivots = NULL;
     lmmc_status_t status;
     lmmc_real_t res_norm;
+    lmmc_real_t initial_residual = 0.0;
 
-    if (F == NULL || x == NULL || cfg == NULL || out == NULL || x->data == NULL) {
+    if (F == NULL || x == NULL || out == NULL || x->data == NULL ||
+        !lmmc_optimize_config_is_valid(cfg)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -159,7 +223,7 @@ lmmc_status_t lmmc_nleq_newton(
         return status;
     }
 
-    pivots = (size_t*)lmmc_alloc(n * sizeof(size_t));
+    pivots = (size_t*)lmmc_alloc_array(n, sizeof(size_t));
     if (pivots == NULL) {
         lmmc_vec_destroy(&Fx);
         lmmc_vec_destroy(&delta);
@@ -185,8 +249,9 @@ lmmc_status_t lmmc_nleq_newton(
             out->failure_reason = LMMC_OPT_FAILURE_NUMERICAL_ISSUE;
             goto cleanup;
         }
+        if (iter == 0) initial_residual = res_norm;
 
-        if (res_norm <= cfg->abs_tol) {
+        if (lmmc_optimize_has_converged(res_norm, initial_residual, cfg)) {
             out->converged = 1;
             goto cleanup;
         }
@@ -273,8 +338,10 @@ lmmc_status_t lmmc_nleq_broyden(
     size_t* pivots = NULL;
     lmmc_status_t status;
     lmmc_real_t res_norm;
+    lmmc_real_t initial_residual = 0.0;
 
-    if (F == NULL || x == NULL || cfg == NULL || out == NULL || x->data == NULL) {
+    if (F == NULL || x == NULL || out == NULL || x->data == NULL ||
+        !lmmc_optimize_config_is_valid(cfg)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -313,7 +380,7 @@ lmmc_status_t lmmc_nleq_broyden(
     status = lmmc_mat_create(n, n, &Blu);
     if (status != LMMC_STATUS_OK) { lmmc_vec_destroy(&Fx); lmmc_vec_destroy(&Fx_new); lmmc_vec_destroy(&delta_x); lmmc_vec_destroy(&delta_F); lmmc_vec_destroy(&Bdx); lmmc_vec_destroy(&temp_vec); lmmc_mat_destroy(&B); return status; }
 
-    pivots = (size_t*)lmmc_alloc(n * sizeof(size_t));
+    pivots = (size_t*)lmmc_alloc_array(n, sizeof(size_t));
     if (pivots == NULL) {
         lmmc_vec_destroy(&Fx); lmmc_vec_destroy(&Fx_new); lmmc_vec_destroy(&delta_x);
         lmmc_vec_destroy(&delta_F); lmmc_vec_destroy(&Bdx); lmmc_vec_destroy(&temp_vec);
@@ -344,8 +411,9 @@ lmmc_status_t lmmc_nleq_broyden(
             out->failure_reason = LMMC_OPT_FAILURE_NUMERICAL_ISSUE;
             goto broyden_cleanup;
         }
+        if (iter == 0) initial_residual = res_norm;
 
-        if (res_norm <= cfg->abs_tol) {
+        if (lmmc_optimize_has_converged(res_norm, initial_residual, cfg)) {
             out->converged = 1;
             goto broyden_cleanup;
         }
@@ -467,10 +535,12 @@ lmmc_status_t lmmc_minimize_lbfgs(
     lmmc_status_t status;
     lmmc_real_t f_val, f_new;
     lmmc_real_t grad_norm;
+    lmmc_real_t initial_residual = 0.0;
     size_t history_count = 0;
     size_t oldest = 0;
 
-    if (obj == NULL || grad == NULL || x == NULL || cfg == NULL || out == NULL || x->data == NULL) {
+    if (obj == NULL || grad == NULL || x == NULL || out == NULL ||
+        x->data == NULL || !lmmc_optimize_config_is_valid(cfg)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -486,10 +556,12 @@ lmmc_status_t lmmc_minimize_lbfgs(
     out->failure_reason = LMMC_OPT_FAILURE_NONE;
 
     /* Allocate storage */
-    s_store = (lmmc_real_t*)lmmc_alloc(m * n * sizeof(lmmc_real_t));
-    y_store = (lmmc_real_t*)lmmc_alloc(m * n * sizeof(lmmc_real_t));
-    alpha = (lmmc_real_t*)lmmc_alloc(m * sizeof(lmmc_real_t));
-    rho = (lmmc_real_t*)lmmc_alloc(m * sizeof(lmmc_real_t));
+    s_store = (lmmc_real_t*)lmmc_alloc_array_2d(
+        m, n, sizeof(lmmc_real_t));
+    y_store = (lmmc_real_t*)lmmc_alloc_array_2d(
+        m, n, sizeof(lmmc_real_t));
+    alpha = (lmmc_real_t*)lmmc_alloc_array(m, sizeof(lmmc_real_t));
+    rho = (lmmc_real_t*)lmmc_alloc_array(m, sizeof(lmmc_real_t));
 
     if (!s_store || !y_store || !alpha || !rho) {
         if (s_store) lmmc_free(s_store);
@@ -532,8 +604,10 @@ lmmc_status_t lmmc_minimize_lbfgs(
             out->failure_reason = LMMC_OPT_FAILURE_NUMERICAL_ISSUE;
             goto lbfgs_cleanup;
         }
+        if (iter == 0) initial_residual = grad_norm;
 
-        if (grad_norm <= cfg->abs_tol) {
+        if (lmmc_optimize_has_converged(
+                grad_norm, initial_residual, cfg)) {
             out->converged = 1;
             goto lbfgs_cleanup;
         }
@@ -708,8 +782,10 @@ lmmc_status_t lmmc_minimize_levenberg_marquardt(
     lmmc_status_t status;
     lmmc_real_t lambda;
     lmmc_real_t res_norm, res_norm_new;
+    lmmc_real_t initial_residual = 0.0;
 
-    if (residual == NULL || x == NULL || cfg == NULL || out == NULL || x->data == NULL) {
+    if (residual == NULL || x == NULL || out == NULL || x->data == NULL ||
+        !lmmc_optimize_config_is_valid(cfg)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -747,7 +823,7 @@ lmmc_status_t lmmc_minimize_levenberg_marquardt(
     status = lmmc_mat_create(n, n, &JtJ);
     if (status != LMMC_STATUS_OK) { lmmc_vec_destroy(&r); lmmc_vec_destroy(&r_new); lmmc_vec_destroy(&delta); lmmc_vec_destroy(&JtR); lmmc_vec_destroy(&x_new); lmmc_mat_destroy(&Jmat); return status; }
 
-    pivots = (size_t*)lmmc_alloc(n * sizeof(size_t));
+    pivots = (size_t*)lmmc_alloc_array(n, sizeof(size_t));
     if (pivots == NULL) {
         lmmc_vec_destroy(&r); lmmc_vec_destroy(&r_new); lmmc_vec_destroy(&delta);
         lmmc_vec_destroy(&JtR); lmmc_vec_destroy(&x_new);
@@ -771,8 +847,9 @@ lmmc_status_t lmmc_minimize_levenberg_marquardt(
             out->failure_reason = LMMC_OPT_FAILURE_NUMERICAL_ISSUE;
             goto lm_cleanup;
         }
+        if (iter == 0) initial_residual = res_norm;
 
-        if (res_norm <= cfg->abs_tol) {
+        if (lmmc_optimize_has_converged(res_norm, initial_residual, cfg)) {
             out->converged = 1;
             goto lm_cleanup;
         }
@@ -934,8 +1011,10 @@ lmmc_status_t lmmc_minimize_gradient_descent(
     lmmc_status_t status;
     lmmc_real_t f_val, f_new;
     lmmc_real_t grad_norm;
+    lmmc_real_t initial_residual = 0.0;
 
-    if (obj == NULL || grad == NULL || x == NULL || cfg == NULL || out == NULL || x->data == NULL) {
+    if (obj == NULL || grad == NULL || x == NULL || out == NULL ||
+        x->data == NULL || !lmmc_optimize_config_is_valid(cfg)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -973,8 +1052,10 @@ lmmc_status_t lmmc_minimize_gradient_descent(
             out->failure_reason = LMMC_OPT_FAILURE_NUMERICAL_ISSUE;
             goto gd_cleanup;
         }
+        if (iter == 0) initial_residual = grad_norm;
 
-        if (grad_norm <= cfg->abs_tol) {
+        if (lmmc_optimize_has_converged(
+                grad_norm, initial_residual, cfg)) {
             out->converged = 1;
             goto gd_cleanup;
         }

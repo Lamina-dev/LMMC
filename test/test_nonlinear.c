@@ -3,6 +3,7 @@
  * 针对 LMMC 中 nonlinear 相关接口的单元测试。
  */
 #include <math.h>
+#include <float.h>
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"
@@ -27,6 +28,11 @@ static double lmmc_test_df_linear(double x, void* user_data) {
     (void)x;
     return 1.0;
 }
+static double lmmc_test_fn_tiny_scaled_linear(double x, void* user_data) {
+    (void)user_data;
+    return 1.0e-20 * (x - 1.0);
+}
+
 
 static double lmmc_test_fn_nan(double x, void* user_data) {
     (void)user_data;
@@ -236,6 +242,29 @@ int main(void) {
         rc = 1;
         goto done;
     }
+    cfg_hard = cfg;
+    cfg_hard.abs_tol = 0.0;
+    st = lmmc_secant_solve(
+        lmmc_test_fn_tiny_scaled_linear, NULL, 0.0, 2.0,
+        &cfg_hard, &result);
+    if (st != LMMC_STATUS_OK || result.converged != 1 ||
+        result.root != 1.0 ||
+        result.failure_reason != LMMC_NONLINEAR_FAILURE_NONE) {
+        rc = 1;
+        goto done;
+    }
+    cfg_hard = cfg;
+    cfg_hard.abs_tol = 0.0;
+    st = lmmc_secant_solve(
+        lmmc_test_fn_linear, NULL, -DBL_MAX, DBL_MAX, &cfg_hard, &result);
+    if (st != LMMC_STATUS_OK || result.converged != 1 ||
+        result.root != 1.0 ||
+        result.failure_reason != LMMC_NONLINEAR_FAILURE_NONE) {
+        rc = 1;
+        goto done;
+    }
+
+
 
     st = lmmc_secant_solve(lmmc_test_fn_const, NULL, 0.0, 2.0, &cfg, &result);
     if (st != LMMC_STATUS_NUMERICAL_FAILURE || result.converged != 0 || result.num_iter != 1 ||

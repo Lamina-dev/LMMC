@@ -45,10 +45,9 @@ static lmmc_status_t lmmc_tensor_validate_binary(
 }
 
 static lmmc_status_t lmmc_mat_validate(const lmmc_mat_t* mat) {
-    if (mat == NULL || mat->data == NULL || mat->rows == 0 || mat->cols == 0 || mat->stride < mat->cols) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    return LMMC_STATUS_OK;
+    return lmmc_mat_descriptor_is_valid(mat)
+        ? LMMC_STATUS_OK
+        : LMMC_STATUS_INVALID_ARGUMENT;
 }
 
 lmmc_status_t lmmc_tensor3_create(size_t dim0, size_t dim1, size_t dim2, lmmc_tensor_t* out_tensor) {
@@ -211,36 +210,25 @@ lmmc_status_t lmmc_tensor_get(const lmmc_tensor_t* tensor, size_t i, size_t j, s
 }
 
 lmmc_status_t lmmc_tensor_norm_fro(const lmmc_tensor_t* tensor, lmmc_real_t* out_norm) {
-    size_t i = 0;
-    size_t j = 0;
-    size_t k = 0;
-    lmmc_real_t sum, tmp_mul, tmp_sum;
-    LMMC_REAL_INIT(&sum);
-    LMMC_REAL_INIT(&tmp_mul);
-    LMMC_REAL_INIT(&tmp_sum);
+    lmmc_scaled_sumsq_t acc;
     if (lmmc_tensor_validate(tensor) != LMMC_STATUS_OK || out_norm == NULL) {
-        LMMC_REAL_CLEAR(&sum);
-        LMMC_REAL_CLEAR(&tmp_mul);
-        LMMC_REAL_CLEAR(&tmp_sum);
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    LMMC_REAL_SET_D(&sum, 0.0);
 
-    for (i = 0; i < tensor->dim0; ++i) {
-        for (j = 0; j < tensor->dim1; ++j) {
-            for (k = 0; k < tensor->dim2; ++k) {
-                lmmc_real_t* v = &tensor->data[i * tensor->stride0 + j * tensor->stride1 + k * tensor->stride2];
-                LMMC_REAL_MUL(&tmp_mul, v, v);
-                LMMC_REAL_ADD(&tmp_sum, &sum, &tmp_mul);
-                LMMC_REAL_SET(&sum, &tmp_sum);
+    lmmc_scaled_sumsq_init(&acc);
+    for (size_t i = 0; i < tensor->dim0; ++i) {
+        for (size_t j = 0; j < tensor->dim1; ++j) {
+            for (size_t k = 0; k < tensor->dim2; ++k) {
+                lmmc_scaled_sumsq_add(
+                    &acc,
+                    tensor->data[
+                        i * tensor->stride0 +
+                        j * tensor->stride1 +
+                        k * tensor->stride2]);
             }
         }
     }
-    LMMC_REAL_SQRT(out_norm, &sum);
-
-    LMMC_REAL_CLEAR(&sum);
-    LMMC_REAL_CLEAR(&tmp_mul);
-    LMMC_REAL_CLEAR(&tmp_sum);
+    *out_norm = lmmc_scaled_sumsq_norm(&acc);
     return LMMC_STATUS_OK;
 }
 

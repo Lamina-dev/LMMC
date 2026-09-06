@@ -2,6 +2,7 @@
  * @file test_optimize.c
  * 优化模块单元测试。
  */
+#include <float.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -74,6 +75,16 @@ static lmmc_status_t linear_system_F(const lmmc_vec_t* x, lmmc_vec_t* F, void* u
     return LMMC_STATUS_OK;
 }
 
+static lmmc_status_t boundary_linear_system_F(
+    const lmmc_vec_t* x,
+    lmmc_vec_t* F,
+    void* user_data)
+{
+    (void)user_data;
+    F->data[0] = x->data[0] - DBL_MAX * 0.5;
+    return LMMC_STATUS_OK;
+}
+
 static lmmc_status_t linear_system_J(const lmmc_vec_t* x, lmmc_mat_t* J, void* user_data) {
     (void)x;
     linear_system_data_t* sys = (linear_system_data_t*)user_data;
@@ -83,6 +94,54 @@ static lmmc_status_t linear_system_J(const lmmc_vec_t* x, lmmc_mat_t* J, void* u
             J->data[i * J->stride + j] = sys->A_data[i * n + j];
         }
     }
+    return LMMC_STATUS_OK;
+}
+
+static lmmc_status_t identity_system_F(
+    const lmmc_vec_t* x,
+    lmmc_vec_t* F,
+    void* user_data)
+{
+    (void)user_data;
+    for (size_t i = 0; i < x->size; ++i) {
+        F->data[i] = x->data[i];
+    }
+    return LMMC_STATUS_OK;
+}
+
+static lmmc_status_t identity_system_J(
+    const lmmc_vec_t* x,
+    lmmc_mat_t* J,
+    void* user_data)
+{
+    (void)x;
+    (void)user_data;
+    for (size_t i = 0; i < J->rows; ++i) {
+        for (size_t j = 0; j < J->cols; ++j) {
+            J->data[i * J->stride + j] = (i == j) ? 1.0 : 0.0;
+        }
+    }
+    return LMMC_STATUS_OK;
+}
+static lmmc_status_t twice_identity_system_J(
+    const lmmc_vec_t* x,
+    lmmc_mat_t* J,
+    void* user_data)
+{
+    (void)x;
+    (void)user_data;
+    J->data[0] = 2.0;
+    return LMMC_STATUS_OK;
+}
+
+
+static lmmc_status_t scalar_square_system_F(
+    const lmmc_vec_t* x,
+    lmmc_vec_t* F,
+    void* user_data)
+{
+    (void)user_data;
+    F->data[0] = x->data[0] * x->data[0] - 2.0;
     return LMMC_STATUS_OK;
 }
 
@@ -512,6 +571,123 @@ static int test_levenberg_marquardt(void) {
     return 0;
 }
 
+static int test_newton_extreme_finite_residual(void)
+{
+    lmmc_vec_t x = {0};
+    lmmc_optimize_config_t cfg = {0};
+    lmmc_optimize_result_t result = {0};
+    lmmc_status_t st = lmmc_vec_create(2, &x);
+    if (st != LMMC_STATUS_OK) {
+        printf("FAIL test_newton_extreme_finite_residual: vec_create failed\n");
+        return 1;
+    }
+    x.data[0] = 1e200;
+    x.data[1] = -1e200;
+    lmmc_optimize_default_config(&cfg);
+    cfg.max_iter = 4;
+
+    st = lmmc_nleq_newton(
+        identity_system_F, identity_system_J, NULL, &x, &cfg, &result);
+    if (st != LMMC_STATUS_OK || !result.converged ||
+        x.data[0] != 0.0 || x.data[1] != 0.0) {
+        printf("FAIL test_newton_extreme_finite_residual: "
+               "status=%d converged=%d residual=%g x=(%g,%g)\n",
+               (int)st, result.converged, result.final_residual,
+               x.data[0], x.data[1]);
+        lmmc_vec_destroy(&x);
+        return 1;
+    }
+
+    lmmc_vec_destroy(&x);
+    printf("PASS test_newton_extreme_finite_residual\n");
+    return 0;
+}
+
+static int test_newton_finite_difference_step(void)
+{
+    lmmc_vec_t x = {0};
+    lmmc_optimize_config_t cfg = {0};
+    lmmc_optimize_result_t result = {0};
+    lmmc_status_t st = lmmc_vec_create(1, &x);
+    if (st != LMMC_STATUS_OK) {
+        printf("FAIL test_newton_finite_difference_step: vec_create failed\n");
+        return 1;
+    }
+    x.data[0] = 1.0;
+    lmmc_optimize_default_config(&cfg);
+    cfg.max_iter = 1;
+
+    st = lmmc_nleq_newton(
+        scalar_square_system_F, NULL, NULL, &x, &cfg, &result);
+    if (st != LMMC_STATUS_OK || fabs(x.data[0] - 1.5) > 1e-6) {
+        printf("FAIL test_newton_finite_difference_step: "
+               "status=%d first_step=%.17g expected=1.5\n",
+               (int)st, x.data[0]);
+        lmmc_vec_destroy(&x);
+        return 1;
+    }
+
+    lmmc_vec_destroy(&x);
+    printf("PASS test_newton_finite_difference_step\n");
+    return 0;
+}
+static int test_newton_finite_difference_at_upper_boundary(void)
+{
+    const lmmc_real_t expected = DBL_MAX * 0.5;
+    lmmc_vec_t x = {0};
+    lmmc_optimize_config_t cfg = {0};
+    lmmc_optimize_result_t result = {0};
+    lmmc_status_t st = lmmc_vec_create(1, &x);
+    if (st != LMMC_STATUS_OK) return 1;
+
+    x.data[0] = DBL_MAX;
+    lmmc_optimize_default_config(&cfg);
+    cfg.max_iter = 3;
+    st = lmmc_nleq_newton(
+        boundary_linear_system_F, NULL, NULL, &x, &cfg, &result);
+    if (st != LMMC_STATUS_OK || !result.converged || x.data[0] != expected) {
+        printf("FAIL test_newton_finite_difference_at_upper_boundary: "
+               "status=%d converged=%d x=%g expected=%g\n",
+               (int)st, result.converged, x.data[0], expected);
+        lmmc_vec_destroy(&x);
+        return 1;
+    }
+
+    lmmc_vec_destroy(&x);
+    printf("PASS test_newton_finite_difference_at_upper_boundary\n");
+    return 0;
+}
+
+static int test_newton_relative_tolerance(void)
+{
+    lmmc_vec_t x = {0};
+    lmmc_optimize_config_t cfg = {0};
+    lmmc_optimize_result_t result = {0};
+    lmmc_status_t st = lmmc_vec_create(1, &x);
+    if (st != LMMC_STATUS_OK) return 1;
+
+    x.data[0] = 1.0;
+    lmmc_optimize_default_config(&cfg);
+    cfg.abs_tol = 0.0;
+    cfg.rel_tol = 0.75;
+    cfg.max_iter = 2;
+    st = lmmc_nleq_newton(
+        identity_system_F, twice_identity_system_J, NULL, &x, &cfg, &result);
+    if (st != LMMC_STATUS_OK || !result.converged ||
+        result.num_iter != 2 || x.data[0] != 0.5) {
+        printf("FAIL test_newton_relative_tolerance: "
+               "status=%d converged=%d iterations=%zu x=%g\n",
+               (int)st, result.converged, result.num_iter, x.data[0]);
+        lmmc_vec_destroy(&x);
+        return 1;
+    }
+
+    lmmc_vec_destroy(&x);
+    printf("PASS test_newton_relative_tolerance\n");
+    return 0;
+}
+
+
 int main(void) {
     int rc = 0;
 
@@ -520,6 +696,10 @@ int main(void) {
     rc |= test_broyden_nonlinear();
     rc |= test_gradient_descent_quadratic();
     rc |= test_levenberg_marquardt();
+    rc |= test_newton_extreme_finite_residual();
+    rc |= test_newton_finite_difference_step();
+    rc |= test_newton_finite_difference_at_upper_boundary();
+    rc |= test_newton_relative_tolerance();
 
     if (rc == 0) {
         printf("\nAll optimization tests PASSED.\n");

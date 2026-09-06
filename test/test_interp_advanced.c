@@ -3,6 +3,7 @@
  * 测试扩展插值功能：边界条件、PCHIP、Akima、二维插值。
  */
 #include <math.h>
+#include <float.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -397,6 +398,126 @@ static int test_non_increasing_abscissae_rejected(void)
     return 0;
 }
 
+static int test_invalid_and_nonfinite_inputs_rejected(void)
+{
+    lmmc_real_t xs[] = {0.0, 1.0, 2.0, 3.0, 4.0};
+    lmmc_real_t ys[] = {0.0, 1.0, 4.0, 9.0, 16.0};
+    lmmc_real_t xs_nan[] = {0.0, 1.0, NAN, 3.0, 4.0};
+    lmmc_real_t ys_nan[] = {0.0, 1.0, NAN, 9.0, 16.0};
+    lmmc_interp_pchip_t* p = NULL;
+    lmmc_interp_akima_t* a = NULL;
+    lmmc_interp_cspline_t* s = NULL;
+    lmmc_interp_lagrange_t* l = NULL;
+    lmmc_status_t st;
+
+    st = lmmc_interp_cspline_create_ex(
+        xs, ys, 5, (lmmc_spline_bc_t)99, 0.0, 0.0, &s);
+    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
+          "unknown spline boundary condition should fail");
+
+    st = lmmc_interp_cspline_create_ex(
+        xs, ys, 5, LMMC_SPLINE_CLAMPED, NAN, 0.0, &s);
+    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
+          "nonfinite clamped derivative should fail");
+
+    st = lmmc_interp_pchip_create(xs_nan, ys, 5, &p);
+    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
+          "PCHIP should reject NaN abscissae");
+
+    st = lmmc_interp_akima_create(xs, ys_nan, 5, &a);
+    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
+          "Akima should reject NaN ordinates");
+
+    st = lmmc_interp_lagrange_create(xs_nan, ys, 5, &l);
+    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
+          "Lagrange should reject NaN abscissae");
+
+    return 0;
+}
+
+static int test_nonfinite_evaluation_inputs_rejected(void)
+{
+    lmmc_real_t xs[] = {0.0, 1.0, 2.0, 3.0, 4.0};
+    lmmc_real_t ys[] = {0.0, 1.0, 4.0, 9.0, 16.0};
+    lmmc_real_t grid[] = {
+        0.0, 1.0, 2.0, 3.0, 4.0,
+        1.0, 2.0, 3.0, 4.0, 5.0,
+        2.0, 3.0, 4.0, 5.0, 6.0,
+        3.0, 4.0, 5.0, 6.0, 7.0,
+        4.0, 5.0, 6.0, 7.0, 8.0
+    };
+    lmmc_interp_pchip_t* p = NULL;
+    lmmc_interp_akima_t* a = NULL;
+    lmmc_interp_cspline_t* s = NULL;
+    lmmc_interp_lagrange_t* l = NULL;
+    lmmc_real_t result = 42.0;
+    lmmc_status_t st;
+
+    CHECK(lmmc_interp_cspline_create(xs, ys, 5, &s) == LMMC_STATUS_OK,
+          "cspline setup should succeed");
+    CHECK(lmmc_interp_pchip_create(xs, ys, 5, &p) == LMMC_STATUS_OK,
+          "PCHIP setup should succeed");
+    CHECK(lmmc_interp_akima_create(xs, ys, 5, &a) == LMMC_STATUS_OK,
+          "Akima setup should succeed");
+    CHECK(lmmc_interp_lagrange_create(xs, ys, 5, &l) == LMMC_STATUS_OK,
+          "Lagrange setup should succeed");
+
+    st = lmmc_interp_cspline_eval(s, NAN, &result);
+    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT, "cspline should reject NaN query");
+    st = lmmc_interp_pchip_eval(p, NAN, &result);
+    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT, "PCHIP should reject NaN query");
+    st = lmmc_interp_akima_eval(a, NAN, &result);
+    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT, "Akima should reject NaN query");
+    st = lmmc_interp_lagrange_eval(l, NAN, &result);
+    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT, "Lagrange should reject NaN query");
+    st = lmmc_interp_bilinear(xs, 5, xs, 5, grid, NAN, 1.0, &result);
+    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT, "bilinear should reject NaN query");
+
+    grid[12] = NAN;
+    st = lmmc_interp_bicubic(xs, 5, xs, 5, grid, 1.0, 1.0, &result);
+    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
+          "bicubic should reject nonfinite grid data");
+
+    lmmc_interp_cspline_destroy(s);
+    lmmc_interp_pchip_destroy(p);
+    lmmc_interp_akima_destroy(a);
+    lmmc_interp_lagrange_destroy(l);
+    return 0;
+}
+
+static int test_nonfinite_coefficients_rejected(void)
+{
+    lmmc_real_t xs_extreme[] = {-DBL_MAX, -1.0, 0.0, 1.0, DBL_MAX};
+    lmmc_real_t xs_regular[] = {0.0, 1.0, 2.0, 3.0, 4.0};
+    lmmc_real_t ys_regular[] = {0.0, 1.0, 4.0, 9.0, 16.0};
+    lmmc_real_t ys_extreme[] = {-DBL_MAX, DBL_MAX, 0.0, 1.0, 2.0};
+    lmmc_interp_cspline_t* s = NULL;
+    lmmc_interp_pchip_t* p = NULL;
+    lmmc_interp_akima_t* a = NULL;
+    lmmc_interp_lagrange_t* l = NULL;
+
+    CHECK(lmmc_interp_cspline_create(xs_regular, ys_extreme, 5, &s) ==
+              LMMC_STATUS_NUMERICAL_FAILURE,
+          "cspline should reject nonfinite derived coefficients");
+    CHECK(s == NULL, "failed cspline creation should leave a null handle");
+
+    CHECK(lmmc_interp_pchip_create(xs_regular, ys_extreme, 5, &p) ==
+              LMMC_STATUS_NUMERICAL_FAILURE,
+          "PCHIP should reject nonfinite derived coefficients");
+    CHECK(p == NULL, "failed PCHIP creation should leave a null handle");
+
+    CHECK(lmmc_interp_akima_create(xs_regular, ys_extreme, 5, &a) ==
+              LMMC_STATUS_NUMERICAL_FAILURE,
+          "Akima should reject nonfinite derived coefficients");
+    CHECK(a == NULL, "failed Akima creation should leave a null handle");
+
+    CHECK(lmmc_interp_lagrange_create(xs_extreme, ys_regular, 5, &l) ==
+              LMMC_STATUS_NUMERICAL_FAILURE,
+          "Lagrange should reject nonfinite barycentric weights");
+    CHECK(l == NULL, "failed Lagrange creation should leave a null handle");
+    return 0;
+}
+
 /* ======== Main ======== */
 
 int main(void)
@@ -428,6 +549,9 @@ int main(void)
     RUN_TEST(test_bicubic_quadratic);
     RUN_TEST(test_bicubic_too_few_points);
     RUN_TEST(test_non_increasing_abscissae_rejected);
+    RUN_TEST(test_invalid_and_nonfinite_inputs_rejected);
+    RUN_TEST(test_nonfinite_evaluation_inputs_rejected);
+    RUN_TEST(test_nonfinite_coefficients_rejected);
 
 #undef RUN_TEST
 

@@ -934,7 +934,8 @@ lmmc_status_t lmmc_gmres_solve(
     lmmc_real_t* sn = NULL;
     lmmc_real_t* g = NULL;
     lmmc_real_t* y = NULL;
-    size_t basis_count = 0, restart = 0, iter_count = 0, n = 0, i = 0;
+    size_t basis_count = 0, restart = 0, restart_plus_one = 0;
+    size_t h_count = 0, iter_count = 0, n = 0, i = 0;
     lmmc_status_t st = LMMC_STATUS_OK;
     int converged = 0;
 
@@ -956,6 +957,11 @@ lmmc_status_t lmmc_gmres_solve(
     if (restart == 0) restart = (n < 30) ? n : 30;
     if (restart > n) restart = n;
     if (restart == 0) { st = LMMC_STATUS_INVALID_ARGUMENT; goto cleanup; }
+    if (!lmmc_safe_add_size(restart, 1, &restart_plus_one) ||
+        !lmmc_safe_mul_size(restart_plus_one, restart, &h_count)) {
+        st = LMMC_STATUS_INVALID_ARGUMENT;
+        goto cleanup;
+    }
 
     if (out_result != NULL) {
         out_result->converged = 0;
@@ -973,31 +979,33 @@ lmmc_status_t lmmc_gmres_solve(
     st = lmmc_vec_create(n, &x_base); if (st != LMMC_STATUS_OK) goto cleanup;
     st = lmmc_vec_create(n, &x_trial); if (st != LMMC_STATUS_OK) goto cleanup;
 
-    basis = (lmmc_vec_t*)lmmc_alloc((restart + 1) * sizeof(lmmc_vec_t));
+    basis = (lmmc_vec_t*)lmmc_alloc_array(
+        restart_plus_one, sizeof(lmmc_vec_t));
     if (basis == NULL) { st = LMMC_STATUS_ALLOCATION_FAILED; goto cleanup; }
-    memset(basis, 0, (restart + 1) * sizeof(lmmc_vec_t));
+    memset(basis, 0, restart_plus_one * sizeof(lmmc_vec_t));
 
-    for (i = 0; i < restart + 1; ++i) {
+    for (i = 0; i < restart_plus_one; ++i) {
         st = lmmc_vec_create(n, &basis[i]);
         if (st != LMMC_STATUS_OK) goto cleanup;
         ++basis_count;
     }
 
-    h = (lmmc_real_t*)lmmc_alloc((restart + 1) * restart * sizeof(lmmc_real_t));
-    cs = (lmmc_real_t*)lmmc_alloc(restart * sizeof(lmmc_real_t));
-    sn = (lmmc_real_t*)lmmc_alloc(restart * sizeof(lmmc_real_t));
-    g = (lmmc_real_t*)lmmc_alloc((restart + 1) * sizeof(lmmc_real_t));
-    y = (lmmc_real_t*)lmmc_alloc(restart * sizeof(lmmc_real_t));
+    h = (lmmc_real_t*)lmmc_alloc_array(h_count, sizeof(lmmc_real_t));
+    cs = (lmmc_real_t*)lmmc_alloc_array(restart, sizeof(lmmc_real_t));
+    sn = (lmmc_real_t*)lmmc_alloc_array(restart, sizeof(lmmc_real_t));
+    g = (lmmc_real_t*)lmmc_alloc_array(
+        restart_plus_one, sizeof(lmmc_real_t));
+    y = (lmmc_real_t*)lmmc_alloc_array(restart, sizeof(lmmc_real_t));
 
     if (h == NULL || cs == NULL || sn == NULL || g == NULL || y == NULL) {
         st = LMMC_STATUS_ALLOCATION_FAILED; goto cleanup;
     }
 
 
-    for(size_t k = 0; k < (restart+1)*restart; k++) { LMMC_REAL_INIT(&h[k]); }
+    for(size_t k = 0; k < h_count; k++) { LMMC_REAL_INIT(&h[k]); }
     for(size_t k = 0; k < restart; k++) { LMMC_REAL_INIT(&cs[k]); }
     for(size_t k = 0; k < restart; k++) { LMMC_REAL_INIT(&sn[k]); }
-    for(size_t k = 0; k < restart+1; k++) { LMMC_REAL_INIT(&g[k]); }
+    for(size_t k = 0; k < restart_plus_one; k++) { LMMC_REAL_INIT(&g[k]); }
     for(size_t k = 0; k < restart; k++) { LMMC_REAL_INIT(&y[k]); }
 
     st = lmmc_vec_norm2_checked(b, &norm_b);

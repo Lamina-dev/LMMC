@@ -41,7 +41,7 @@ lmmc_status_t lmmc_stack_reset(size_t size) {
         return LMMC_STATUS_NOT_INITIALIZED;
     }
     if (lmmp_stack_init(size) != 0) {
-        return LMMC_STATUS_BUSY;
+        return LMMC_STATUS_NOT_INITIALIZED;
     }
     return LMMC_STATUS_OK;
 }

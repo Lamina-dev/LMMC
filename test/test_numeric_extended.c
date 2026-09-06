@@ -55,6 +55,43 @@ int main(void) {
         if (!lmmc_test_nearly_equal(c, 1.0, 1e-15)) { rc = 1; goto done; }
     }
 
+    {
+        lmmc_real_t s = 7.0, c = 9.0;
+        st = lmmc_sincos(INFINITY, &s, &c);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT || s != 7.0 || c != 9.0) {
+            fprintf(stderr, "sincos validates its finite input before writing outputs\n");
+            rc = 1; goto done;
+        }
+        st = lmmc_sincos(NAN, &s, &c);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT || s != 7.0 || c != 9.0) {
+            rc = 1; goto done;
+        }
+        st = lmmc_sincos(0.5, &s, NULL);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT || s != 7.0) {
+            rc = 1; goto done;
+        }
+        st = lmmc_sincos(-0.0, &s, &c);
+        if (st != LMMC_STATUS_OK || s != 0.0 || !signbit(s) || c != 1.0) {
+            rc = 1; goto done;
+        }
+    }
+
+    {
+        lmmc_real_t shared = 7.0;
+        st = lmmc_split_int_frac(3.25, &shared, &shared);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT || shared != 7.0) {
+            rc = 1; goto done;
+        }
+    }
+    {
+        lmmc_real_t shared = 7.0;
+        st = lmmc_sincos(0.5, &shared, &shared);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT || shared != 7.0) {
+            rc = 1; goto done;
+        }
+    }
+
+
 
     test_section = 3;
     {
@@ -207,6 +244,56 @@ int main(void) {
                     rc = 1; goto done;
                 }
             }
+        }
+    }
+
+    {
+        double storage[9] = {
+            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0
+        };
+        double before[9];
+        memcpy(before, storage, sizeof(storage));
+
+        st = lmmc_fft(storage, storage + 1, 8, 0);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT ||
+            memcmp(before, storage, sizeof(storage)) != 0) {
+            rc = 1; goto done;
+        }
+    }
+
+    {
+        double storage[5] = {1.0, 2.0, 3.0, 4.0, 5.0};
+        double before[5];
+        memcpy(before, storage, sizeof(storage));
+
+        st = lmmc_fft_radix4(storage, storage + 1, 4, 0);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT ||
+            memcmp(before, storage, sizeof(storage)) != 0) {
+            rc = 1; goto done;
+        }
+    }
+
+    {
+        double storage[8] = {
+            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0
+        };
+        double imag_in[3] = {9.0, 10.0, 11.0};
+        double imag_out[4] = {12.0, 13.0, 14.0, 15.0};
+        double storage_before[8];
+        double imag_in_before[3];
+        double imag_out_before[4];
+        size_t nfft = 99;
+        memcpy(storage_before, storage, sizeof(storage));
+        memcpy(imag_in_before, imag_in, sizeof(imag_in));
+        memcpy(imag_out_before, imag_out, sizeof(imag_out));
+
+        st = lmmc_fft_radix4_pad_into(
+            storage, imag_in, 3, storage + 1, imag_out, &nfft);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT || nfft != 99 ||
+            memcmp(storage_before, storage, sizeof(storage)) != 0 ||
+            memcmp(imag_in_before, imag_in, sizeof(imag_in)) != 0 ||
+            memcmp(imag_out_before, imag_out, sizeof(imag_out)) != 0) {
+            rc = 1; goto done;
         }
     }
 

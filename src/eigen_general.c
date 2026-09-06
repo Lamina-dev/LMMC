@@ -32,7 +32,7 @@ static lmmc_status_t hessenberg_reduce(lmmc_mat_t *H, lmmc_mat_t *Q) {
 
     if (n <= 2) return LMMC_STATUS_OK;
 
-    vbuf = (lmmc_real_t *)lmmc_alloc(n * sizeof(lmmc_real_t));
+    vbuf = (lmmc_real_t *)lmmc_alloc_array(n, sizeof(lmmc_real_t));
     if (!vbuf) return LMMC_STATUS_ALLOCATION_FAILED;
 
     for (k = 0; k < n - 2; k++) {
@@ -196,6 +196,33 @@ static lmmc_status_t francis_qr_iteration(lmmc_mat_t *H, lmmc_mat_t *Q, size_t n
     return LMMC_STATUS_OK;
 }
 
+static void eigenvalues_2x2(
+    lmmc_real_t a00, lmmc_real_t a01,
+    lmmc_real_t a10, lmmc_real_t a11,
+    lmmc_real_t *real0, lmmc_real_t *imag0,
+    lmmc_real_t *real1, lmmc_real_t *imag1)
+{
+    const lmmc_real_t trace = a00 + a11;
+    const lmmc_real_t determinant = a00 * a11 - a01 * a10;
+    const lmmc_real_t discriminant =
+        fma(trace, trace, -4.0 * determinant);
+    if (discriminant >= 0.0) {
+        const lmmc_real_t root = sqrt(discriminant);
+        const lmmc_real_t q =
+            0.5 * (trace + copysign(root, trace));
+        *real0 = q;
+        *real1 = q == 0.0 ? 0.0 : determinant / q;
+        *imag0 = 0.0;
+        *imag1 = 0.0;
+    } else {
+        const lmmc_real_t imaginary = sqrt(-discriminant) * 0.5;
+        *real0 = trace * 0.5;
+        *real1 = trace * 0.5;
+        *imag0 = imaginary;
+        *imag1 = -imaginary;
+    }
+}
+
 /**
  * @brief 从实 Schur 形提取特征值.
  *
@@ -216,20 +243,9 @@ static void extract_eigenvalues_from_schur(const lmmc_mat_t *H, size_t n,
             lmmc_real_t a12 = MAT_ELEM(H, i, i + 1);
             lmmc_real_t a21 = MAT_ELEM(H, i + 1, i);
             lmmc_real_t a22 = MAT_ELEM(H, i + 1, i + 1);
-            lmmc_real_t tr = a11 + a22;
-            lmmc_real_t det = a11 * a22 - a12 * a21;
-            lmmc_real_t disc = tr * tr - 4.0 * det;
-            if (disc >= 0.0) {
-                lmmc_real_t sq = sqrt(disc);
-                lmmc_real_t lam1 = (tr + sq) * 0.5;
-                lmmc_real_t lam2 = (tr - sq) * 0.5;
-                re[i] = lam1; im[i] = 0.0;
-                re[i + 1] = lam2; im[i + 1] = 0.0;
-            } else {
-                lmmc_real_t sq = sqrt(-disc) * 0.5;
-                re[i] = tr * 0.5;     im[i] = sq;
-                re[i + 1] = tr * 0.5; im[i + 1] = -sq;
-            }
+            eigenvalues_2x2(
+                a11, a12, a21, a22,
+                &re[i], &im[i], &re[i + 1], &im[i + 1]);
             i += 2;
         }
     }
@@ -238,11 +254,24 @@ static void extract_eigenvalues_from_schur(const lmmc_mat_t *H, size_t n,
 lmmc_status_t lmmc_eigen_general(const lmmc_mat_t *a, lmmc_eigen_gen_result_t *out_result)
 {
     lmmc_status_t status;
-    if (!a || !out_result || !a->data) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (a->rows != a->cols || a->rows == 0) return LMMC_STATUS_INVALID_ARGUMENT;
+    lmmc_real_t matrix_scale = 0.0;
+    if (!lmmc_mat_descriptor_is_valid(a) || !out_result) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->rows != a->cols) return LMMC_STATUS_INVALID_ARGUMENT;
 
     size_t n = a->rows;
     size_t i, j;
+    for (i = 0; i < n; ++i) {
+        for (j = 0; j < n; ++j) {
+            lmmc_real_t magnitude = fabs(MAT_ELEM(a, i, j));
+            if (!isfinite(magnitude)) {
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
+            if (magnitude > matrix_scale) matrix_scale = magnitude;
+        }
+    }
+    if (matrix_scale == 0.0) matrix_scale = 1.0;
 
     /* Allocate output vectors */
     status = lmmc_vec_create(n, &out_result->real_parts);
@@ -260,24 +289,20 @@ lmmc_status_t lmmc_eigen_general(const lmmc_mat_t *a, lmmc_eigen_gen_result_t *o
     }
 
     if (n == 2) {
-        lmmc_real_t a00 = MAT_ELEM(a, 0, 0), a01 = MAT_ELEM(a, 0, 1);
-        lmmc_real_t a10 = MAT_ELEM(a, 1, 0), a11 = MAT_ELEM(a, 1, 1);
-        lmmc_real_t tr = a00 + a11;
-        lmmc_real_t det = a00 * a11 - a01 * a10;
-        lmmc_real_t disc = tr * tr - 4.0 * det;
-        if (disc >= 0.0) {
-            lmmc_real_t sq = sqrt(disc);
-            out_result->real_parts.data[0] = (tr + sq) * 0.5;
-            out_result->imag_parts.data[0] = 0.0;
-            out_result->real_parts.data[1] = (tr - sq) * 0.5;
-            out_result->imag_parts.data[1] = 0.0;
-        } else {
-            lmmc_real_t sq = sqrt(-disc) * 0.5;
-            out_result->real_parts.data[0] = tr * 0.5;
-            out_result->imag_parts.data[0] = sq;
-            out_result->real_parts.data[1] = tr * 0.5;
-            out_result->imag_parts.data[1] = -sq;
-        }
+        lmmc_real_t a00 = MAT_ELEM(a, 0, 0) / matrix_scale;
+        lmmc_real_t a01 = MAT_ELEM(a, 0, 1) / matrix_scale;
+        lmmc_real_t a10 = MAT_ELEM(a, 1, 0) / matrix_scale;
+        lmmc_real_t a11 = MAT_ELEM(a, 1, 1) / matrix_scale;
+        eigenvalues_2x2(
+            a00, a01, a10, a11,
+            &out_result->real_parts.data[0],
+            &out_result->imag_parts.data[0],
+            &out_result->real_parts.data[1],
+            &out_result->imag_parts.data[1]);
+        out_result->real_parts.data[0] *= matrix_scale;
+        out_result->imag_parts.data[0] *= matrix_scale;
+        out_result->real_parts.data[1] *= matrix_scale;
+        out_result->imag_parts.data[1] *= matrix_scale;
         return LMMC_STATUS_OK;
     }
 
@@ -297,10 +322,10 @@ lmmc_status_t lmmc_eigen_general(const lmmc_mat_t *a, lmmc_eigen_gen_result_t *o
         return status;
     }
 
-    /* Copy A into H */
+    /* Common scaling preserves eigenvectors and prevents avoidable overflow. */
     for (i = 0; i < n; i++)
         for (j = 0; j < n; j++)
-            MAT_ELEM(&H, i, j) = MAT_ELEM(a, i, j);
+            MAT_ELEM(&H, i, j) = MAT_ELEM(a, i, j) / matrix_scale;
 
     /* Step 1: Reduce to upper Hessenberg form */
     status = hessenberg_reduce(&H, &Q_mat);
@@ -326,6 +351,18 @@ lmmc_status_t lmmc_eigen_general(const lmmc_mat_t *a, lmmc_eigen_gen_result_t *o
     extract_eigenvalues_from_schur(&H, n,
                                    out_result->real_parts.data,
                                    out_result->imag_parts.data);
+    for (i = 0; i < n; ++i) {
+        out_result->real_parts.data[i] *= matrix_scale;
+        out_result->imag_parts.data[i] *= matrix_scale;
+        if (!isfinite(out_result->real_parts.data[i]) ||
+            !isfinite(out_result->imag_parts.data[i])) {
+            lmmc_mat_destroy(&H);
+            lmmc_mat_destroy(&Q_mat);
+            lmmc_vec_destroy(&out_result->real_parts);
+            lmmc_vec_destroy(&out_result->imag_parts);
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+    }
 
     lmmc_mat_destroy(&H);
     lmmc_mat_destroy(&Q_mat);
@@ -374,7 +411,7 @@ static lmmc_status_t inverse_iteration_real(
     status = lmmc_mat_create(n, n, &shifted);
     if (status != LMMC_STATUS_OK) return status;
 
-    size_t *pivots = (size_t *)lmmc_alloc(n * sizeof(size_t));
+    size_t *pivots = (size_t *)lmmc_alloc_array(n, sizeof(size_t));
     if (!pivots) { lmmc_mat_destroy(&shifted); return LMMC_STATUS_ALLOCATION_FAILED; }
 
     lmmc_vec_t b_vec, x_vec;
@@ -503,7 +540,7 @@ static lmmc_status_t inverse_iteration_complex(
     status = lmmc_mat_create(n2, n2, &big);
     if (status != LMMC_STATUS_OK) return status;
 
-    size_t *pivots = (size_t *)lmmc_alloc(n2 * sizeof(size_t));
+    size_t *pivots = (size_t *)lmmc_alloc_array(n2, sizeof(size_t));
     if (!pivots) { lmmc_mat_destroy(&big); return LMMC_STATUS_ALLOCATION_FAILED; }
 
     lmmc_vec_t b_vec, x_vec;
@@ -614,11 +651,24 @@ lmmc_status_t lmmc_eigen_general_full(
     lmmc_eigen_gen_full_result_t *out_result)
 {
     lmmc_status_t status;
-    if (!a || !out_result || !a->data) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (a->rows != a->cols || a->rows == 0) return LMMC_STATUS_INVALID_ARGUMENT;
+    lmmc_real_t matrix_scale = 0.0;
+    if (!lmmc_mat_descriptor_is_valid(a) || !out_result) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->rows != a->cols) return LMMC_STATUS_INVALID_ARGUMENT;
 
     size_t n = a->rows;
     size_t i, j;
+    for (i = 0; i < n; ++i) {
+        for (j = 0; j < n; ++j) {
+            lmmc_real_t magnitude = fabs(MAT_ELEM(a, i, j));
+            if (!isfinite(magnitude)) {
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
+            if (magnitude > matrix_scale) matrix_scale = magnitude;
+        }
+    }
+    if (matrix_scale == 0.0) matrix_scale = 1.0;
 
     /* Initialize output to zeros so cleanup is safe on partial failure */
     memset(out_result, 0, sizeof(*out_result));
@@ -643,25 +693,29 @@ lmmc_status_t lmmc_eigen_general_full(
     }
 
     if (n == 2) {
-        lmmc_real_t a00 = MAT_ELEM(a, 0, 0), a01 = MAT_ELEM(a, 0, 1);
-        lmmc_real_t a10 = MAT_ELEM(a, 1, 0), a11 = MAT_ELEM(a, 1, 1);
+        lmmc_real_t a00 = MAT_ELEM(a, 0, 0) / matrix_scale;
+        lmmc_real_t a01 = MAT_ELEM(a, 0, 1) / matrix_scale;
+        lmmc_real_t a10 = MAT_ELEM(a, 1, 0) / matrix_scale;
+        lmmc_real_t a11 = MAT_ELEM(a, 1, 1) / matrix_scale;
         lmmc_real_t tr = a00 + a11;
-        lmmc_real_t det = a00 * a11 - a01 * a10;
-        lmmc_real_t disc = tr * tr - 4.0 * det;
+        eigenvalues_2x2(
+            a00, a01, a10, a11,
+            &out_result->real_parts.data[0],
+            &out_result->imag_parts.data[0],
+            &out_result->real_parts.data[1],
+            &out_result->imag_parts.data[1]);
+        out_result->real_parts.data[0] *= matrix_scale;
+        out_result->imag_parts.data[0] *= matrix_scale;
+        out_result->real_parts.data[1] *= matrix_scale;
+        out_result->imag_parts.data[1] *= matrix_scale;
 
-        if (disc >= 0.0) {
-            lmmc_real_t sq = sqrt(disc);
-            lmmc_real_t lam1 = (tr + sq) * 0.5;
-            lmmc_real_t lam2 = (tr - sq) * 0.5;
-            out_result->real_parts.data[0] = lam1;
-            out_result->imag_parts.data[0] = 0.0;
-            out_result->real_parts.data[1] = lam2;
-            out_result->imag_parts.data[1] = 0.0;
+        if (out_result->imag_parts.data[0] == 0.0) {
 
             /* Compute eigenvectors for 2x2 real case.
              * For eigenvalue lam, solve (A - lam*I)*v = 0. */
             for (i = 0; i < 2; i++) {
-                lmmc_real_t lam = out_result->real_parts.data[i];
+                lmmc_real_t lam =
+                    out_result->real_parts.data[i] / matrix_scale;
                 lmmc_real_t v0, v1, nrm;
                 /* Row 0: (a00 - lam)*v0 + a01*v1 = 0 */
                 /* Row 1: a10*v0 + (a11 - lam)*v1 = 0 */
@@ -702,19 +756,20 @@ lmmc_status_t lmmc_eigen_general_full(
                     /* Both rows are zero - any vector is an eigenvector */
                     v0 = 1.0; v1 = 0.0;
                 }
-                nrm = sqrt(v0 * v0 + v1 * v1);
-                if (nrm < 1e-15) { v0 = 1.0; v1 = 0.0; nrm = 1.0; }
+                nrm = hypot(v0, v1);
+                if (nrm == 0.0) { v0 = 1.0; v1 = 0.0; nrm = 1.0; }
                 MAT_ELEM(&out_result->vectors_real, 0, i) = v0 / nrm;
                 MAT_ELEM(&out_result->vectors_real, 1, i) = v1 / nrm;
                 MAT_ELEM(&out_result->vectors_imag, 0, i) = 0.0;
                 MAT_ELEM(&out_result->vectors_imag, 1, i) = 0.0;
             }
         } else {
-            lmmc_real_t sq = sqrt(-disc) * 0.5;
-            out_result->real_parts.data[0] = tr * 0.5;
-            out_result->imag_parts.data[0] = sq;
-            out_result->real_parts.data[1] = tr * 0.5;
-            out_result->imag_parts.data[1] = -sq;
+            lmmc_real_t sq =
+                out_result->imag_parts.data[0] / matrix_scale;
+            out_result->real_parts.data[0] = tr * 0.5 * matrix_scale;
+            out_result->imag_parts.data[0] = sq * matrix_scale;
+            out_result->real_parts.data[1] = tr * 0.5 * matrix_scale;
+            out_result->imag_parts.data[1] = -sq * matrix_scale;
 
             /* Complex-conjugate pair: eigenvector for lam = (tr/2) + i*sq
              * From row 0: (a00 - tr/2 - i*sq)*v0 + a01*v1 = 0
@@ -726,7 +781,7 @@ lmmc_status_t lmmc_eigen_general_full(
                 lmmc_real_t vr1 = re_part;
                 lmmc_real_t vi0 = 0.0;
                 lmmc_real_t vi1 = sq;
-                lmmc_real_t nrm = sqrt(vr0*vr0 + vr1*vr1 + vi0*vi0 + vi1*vi1);
+                lmmc_real_t nrm = hypot(hypot(vr0, vr1), hypot(vi0, vi1));
                 if (nrm == 0.0) nrm = 1.0;
                 MAT_ELEM(&out_result->vectors_real, 0, 0) = vr0 / nrm;
                 MAT_ELEM(&out_result->vectors_real, 1, 0) = vr1 / nrm;
@@ -738,7 +793,7 @@ lmmc_status_t lmmc_eigen_general_full(
                 lmmc_real_t vr1 = a10;
                 lmmc_real_t vi0 = sq;
                 lmmc_real_t vi1 = 0.0;
-                lmmc_real_t nrm = sqrt(vr0*vr0 + vr1*vr1 + vi0*vi0 + vi1*vi1);
+                lmmc_real_t nrm = hypot(hypot(vr0, vr1), hypot(vi0, vi1));
                 if (nrm == 0.0) nrm = 1.0;
                 MAT_ELEM(&out_result->vectors_real, 0, 0) = vr0 / nrm;
                 MAT_ELEM(&out_result->vectors_real, 1, 0) = vr1 / nrm;
@@ -754,105 +809,108 @@ lmmc_status_t lmmc_eigen_general_full(
         return LMMC_STATUS_OK;
     }
 
-    /* General case: use Hessenberg + Francis QR to get eigenvalues,
-     * then inverse iteration for eigenvectors */
+    /*
+     * Solve the scaled problem once through the eigenvalue-only implementation,
+     * then perform inverse iteration in that same safe numeric range.
+     */
     {
-        lmmc_mat_t H, Q_mat;
-        status = lmmc_mat_create(n, n, &H);
+        lmmc_mat_t scaled_a = {0};
+        lmmc_eigen_gen_result_t eigenvalues = {0};
+        status = lmmc_mat_create(n, n, &scaled_a);
         if (status != LMMC_STATUS_OK) goto fail;
-        status = lmmc_mat_create(n, n, &Q_mat);
-        if (status != LMMC_STATUS_OK) { lmmc_mat_destroy(&H); goto fail; }
-
-        /* Copy A into H */
-        for (i = 0; i < n; i++)
-            for (j = 0; j < n; j++)
-                MAT_ELEM(&H, i, j) = MAT_ELEM(a, i, j);
-
-        /* Step 1: Reduce to upper Hessenberg form */
-        status = hessenberg_reduce(&H, &Q_mat);
-        if (status != LMMC_STATUS_OK) {
-            lmmc_mat_destroy(&H);
-            lmmc_mat_destroy(&Q_mat);
-            goto fail;
-        }
-
-        /* Step 2: Francis double-shift QR iteration */
-        status = francis_qr_iteration(&H, &Q_mat, n);
-        if (status != LMMC_STATUS_OK) {
-            lmmc_mat_destroy(&H);
-            lmmc_mat_destroy(&Q_mat);
-            goto fail;
-        }
-
-        /* Step 3: Extract eigenvalues from real Schur form */
-        extract_eigenvalues_from_schur(&H, n,
-                                       out_result->real_parts.data,
-                                       out_result->imag_parts.data);
-
-        lmmc_mat_destroy(&H);
-        lmmc_mat_destroy(&Q_mat);
-    }
-
-    /* Step 4: Compute eigenvectors via inverse iteration */
-    /* Initialize vectors_imag to zero */
-    for (i = 0; i < n; i++)
-        for (j = 0; j < n; j++)
-            MAT_ELEM(&out_result->vectors_imag, i, j) = 0.0;
-
-    i = 0;
-    while (i < n) {
-        if (out_result->imag_parts.data[i] == 0.0) {
-            /* Real eigenvalue: inverse iteration for real eigenvector */
-            lmmc_real_t *col = (lmmc_real_t *)lmmc_alloc(n * sizeof(lmmc_real_t));
-            if (!col) { status = LMMC_STATUS_ALLOCATION_FAILED; goto fail; }
-
-            status = inverse_iteration_real(a, n, out_result->real_parts.data[i], col);
-            if (status != LMMC_STATUS_OK) {
-                lmmc_free(col);
-                goto fail;
+        for (i = 0; i < n; ++i) {
+            for (j = 0; j < n; ++j) {
+                MAT_ELEM(&scaled_a, i, j) =
+                    MAT_ELEM(a, i, j) / matrix_scale;
             }
+        }
 
-            /* Store in vectors_real column i, vectors_imag column i = 0 */
+        status = lmmc_eigen_general(&scaled_a, &eigenvalues);
+        if (status != LMMC_STATUS_OK) {
+            lmmc_mat_destroy(&scaled_a);
+            goto fail;
+        }
+        for (i = 0; i < n; ++i) {
+            out_result->real_parts.data[i] = eigenvalues.real_parts.data[i];
+            out_result->imag_parts.data[i] = eigenvalues.imag_parts.data[i];
+        }
+        lmmc_eigen_gen_result_destroy(&eigenvalues);
+
+        for (i = 0; i < n; i++) {
             for (j = 0; j < n; j++) {
-                MAT_ELEM(&out_result->vectors_real, j, i) = col[j];
-                MAT_ELEM(&out_result->vectors_imag, j, i) = 0.0;
+                MAT_ELEM(&out_result->vectors_imag, i, j) = 0.0;
             }
-            lmmc_free(col);
-            i++;
-        } else {
-            /* Complex-conjugate pair: eigenvalues at i and i+1 */
-            lmmc_real_t alpha_val = out_result->real_parts.data[i];
-            lmmc_real_t beta_val = out_result->imag_parts.data[i];
+        }
 
-            lmmc_real_t *vr = (lmmc_real_t *)lmmc_alloc(n * sizeof(lmmc_real_t));
-            lmmc_real_t *vi = (lmmc_real_t *)lmmc_alloc(n * sizeof(lmmc_real_t));
-            if (!vr || !vi) {
-                if (vr) lmmc_free(vr);
-                if (vi) lmmc_free(vi);
-                status = LMMC_STATUS_ALLOCATION_FAILED;
-                goto fail;
-            }
-
-            status = inverse_iteration_complex(a, n, alpha_val, beta_val, vr, vi);
-            if (status != LMMC_STATUS_OK) {
+        i = 0;
+        while (i < n) {
+            if (out_result->imag_parts.data[i] == 0.0) {
+                lmmc_real_t *col = (lmmc_real_t *)lmmc_alloc_array(
+                    n, sizeof(lmmc_real_t));
+                if (!col) {
+                    status = LMMC_STATUS_ALLOCATION_FAILED;
+                    lmmc_mat_destroy(&scaled_a);
+                    goto fail;
+                }
+                status = inverse_iteration_real(
+                    &scaled_a, n, out_result->real_parts.data[i], col);
+                if (status != LMMC_STATUS_OK) {
+                    lmmc_free(col);
+                    lmmc_mat_destroy(&scaled_a);
+                    goto fail;
+                }
+                for (j = 0; j < n; j++) {
+                    MAT_ELEM(&out_result->vectors_real, j, i) = col[j];
+                    MAT_ELEM(&out_result->vectors_imag, j, i) = 0.0;
+                }
+                lmmc_free(col);
+                ++i;
+            } else {
+                lmmc_real_t *vr = (lmmc_real_t *)lmmc_alloc_array(
+                    n, sizeof(lmmc_real_t));
+                lmmc_real_t *vi = (lmmc_real_t *)lmmc_alloc_array(
+                    n, sizeof(lmmc_real_t));
+                if (!vr || !vi) {
+                    if (vr) lmmc_free(vr);
+                    if (vi) lmmc_free(vi);
+                    status = LMMC_STATUS_ALLOCATION_FAILED;
+                    lmmc_mat_destroy(&scaled_a);
+                    goto fail;
+                }
+                status = inverse_iteration_complex(
+                    &scaled_a, n,
+                    out_result->real_parts.data[i],
+                    out_result->imag_parts.data[i], vr, vi);
+                if (status != LMMC_STATUS_OK) {
+                    lmmc_free(vr);
+                    lmmc_free(vi);
+                    lmmc_mat_destroy(&scaled_a);
+                    goto fail;
+                }
+                for (j = 0; j < n; j++) {
+                    MAT_ELEM(&out_result->vectors_real, j, i) = vr[j];
+                    MAT_ELEM(&out_result->vectors_imag, j, i) = vi[j];
+                    MAT_ELEM(&out_result->vectors_real, j, i + 1) = vr[j];
+                    MAT_ELEM(&out_result->vectors_imag, j, i + 1) = -vi[j];
+                }
                 lmmc_free(vr);
                 lmmc_free(vi);
+                i += 2;
+            }
+        }
+
+        for (i = 0; i < n; ++i) {
+            out_result->real_parts.data[i] *= matrix_scale;
+            out_result->imag_parts.data[i] *= matrix_scale;
+            if (!isfinite(out_result->real_parts.data[i]) ||
+                !isfinite(out_result->imag_parts.data[i])) {
+                status = LMMC_STATUS_NUMERICAL_FAILURE;
+                lmmc_mat_destroy(&scaled_a);
                 goto fail;
             }
-
-            /* Store: column i gets (vr, vi), column i+1 gets (vr, -vi) */
-            for (j = 0; j < n; j++) {
-                MAT_ELEM(&out_result->vectors_real, j, i) = vr[j];
-                MAT_ELEM(&out_result->vectors_imag, j, i) = vi[j];
-                MAT_ELEM(&out_result->vectors_real, j, i + 1) = vr[j];
-                MAT_ELEM(&out_result->vectors_imag, j, i + 1) = -vi[j];
-            }
-            lmmc_free(vr);
-            lmmc_free(vi);
-            i += 2;
         }
+        lmmc_mat_destroy(&scaled_a);
     }
-
     return LMMC_STATUS_OK;
 
 fail:

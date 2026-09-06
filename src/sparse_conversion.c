@@ -120,7 +120,7 @@ lmmc_status_t lmmc_sparse_transpose(const lmmc_sparse_mat_t* sparse, lmmc_sparse
 
     if (out_transposed->nnz == 0) return LMMC_STATUS_OK;
 
-    next = (size_t*)lmmc_alloc(inner_size_src * sizeof(size_t));
+    next = (size_t*)lmmc_alloc_array(inner_size_src, sizeof(size_t));
     if (next == NULL) {
         lmmc_sparse_destroy(out_transposed);
         return LMMC_STATUS_ALLOCATION_FAILED;
@@ -167,7 +167,7 @@ lmmc_status_t lmmc_sparse_to_csc(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
         dst->row_ptr[i + 1] += dst->row_ptr[i];
     }
 
-    size_t* next = (size_t*)lmmc_alloc(src->cols * sizeof(size_t));
+    size_t* next = (size_t*)lmmc_alloc_array(src->cols, sizeof(size_t));
     if (next == NULL) {
         lmmc_sparse_destroy(dst);
         return LMMC_STATUS_ALLOCATION_FAILED;
@@ -214,7 +214,7 @@ lmmc_status_t lmmc_sparse_to_csr(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
         dst->row_ptr[i + 1] += dst->row_ptr[i];
     }
 
-    size_t* next = (size_t*)lmmc_alloc(src->rows * sizeof(size_t));
+    size_t* next = (size_t*)lmmc_alloc_array(src->rows, sizeof(size_t));
     if (next == NULL) {
         lmmc_sparse_destroy(dst);
         return LMMC_STATUS_ALLOCATION_FAILED;
@@ -274,7 +274,8 @@ lmmc_status_t lmmc_sparse_coo_to_csr(
     }
 
 
-    entries = (lmmc_coo_sort_entry_t*)lmmc_alloc(coo->nnz * sizeof(lmmc_coo_sort_entry_t));
+    entries = (lmmc_coo_sort_entry_t*)lmmc_alloc_array(
+        coo->nnz, sizeof(lmmc_coo_sort_entry_t));
     if (entries == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
@@ -386,7 +387,8 @@ lmmc_status_t lmmc_sparse_coo_to_csc(
     }
 
 
-    entries = (lmmc_coo_sort_entry_t*)lmmc_alloc(coo->nnz * sizeof(lmmc_coo_sort_entry_t));
+    entries = (lmmc_coo_sort_entry_t*)lmmc_alloc_array(
+        coo->nnz, sizeof(lmmc_coo_sort_entry_t));
     if (entries == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }

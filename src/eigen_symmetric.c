@@ -19,25 +19,33 @@ static lmmc_status_t householder_tridiag(lmmc_mat_t *a, lmmc_real_t *diag, lmmc_
     if (taus) { for (i = 0; i + 1 < n; i++) taus[i] = 0.0; }
     if (n == 1) { diag[0] = MAT_ELEM(a, 0, 0); return LMMC_STATUS_OK; }
     for (k = 0; k < n - 1; k++) {
-        lmmc_real_t sigma = 0.0;
-        for (i = k + 2; i < n; i++) sigma += MAT_ELEM(a, i, k) * MAT_ELEM(a, i, k);
+        lmmc_scaled_sumsq_t acc;
+        lmmc_scaled_sumsq_init(&acc);
+        for (i = k + 2; i < n; i++) {
+            lmmc_scaled_sumsq_add(&acc, MAT_ELEM(a, i, k));
+        }
+        lmmc_real_t tail_norm = lmmc_scaled_sumsq_norm(&acc);
         lmmc_real_t alpha_val = MAT_ELEM(a, k + 1, k);
-        if (sigma == 0.0) {
+        if (tail_norm == 0.0) {
             offdiag[k] = alpha_val; diag[k] = MAT_ELEM(a, k, k);
             if (taus) taus[k] = 0.0;
 
             for (i = k + 2; i < n; i++) MAT_ELEM(a, i, k) = 0.0;
             continue;
         }
-        lmmc_real_t norm_x = sqrt(alpha_val * alpha_val + sigma);
-        lmmc_real_t beta = (alpha_val >= 0.0) ? -norm_x : norm_x;
-        lmmc_real_t v_first = alpha_val - beta;
-        lmmc_real_t tau = -v_first / beta;
-        lmmc_real_t inv_v_first = 1.0 / v_first;
-        for (i = k + 2; i < n; i++) MAT_ELEM(a, i, k) *= inv_v_first;
+        lmmc_real_t norm_x = hypot(alpha_val, tail_norm);
+        lmmc_real_t beta = -copysign(norm_x, alpha_val);
+        lmmc_real_t tau = 1.0 - alpha_val / beta;
+        lmmc_real_t denominator_scaled =
+            alpha_val / norm_x - beta / norm_x;
+        for (i = k + 2; i < n; i++) {
+            MAT_ELEM(a, i, k) =
+                (MAT_ELEM(a, i, k) / norm_x) / denominator_scaled;
+        }
         offdiag[k] = beta;
         if (taus) taus[k] = tau;
-        lmmc_real_t *w = (lmmc_real_t *)lmmc_alloc((n - k - 1) * sizeof(lmmc_real_t));
+        lmmc_real_t *w = (lmmc_real_t *)lmmc_alloc_array(
+            n - k - 1, sizeof(lmmc_real_t));
         if (!w) return LMMC_STATUS_ALLOCATION_FAILED;
         for (i = 0; i < n - k - 1; i++) {
             lmmc_real_t sum = 0.0;
@@ -111,7 +119,7 @@ static lmmc_status_t tridiag_ql(lmmc_real_t *diag, lmmc_real_t *offdiag, size_t 
             if (iter >= (size_t)EIGEN_MAX_ITER) return LMMC_STATUS_CONVERGENCE_FAILED;
             iter++;
             g = (diag[l + 1] - diag[l]) / (2.0 * offdiag[l]);
-            r = sqrt(g * g + 1.0);
+            r = hypot(g, 1.0);
             if (g >= 0.0) g = diag[m] - diag[l] + offdiag[l] / (g + r);
             else g = diag[m] - diag[l] + offdiag[l] / (g - r);
             s = 1.0; c = 1.0; p = 0.0;
@@ -151,10 +159,24 @@ static void sort_eigen_ascending(lmmc_real_t *eigenvalues, lmmc_mat_t *Q, size_t
 }
 
 lmmc_status_t lmmc_eigen_symmetric(const lmmc_mat_t *a, lmmc_eigen_sym_result_t *out_result) {
-    lmmc_status_t status; size_t n;
-    if (!a || !out_result || !a->data) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (a->rows != a->cols || a->rows == 0) return LMMC_STATUS_INVALID_ARGUMENT;
+    lmmc_status_t status;
+    lmmc_real_t matrix_scale = 0.0;
+    size_t n, i, j;
+    if (!lmmc_mat_descriptor_is_valid(a) || !out_result) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->rows != a->cols) return LMMC_STATUS_INVALID_ARGUMENT;
     n = a->rows;
+    for (i = 0; i < n; ++i) {
+        for (j = 0; j < n; ++j) {
+            lmmc_real_t magnitude = fabs(MAT_ELEM(a, i, j));
+            if (!isfinite(magnitude)) {
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
+            if (magnitude > matrix_scale) matrix_scale = magnitude;
+        }
+    }
+    if (matrix_scale == 0.0) matrix_scale = 1.0;
     status = lmmc_vec_create(n, &out_result->eigenvalues);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_mat_create(n, n, &out_result->eigenvectors);
@@ -169,10 +191,17 @@ lmmc_status_t lmmc_eigen_symmetric(const lmmc_mat_t *a, lmmc_eigen_sym_result_t 
     if (status != LMMC_STATUS_OK) { lmmc_vec_destroy(&out_result->eigenvalues); lmmc_mat_destroy(&out_result->eigenvectors); return status; }
     status = lmmc_mat_copy(a, &work);
     if (status != LMMC_STATUS_OK) { lmmc_mat_destroy(&work); lmmc_vec_destroy(&out_result->eigenvalues); lmmc_mat_destroy(&out_result->eigenvectors); return status; }
-    lmmc_real_t *offdiag = (lmmc_real_t *)lmmc_alloc(n * sizeof(lmmc_real_t));
+    for (i = 0; i < n; ++i) {
+        for (j = 0; j < n; ++j) {
+            MAT_ELEM(&work, i, j) /= matrix_scale;
+        }
+    }
+    lmmc_real_t *offdiag = (lmmc_real_t *)lmmc_alloc_array(
+        n, sizeof(lmmc_real_t));
     if (!offdiag) { lmmc_mat_destroy(&work); lmmc_vec_destroy(&out_result->eigenvalues); lmmc_mat_destroy(&out_result->eigenvectors); return LMMC_STATUS_ALLOCATION_FAILED; }
     memset(offdiag, 0, n * sizeof(lmmc_real_t));
-    lmmc_real_t *taus = (lmmc_real_t *)lmmc_alloc((n > 1 ? n - 1 : 1) * sizeof(lmmc_real_t));
+    lmmc_real_t *taus = (lmmc_real_t *)lmmc_alloc_array(
+        n > 1 ? n - 1 : 1, sizeof(lmmc_real_t));
     if (!taus) { lmmc_free(offdiag); lmmc_mat_destroy(&work); lmmc_vec_destroy(&out_result->eigenvalues); lmmc_mat_destroy(&out_result->eigenvectors); return LMMC_STATUS_ALLOCATION_FAILED; }
     status = householder_tridiag(&work, out_result->eigenvalues.data, offdiag, taus);
     if (status != LMMC_STATUS_OK) { lmmc_free(taus); lmmc_free(offdiag); lmmc_mat_destroy(&work); lmmc_vec_destroy(&out_result->eigenvalues); lmmc_mat_destroy(&out_result->eigenvectors); return status; }
@@ -202,6 +231,14 @@ lmmc_status_t lmmc_eigen_symmetric(const lmmc_mat_t *a, lmmc_eigen_sym_result_t 
     lmmc_free(offdiag);
     if (status != LMMC_STATUS_OK) { lmmc_vec_destroy(&out_result->eigenvalues); lmmc_mat_destroy(&out_result->eigenvectors); return status; }
     sort_eigen_ascending(out_result->eigenvalues.data, &out_result->eigenvectors, n);
+    for (i = 0; i < n; ++i) {
+        out_result->eigenvalues.data[i] *= matrix_scale;
+        if (!isfinite(out_result->eigenvalues.data[i])) {
+            lmmc_vec_destroy(&out_result->eigenvalues);
+            lmmc_mat_destroy(&out_result->eigenvectors);
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+    }
     return LMMC_STATUS_OK;
 }
 

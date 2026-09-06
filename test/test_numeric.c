@@ -2,6 +2,7 @@
  * @file test_numeric.c
  * 针对 LMMC 中 numeric 相关接口的单元测试。
  */
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -58,6 +59,183 @@ int main(void) {
     if (st != LMMC_STATUS_OK || equal != 1) {
         rc = 1;
         goto done;
+    }
+
+    equal = 7;
+    st = lmmc_double_nearly_equal_tol(1.0, 1.15, 0.1, 0.1, &equal);
+    if (st != LMMC_STATUS_OK || equal != 0) {
+        rc = 1;
+        goto done;
+    }
+
+    equal = 7;
+    st = lmmc_approx_eq(1.0, 1.0, -1.0, &equal);
+    if (st != LMMC_STATUS_INVALID_ARGUMENT || equal != 7) {
+        rc = 1;
+        goto done;
+    }
+
+    st = lmmc_approx_eq(1.0, 1.0, NAN, &equal);
+    if (st != LMMC_STATUS_INVALID_ARGUMENT || equal != 7) {
+        rc = 1;
+        goto done;
+    }
+
+    {
+        lmmc_real_t remainder = 7.0;
+        st = lmmc_fmod(1.0, 0.0, &remainder);
+        if (st != LMMC_STATUS_OUT_OF_RANGE || remainder != 7.0) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_fmod(INFINITY, 2.0, &remainder);
+        if (st != LMMC_STATUS_OUT_OF_RANGE || remainder != 7.0) {
+            fprintf(stderr, "fmod infinite dividend must report a domain error\n");
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_fmod(1.0, NAN, &remainder);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT || remainder != 7.0) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_fmod(NAN, 1.0, &remainder);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT || remainder != 7.0) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_fmod(-3.5, INFINITY, &remainder);
+        if (st != LMMC_STATUS_OK || remainder != -3.5) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_fmod(-4.0, 2.0, &remainder);
+        if (st != LMMC_STATUS_OK || remainder != 0.0 || !signbit(remainder)) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_fmod(DBL_MAX, DBL_MIN, &remainder);
+        if (st != LMMC_STATUS_OK || remainder != 0.0) {
+            rc = 1;
+            goto done;
+        }
+    }
+
+    {
+        lmmc_real_t length = 7.0;
+        st = lmmc_hypot(DBL_MAX, DBL_MAX, &length);
+        if (st != LMMC_STATUS_NUMERICAL_FAILURE || length != 7.0) {
+            fprintf(stderr, "hypot overflow must fail without modifying output\n");
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_hypot(NAN, 1.0, &length);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT || length != 7.0) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_hypot(1.0, INFINITY, &length);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT || length != 7.0) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_hypot(DBL_MAX / 2.0, DBL_MAX / 2.0, &length);
+        if (st != LMMC_STATUS_OK || !isfinite(length) ||
+            fabs(length / (DBL_MAX / 2.0) - sqrt(2.0)) > 1e-15) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_hypot(DBL_MIN / 2.0, 0.0, &length);
+        if (st != LMMC_STATUS_OK || length != DBL_MIN / 2.0) {
+            rc = 1;
+            goto done;
+        }
+    }
+
+    {
+        lmmc_real_t logarithm = 7.0;
+        st = lmmc_log2(-1.0, &logarithm);
+        if (st != LMMC_STATUS_OUT_OF_RANGE || logarithm != 7.0) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_log2(0.0, &logarithm);
+        if (st != LMMC_STATUS_OUT_OF_RANGE || logarithm != 7.0) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_log2(8.0, &logarithm);
+        if (st != LMMC_STATUS_OK || logarithm != 3.0) {
+            rc = 1;
+            goto done;
+        }
+    }
+
+    {
+        lmmc_real_t exponential = 7.0;
+        st = lmmc_exp2(1024.0, &exponential);
+        if (st != LMMC_STATUS_NUMERICAL_FAILURE || exponential != 7.0) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_exp2(10.0, &exponential);
+        if (st != LMMC_STATUS_OK || exponential != 1024.0) {
+            rc = 1;
+            goto done;
+        }
+    }
+
+    {
+        lmmc_real_t exponential = 7.0;
+        st = lmmc_expm1(1000.0, &exponential);
+        if (st != LMMC_STATUS_NUMERICAL_FAILURE || exponential != 7.0) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_expm1(1.0, &exponential);
+        if (st != LMMC_STATUS_OK ||
+            fabs(exponential - 1.718281828459045) > 1e-15) {
+            rc = 1;
+            goto done;
+        }
+    }
+
+    {
+        lmmc_real_t scaled = 7.0;
+        st = lmmc_ldexp(1.0, 1024, &scaled);
+        if (st != LMMC_STATUS_NUMERICAL_FAILURE || scaled != 7.0) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_ldexp(1.0, -1075, &scaled);
+        if (st != LMMC_STATUS_NUMERICAL_FAILURE || scaled != 7.0) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_ldexp(0.5, 4, &scaled);
+        if (st != LMMC_STATUS_OK || scaled != 8.0) {
+            rc = 1;
+            goto done;
+        }
+    }
+
+    {
+        lmmc_real_t logarithm = 7.0;
+        st = lmmc_log1p(-2.0, &logarithm);
+        if (st != LMMC_STATUS_OUT_OF_RANGE || logarithm != 7.0) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_log1p(-1.0, &logarithm);
+        if (st != LMMC_STATUS_OUT_OF_RANGE || logarithm != 7.0) {
+            rc = 1;
+            goto done;
+        }
+        st = lmmc_log1p(3.0, &logarithm);
+        if (st != LMMC_STATUS_OK || fabs(logarithm - log(4.0)) > 1e-15) {
+            rc = 1;
+            goto done;
+        }
     }
 
     {
@@ -251,7 +429,7 @@ int main(void) {
             goto done;
         }
         st = lmmc_fft_radix4(real4, imag4, 4, 2);
-        if (st != LMMC_STATUS_INVALID_ARGUMENT) {
+        if (st != LMMC_STATUS_OK) {
             rc = 1;
             goto done;
         }

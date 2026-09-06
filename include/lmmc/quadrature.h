@@ -30,6 +30,9 @@ typedef struct {
 /**
  * @brief 复合梯形公式：将 @f$[a,b]@f$ 等分为 @p n 段。
  *
+ * 采样点在 [-1,1] 的归一化坐标中生成，并通过溢出安全的中心和半长度
+ * 映射到 [a,b]；不会直接形成可能溢出的 `b-a`。
+ *
  * @param[in]  func       被积函数回调。
  * @param[in]  user_data  传递给 @p func 的用户上下文。
  * @param[in]  a          积分下限。
@@ -38,7 +41,8 @@ typedef struct {
  * @param[out] out_result 输出积分近似值。
  *
  * @return ::LMMC_STATUS_OK 成功；
- *         ::LMMC_STATUS_INVALID_ARGUMENT 若 n == 0 或指针为 NULL。
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若端点非有限、顺序无效、
+ *         n == 0 或指针为 NULL。
  *
  * @par 副作用
  * - 回调 @p func 被调用 n+1 次。
@@ -55,6 +59,9 @@ lmmc_status_t lmmc_quad_trapezoid(
 
 /**
  * @brief 复合 Simpson 公式：将 @f$[a,b]@f$ 等分为 @p n 段（要求偶数）。
+ *
+ * 采样点先在 [-1,1] 的归一化坐标中生成，再通过溢出安全的中心和半长度
+ * 映射到 [a,b]；不会直接形成可能溢出的 `b-a`。
  *
  * @param[in]  func       被积函数回调。
  * @param[in]  user_data  传递给 @p func 的用户上下文。
@@ -82,7 +89,9 @@ lmmc_status_t lmmc_quad_simpson(
 /**
  * @brief Gauss-Legendre 求积：将 @f$[a,b]@f$ 仿射映射到 @f$[-1,1]@f$ 后使用正交节点。
  *
- * 对 2*order-1 次以下的多项式精确积分。节点与权重在编译时预计算（order <= 20）。
+ * 中心与半长度按端点符号选择等价公式，不直接形成可能溢出的 `a+b`
+ * 或 `b-a`。对 2*order-1 次以下的多项式精确积分；节点与权重在编译时
+ * 预计算（order <= 20）。
  *
  * @param[in]  func       被积函数回调。
  * @param[in]  user_data  传递给 @p func 的用户上下文。
@@ -111,7 +120,8 @@ lmmc_status_t lmmc_quad_gauss_legendre(
  * @brief 自适应 Simpson 积分，通过递归二分自动控制精度。
  *
  * 递归地将区间二分，直到局部 Simpson 估计满足容差条件或达到最大递归深度。
- * 适用于被积函数局部变化剧烈的情况。
+ * 中点和各 Simpson 区段通过溢出安全的中心与半长度计算，不直接形成
+ * 可能溢出的 `a+b` 或 `b-a`。适用于被积函数局部变化剧烈的情况。
  *
  * @param[in]  func       被积函数回调。
  * @param[in]  user_data  传递给 @p func 的用户上下文。
@@ -146,23 +156,26 @@ lmmc_status_t lmmc_quad_adaptive(
  * @brief Romberg 积分（Richardson 外推加速梯形法则）。
  *
  * 通过逐次加密梯形法则并进行 Richardson 外推，快速提升收敛阶。
- * 对光滑被积函数效率极高。
+ * 外推使用增量形式，避免先将有限梯形估计乘以 @f$4^j@f$；
+ * 采样点在 [-1,1] 生成后通过溢出安全的中心和半长度映射到 [a,b]，
+ * 不直接形成可能溢出的 `b-a`。对光滑被积函数效率极高。
  *
  * @param[in]  f         被积函数回调。
  * @param[in]  ud        用户数据指针，传递给 @p f 。
  * @param[in]  a         积分下限。
  * @param[in]  b         积分上限。
  * @param[in]  abs_tol   绝对容差，范围 [1e-15, 1e-1]。
- * @param[in]  max_iter  最大迭代次数（Romberg 表行数），范围 [1, 1000000]。
+ * @param[in]  max_iter  最大迭代次数（Romberg 表行数），范围 [1, 30]。
  * @param[out] out       积分结果（值、误差估计、求值次数）。
  *
  * @return ::LMMC_STATUS_OK 在容差内收敛；
  *         ::LMMC_STATUS_CONVERGENCE_FAILED 达到最大迭代次数；
+ *         ::LMMC_STATUS_NUMERICAL_FAILURE 回调或中间结果为非有限值；
  *         ::LMMC_STATUS_INVALID_ARGUMENT 若参数超出有效范围或指针为 NULL。
  *
  * @par 副作用
- * - 回调 @p f 被调用次数记录在 out->num_evals 中，约为 @f$2^{max\_iter}@f$ 量级。
- * - 内部分配 Romberg 表所需的临时数组，函数返回前释放。
+ * - 回调 @p f 被调用次数记录在 out->num_evals 中，最多为 @f$2^{max\_iter-1}+1@f$ 次。
+ * - 不分配堆内存。
  */
 lmmc_status_t lmmc_quad_romberg(
     lmmc_quad_func_t f,
@@ -177,7 +190,9 @@ lmmc_status_t lmmc_quad_romberg(
 /**
  * @brief Tanh-Sinh（双指数）积分，适用于端点奇异性。
  *
- * 利用 @f$\tanh(\frac{\pi}{2}\sinh t)@f$ 变换将端点奇异性映射为指数衰减，
+ * 利用 @f$\tanh(\frac{\pi}{2}\sinh t)@f$ 变换将端点奇异性映射为指数衰减。
+ * 因浮点舍入落到精确端点的节点不调用 @p f，其极限权重贡献按零处理；
+ * 非端点回调的 NaN 或无穷值仍返回数值失败。
  * 对端点处有代数或对数奇异性的被积函数特别有效。
  *
  * @param[in]  f         被积函数回调。
@@ -190,11 +205,13 @@ lmmc_status_t lmmc_quad_romberg(
  *
  * @return ::LMMC_STATUS_OK 在容差内收敛；
  *         ::LMMC_STATUS_CONVERGENCE_FAILED 达到最大节点数；
+ *         ::LMMC_STATUS_NUMERICAL_FAILURE 回调或中间结果为非有限值；
  *         ::LMMC_STATUS_INVALID_ARGUMENT 若参数超出有效范围或指针为 NULL。
  *
  * @par 副作用
- * - 回调 @p f 被调用次数记录在 out->num_evals 中，不超过 @p max_nodes 次。
- * - 内部分配节点/权重临时数组，函数返回前释放。
+ * - 仅对可表示的内部节点调用 @p f。
+ * - 实际回调次数记录在 out->num_evals 中，不超过 @p max_nodes 次。
+ * - 不分配堆内存。
  */
 lmmc_status_t lmmc_quad_tanh_sinh(
     lmmc_quad_func_t f,
@@ -217,6 +234,7 @@ lmmc_status_t lmmc_quad_tanh_sinh(
  * @param[out] out    积分结果值。
  *
  * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_NUMERICAL_FAILURE 回调或累加结果为非有限值；
  *         ::LMMC_STATUS_INVALID_ARGUMENT 若 order 超出范围或指针为 NULL。
  *
  * @par 副作用
@@ -241,6 +259,7 @@ lmmc_status_t lmmc_quad_gauss_hermite(
  * @param[out] out    积分结果值。
  *
  * @return ::LMMC_STATUS_OK 成功；
+ *         ::LMMC_STATUS_NUMERICAL_FAILURE 回调或累加结果为非有限值；
  *         ::LMMC_STATUS_INVALID_ARGUMENT 若 order 超出范围或指针为 NULL。
  *
  * @par 副作用

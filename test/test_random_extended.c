@@ -233,6 +233,17 @@ int main(void)
         st = lmmc_rng_uniform(rng, 10.0, 3.0, &val);
         if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; lmmc_rng_destroy(rng); goto done; }
 
+        st = lmmc_rng_uniform(rng, -DBL_MAX, DBL_MAX, &val);
+        if (st != LMMC_STATUS_OK || !isfinite(val) ||
+            val < -DBL_MAX || val >= DBL_MAX) {
+            rc = 1;
+            lmmc_rng_destroy(rng);
+            goto done;
+        }
+
+        st = lmmc_rng_uniform(rng, NAN, 1.0, &val);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; lmmc_rng_destroy(rng); goto done; }
+
         lmmc_rng_destroy(rng);
     }
 
@@ -254,6 +265,9 @@ int main(void)
         st = lmmc_rng_exponential(rng, -1.0, &val);
         if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; lmmc_rng_destroy(rng); goto done; }
 
+        st = lmmc_rng_exponential(rng, NAN, &val);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; lmmc_rng_destroy(rng); goto done; }
+
         lmmc_rng_destroy(rng);
     }
 
@@ -268,6 +282,15 @@ int main(void)
         lmmc_rng_seed(rng, 3);
 
         st = lmmc_rng_normal(rng, 0.0, -1.0, &val);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; lmmc_rng_destroy(rng); goto done; }
+
+        st = lmmc_rng_normal(rng, NAN, 1.0, &val);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; lmmc_rng_destroy(rng); goto done; }
+
+        st = lmmc_rng_normal(rng, 0.0, NAN, &val);
+        if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; lmmc_rng_destroy(rng); goto done; }
+
+        st = lmmc_rng_gamma(rng, 1.0, NAN, &val);
         if (st != LMMC_STATUS_INVALID_ARGUMENT) { rc = 1; lmmc_rng_destroy(rng); goto done; }
 
         lmmc_rng_destroy(rng);

@@ -249,12 +249,12 @@ lmmc_status_t lmmc_rng_uniform(
     if (rng == NULL || out_value == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (a >= b) {
+    if (!isfinite(a) || !isfinite(b) || a >= b) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
     u = u64_to_double01(xoshiro256ss_next(rng->state));
-    *out_value = a + (b - a) * u;
+    *out_value = fma(b, u, a * (1.0 - u));
     return LMMC_STATUS_OK;
 }
 
@@ -373,7 +373,7 @@ lmmc_status_t lmmc_rng_normal(
     if (rng == NULL || out_value == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (stddev <= 0.0) {
+    if (!isfinite(mean) || !isfinite(stddev) || stddev <= 0.0) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -391,7 +391,7 @@ lmmc_status_t lmmc_rng_exponential(
     if (rng == NULL || out_value == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (rate <= 0.0) {
+    if (!isfinite(rate) || rate <= 0.0) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -417,13 +417,13 @@ lmmc_status_t lmmc_rng_fill_uniform(
     if (rng == NULL || array == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (a >= b) {
+    if (!isfinite(a) || !isfinite(b) || a >= b) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
     for (i = 0; i < count; i++) {
         u = u64_to_double01(xoshiro256ss_next(rng->state));
-        array[i] = a + (b - a) * u;
+        array[i] = fma(b, u, a * (1.0 - u));
     }
 
     return LMMC_STATUS_OK;
@@ -488,7 +488,8 @@ lmmc_status_t lmmc_rng_gamma(
     if (rng == NULL || out == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (shape <= 0.0 || scale <= 0.0) {
+    if (!isfinite(shape) || !isfinite(scale) ||
+        shape <= 0.0 || scale <= 0.0) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -545,7 +546,8 @@ lmmc_status_t lmmc_rng_beta(
     if (rng == NULL || out == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (alpha <= 0.0 || beta_param <= 0.0) {
+    if (!isfinite(alpha) || !isfinite(beta_param) ||
+        alpha <= 0.0 || beta_param <= 0.0) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -567,7 +569,7 @@ lmmc_status_t lmmc_rng_chi_squared(
     if (rng == NULL || out == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (df <= 0.0) {
+    if (!isfinite(df) || df <= 0.0) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -585,7 +587,7 @@ lmmc_status_t lmmc_rng_student_t(
     if (rng == NULL || out == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (df <= 0.0) {
+    if (!isfinite(df) || df <= 0.0) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -610,7 +612,8 @@ lmmc_status_t lmmc_rng_f(
     if (rng == NULL || out == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (df1 <= 0.0 || df2 <= 0.0) {
+    if (!isfinite(df1) || !isfinite(df2) ||
+        df1 <= 0.0 || df2 <= 0.0) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -703,7 +706,7 @@ lmmc_status_t lmmc_rng_poisson(
     if (rng == NULL || out == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    if (lambda <= 0.0) {
+    if (!isfinite(lambda) || lambda <= 0.0) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 

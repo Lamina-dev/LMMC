@@ -3,6 +3,7 @@
  * 针对 LMMC 中 stats 相关接口的单元测试。
  */
 #include <math.h>
+#include <float.h>
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"
@@ -109,6 +110,28 @@ int main(void) {
         rc = 1;
         goto cleanup;
     }
+    {
+        lmmc_real_t extreme_x_data[] = {-DBL_MAX, DBL_MAX};
+        lmmc_real_t extreme_y_data[] = {-DBL_MAX, DBL_MAX};
+        lmmc_vec_t extreme_x = {2, extreme_x_data, 0};
+        lmmc_vec_t extreme_y = {2, extreme_y_data, 0};
+        mean = 17.0;
+        st = lmmc_vec_mean(&extreme_x, &mean);
+        if (st != LMMC_STATUS_OK || mean != 0.0) {
+            rc = 1;
+            goto cleanup;
+        }
+
+
+        corr = 17.0;
+        st = lmmc_vec_correlation_population(
+            &extreme_x, &extreme_y, &corr);
+        if (st != LMMC_STATUS_OK ||
+            !lmmc_test_nearly_equal(corr, 1.0, 1e-12)) {
+            rc = 1;
+            goto cleanup;
+        }
+    }
 
     st = lmmc_mat_create(4, 2, &data);
     if (st != LMMC_STATUS_OK) {
@@ -193,6 +216,36 @@ int main(void) {
         rc = 1;
         goto cleanup;
     }
+    {
+        lmmc_real_t extreme_data[] = {
+            -DBL_MAX, -DBL_MAX,
+             DBL_MAX,  DBL_MAX
+        };
+        lmmc_real_t extreme_output[4] = {17.0, 17.0, 17.0, 17.0};
+        lmmc_mat_t extreme_matrix = {2, 2, 2, extreme_data, 0};
+        lmmc_mat_t extreme_correlation = {
+            2, 2, 2, extreme_output, 0
+        };
+
+        st = lmmc_mat_column_mean(&extreme_matrix, &means);
+        if (st != LMMC_STATUS_OK ||
+            means.data[0] != 0.0 || means.data[1] != 0.0) {
+            rc = 1;
+            goto cleanup;
+        }
+
+        st = lmmc_mat_correlation_population(
+            &extreme_matrix, &extreme_correlation);
+        if (st != LMMC_STATUS_OK ||
+            !lmmc_test_nearly_equal(extreme_output[0], 1.0, 1e-12) ||
+            !lmmc_test_nearly_equal(extreme_output[1], 1.0, 1e-12) ||
+            !lmmc_test_nearly_equal(extreme_output[2], 1.0, 1e-12) ||
+            !lmmc_test_nearly_equal(extreme_output[3], 1.0, 1e-12)) {
+            rc = 1;
+            goto cleanup;
+        }
+    }
+
 
     st = lmmc_vec_create(1, &one);
     if (st != LMMC_STATUS_OK) {

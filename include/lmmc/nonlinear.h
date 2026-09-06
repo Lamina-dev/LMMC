@@ -58,7 +58,7 @@ typedef struct {
     lmmc_real_t abs_tol;                          /**< 残差绝对容差. */
     lmmc_real_t rel_tol;                          /**< 步长相对容差. */
     size_t max_iter;                              /**< 最大迭代次数. */
-    lmmc_real_t derivative_step;                  /**< 数值导数差分步长(仅割线 / 自动差分使用). */
+    lmmc_real_t derivative_step;                  /**< Newton 自动差分的相对扰动步长. */
     lmmc_real_t min_derivative;                   /**< Newton 法允许的最小导数绝对值. */
     lmmc_real_t min_step;                         /**< 维持迭代稳定性的步长下限. */
     lmmc_diagnostic_sink_t diagnostics;           /**< 统一诊断出口. */
@@ -73,9 +73,9 @@ lmmc_status_t lmmc_nonlinear_default_config(lmmc_nonlinear_config_t* out_cfg);
 /**
  * @brief 二分法求根.
  *
- * 要求 f(left)*f(right) < 0(区间端点异号).每步将区间减半,
- * 收敛判据:|f(mid)| <= abs_tol 或半区间宽度 <= x_tol.
- *
+ * 要求 f(left)*f(right) < 0（或端点本身为根）。中点与半区间宽度按
+ * 端点符号选择等价公式，不形成可能溢出的 `left+right` 或
+ * `right-left`。收敛判据为 |f(mid)| <= abs_tol 或半区间宽度 <= x_tol。
  * @param[in]  func       标量函数 f(x).
  * @param[in]  user_data  传递给 func 的用户上下文.
  * @param[in]  left       区间左端点,要求 left < right.
@@ -103,9 +103,9 @@ lmmc_status_t lmmc_bisection_solve(
 /**
  * @brief Newton 法求根.
  *
- * 若 dfunc 为 NULL,使用中心差分自动计算导数.
- * 收敛判据:|f(x)| <= abs_tol 或 |x_{k+1}-x_k| <= x_tol.
- * 导数过小时报告 ZERO_DERIVATIVE 失败.
+ * 若 dfunc 为 NULL，使用中心差分自动计算导数。解析导数与数值导数均按
+ * @c min_derivative 判定是否可用，该阈值不随 x 的绝对量级隐式变化。
+ * 收敛判据为 |f(x)| <= abs_tol 或 |x_{k+1}-x_k| <= x_tol。
  *
  * @param[in]  func       标量函数 f(x).
  * @param[in]  dfunc      解析导数 f'(x),可为 NULL(自动差分).
@@ -134,9 +134,10 @@ lmmc_status_t lmmc_newton_solve(
 /**
  * @brief 割线法求根.
  *
- * 仅需函数值,不需要导数.使用两个初始点 x0 != x1 逼近.
- * 收敛判据同 Newton 法.
- *
+ * 仅需函数值，不需要导数。使用两个初始点 x0 != x1 逼近；函数值先按
+ * 相邻值的最大绝对值缩放，异号函数值使用凸组合计算截距，因此函数值差、
+ * 初始点差均不必在原始量级上可表示。非零常数缩放 f 不改变判定。
+ * 收敛判据同 Newton 法。
  * @param[in]  func       标量函数 f(x).
  * @param[in]  user_data  传递给 func 的用户上下文.
  * @param[in]  x0         第一个初始点.

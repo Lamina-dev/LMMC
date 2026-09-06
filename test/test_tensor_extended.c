@@ -324,6 +324,31 @@ int main(void) {
         lmmc_tensor_destroy(&ones);
     }
 
+    {
+        lmmc_tensor_t extreme = {0};
+        double norm = -1.0;
+
+        st = lmmc_tensor3_create(1, 1, 2, &extreme);
+        if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
+        extreme.data[0] = 1.0e308;
+        extreme.data[1] = 1.0e308;
+        st = lmmc_tensor_norm_fro(&extreme, &norm);
+        if (st != LMMC_STATUS_OK || !isfinite(norm) ||
+            fabs(norm / 1.0e308 - sqrt(2.0)) > 1.0e-15) {
+            printf("large finite tensor norm=%g\n", norm);
+            lmmc_tensor_destroy(&extreme); rc = 1; goto done;
+        }
+        extreme.data[0] = 1.0e-300;
+        extreme.data[1] = 1.0e-300;
+        st = lmmc_tensor_norm_fro(&extreme, &norm);
+        if (st != LMMC_STATUS_OK ||
+            fabs(norm / 1.0e-300 - sqrt(2.0)) > 1.0e-15) {
+            printf("small nonzero tensor norm=%g\n", norm);
+            lmmc_tensor_destroy(&extreme); rc = 1; goto done;
+        }
+        lmmc_tensor_destroy(&extreme);
+    }
+
 
     {
         double sum_val, max_val, min_val;

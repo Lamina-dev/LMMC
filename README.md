@@ -25,6 +25,13 @@ ctest --test-dir build --output-on-failure
   random-number streams
 - N-dimensional tensors, FFTs, complex arithmetic, and scalar special
   functions
+- Standard-library adapters for math, constants, units, collections, linear
+  algebra, statistics, and random-number operations
+
+The standard-library C API is declared in `lmmc/stdlib.h` and uses the
+`lmmc_std_*` function/type prefix and `LMMC_STD_*` constants. These LMMC
+adapters implement the relevant LSR specification contracts; LSR is the
+specification name, not the implementation API prefix.
 
 Persistent LMMC objects use recoverable heap ownership and may be transferred
 between initialized threads. Concurrent mutation requires external

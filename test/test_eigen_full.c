@@ -184,6 +184,119 @@ static int test_diagonal_2x2(void)
     return 0;
 }
 
+static int test_extreme_scale_2x2(void)
+{
+    const double scale = 1.0e200;
+    lmmc_mat_t mat;
+    lmmc_status_t st = lmmc_mat_create(2, 2, &mat);
+    CHECK(st == LMMC_STATUS_OK, "extreme-scale mat_create failed");
+    MAT_ELEM(&mat, 0, 0) = scale;
+    MAT_ELEM(&mat, 0, 1) = scale;
+    MAT_ELEM(&mat, 1, 0) = 0.0;
+    MAT_ELEM(&mat, 1, 1) = 2.0 * scale;
+
+    lmmc_eigen_gen_full_result_t result;
+    st = lmmc_eigen_general_full(&mat, &result);
+    CHECK(st == LMMC_STATUS_OK,
+          "full eigen should accept representable extreme scale, got %d",
+          (int)st);
+
+    int found_one = 0;
+    int found_two = 0;
+    for (size_t col = 0; col < 2; ++col) {
+        double lambda = result.real_parts.data[col] / scale;
+        double v0 = MAT_ELEM(&result.vectors_real, 0, col);
+        double v1 = MAT_ELEM(&result.vectors_real, 1, col);
+        double r0 = (1.0 - lambda) * v0 + v1;
+        double r1 = (2.0 - lambda) * v1;
+        CHECK(isfinite(lambda) && isfinite(v0) && isfinite(v1),
+              "extreme-scale full eigenpair must be finite");
+        CHECK(hypot(r0, r1) < 1.0e-10,
+              "extreme-scale full eigenpair residual must be small");
+        found_one |= fabs(lambda - 1.0) < 1.0e-10;
+        found_two |= fabs(lambda - 2.0) < 1.0e-10;
+    }
+    CHECK(found_one && found_two,
+          "extreme-scale full eigen preserves both eigenvalues");
+
+    lmmc_eigen_gen_full_result_destroy(&result);
+    lmmc_mat_destroy(&mat);
+    return 0;
+}
+
+static int test_widely_separated_2x2(void)
+{
+    lmmc_mat_t mat;
+    lmmc_status_t st = lmmc_mat_create(2, 2, &mat);
+    CHECK(st == LMMC_STATUS_OK, "separated-scale mat_create failed");
+    lmmc_mat_fill(&mat, 0.0);
+    MAT_ELEM(&mat, 0, 0) = 1.0;
+    MAT_ELEM(&mat, 1, 1) = 1.0e-200;
+
+    lmmc_eigen_gen_full_result_t result;
+    st = lmmc_eigen_general_full(&mat, &result);
+    CHECK(st == LMMC_STATUS_OK,
+          "full eigen should support separated finite eigenvalues, got %d",
+          (int)st);
+    int found_large = 0;
+    int found_small = 0;
+    for (size_t i = 0; i < 2; ++i) {
+        found_large |= fabs(result.real_parts.data[i] - 1.0) < 1.0e-12;
+        found_small |=
+            fabs(result.real_parts.data[i] / 1.0e-200 - 1.0) < 1.0e-12;
+    }
+    CHECK(found_large && found_small,
+          "stable 2x2 roots preserve the small eigenvalue");
+
+    lmmc_eigen_gen_full_result_destroy(&result);
+    lmmc_mat_destroy(&mat);
+    return 0;
+}
+
+static int test_extreme_scale_3x3(void)
+{
+    const double scale = 1.0e200;
+    lmmc_mat_t mat;
+    lmmc_status_t st = lmmc_mat_create(3, 3, &mat);
+    CHECK(st == LMMC_STATUS_OK, "extreme-scale 3x3 mat_create failed");
+    lmmc_mat_fill(&mat, 0.0);
+    MAT_ELEM(&mat, 0, 0) = scale;
+    MAT_ELEM(&mat, 1, 0) = scale;
+    MAT_ELEM(&mat, 1, 1) = 2.0 * scale;
+    MAT_ELEM(&mat, 2, 0) = scale;
+    MAT_ELEM(&mat, 2, 2) = 3.0 * scale;
+
+    lmmc_eigen_gen_full_result_t result;
+    st = lmmc_eigen_general_full(&mat, &result);
+    CHECK(st == LMMC_STATUS_OK,
+          "full 3x3 eigen should accept representable extreme scale, got %d",
+          (int)st);
+    int found[3] = {0, 0, 0};
+    for (size_t col = 0; col < 3; ++col) {
+        const double lambda = result.real_parts.data[col] / scale;
+        double v[3];
+        for (size_t row = 0; row < 3; ++row) {
+            v[row] = MAT_ELEM(&result.vectors_real, row, col);
+            CHECK(isfinite(v[row]),
+                  "extreme-scale 3x3 eigenvector must be finite");
+        }
+        const double r0 = (1.0 - lambda) * v[0];
+        const double r1 = v[0] + (2.0 - lambda) * v[1];
+        const double r2 = v[0] + (3.0 - lambda) * v[2];
+        CHECK(hypot(hypot(r0, r1), r2) < 1.0e-8,
+              "extreme-scale 3x3 eigenpair residual must be small");
+        found[0] |= fabs(lambda - 1.0) < 1.0e-8;
+        found[1] |= fabs(lambda - 2.0) < 1.0e-8;
+        found[2] |= fabs(lambda - 3.0) < 1.0e-8;
+    }
+    CHECK(found[0] && found[1] && found[2],
+          "extreme-scale full 3x3 eigen preserves all eigenvalues");
+
+    lmmc_eigen_gen_full_result_destroy(&result);
+    lmmc_mat_destroy(&mat);
+    return 0;
+}
+
 static int test_rotation_2x2(void)
 {
     /* Rotation matrix has complex eigenvalues */
@@ -377,6 +490,9 @@ int main(void)
         {"1x1",                test_1x1},
         {"diagonal_2x2",      test_diagonal_2x2},
         {"rotation_2x2",      test_rotation_2x2},
+        {"extreme_scale_2x2", test_extreme_scale_2x2},
+        {"widely_separated_2x2", test_widely_separated_2x2},
+        {"extreme_scale_3x3", test_extreme_scale_3x3},
         {"diagonal_3x3",      test_diagonal_3x3},
         {"random_5x5",        test_random_5x5},
         {"random_10x10",      test_random_10x10},

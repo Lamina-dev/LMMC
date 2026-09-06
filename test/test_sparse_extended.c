@@ -679,6 +679,48 @@ int main(void) {
         lmmc_mat_destroy(&dense2);
         lmmc_sparse_destroy(&sparse2);
         if (rc != 0) goto done;
+
+        {
+            const double large_data[] = {1.0e308, 1.0e308};
+            const double small_data[] = {1.0e-300, 1.0e-300};
+            lmmc_sparse_mat_t extreme = {0};
+
+            st = helper_build_sparse(large_data, 1, 2, &extreme);
+            if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
+            st = lmmc_sparse_norm_fro(&extreme, &norm_s2);
+            if (st != LMMC_STATUS_OK || !isfinite(norm_s2) ||
+                fabs(norm_s2 / 1.0e308 - sqrt(2.0)) > 1.0e-15) {
+                printf("large finite sparse norm=%g\n", norm_s2);
+                rc = 1; lmmc_sparse_destroy(&extreme); goto done;
+            }
+            lmmc_sparse_destroy(&extreme);
+
+            {
+                lmmc_sparse_builder_t* builder = NULL;
+                st = lmmc_sparse_builder_create(1, 2, 2, &builder);
+                if (st == LMMC_STATUS_OK) {
+                    st = lmmc_sparse_builder_add(
+                        builder, 0, 0, small_data[0]);
+                }
+                if (st == LMMC_STATUS_OK) {
+                    st = lmmc_sparse_builder_add(
+                        builder, 0, 1, small_data[1]);
+                }
+                if (st == LMMC_STATUS_OK) {
+                    st = lmmc_sparse_builder_build(
+                        builder, LMMC_SPARSE_CSR, &extreme);
+                }
+                lmmc_sparse_builder_destroy(builder);
+                if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
+            }
+            st = lmmc_sparse_norm_fro(&extreme, &norm_s2);
+            if (st != LMMC_STATUS_OK ||
+                fabs(norm_s2 / 1.0e-300 - sqrt(2.0)) > 1.0e-15) {
+                printf("small nonzero sparse norm=%g\n", norm_s2);
+                rc = 1; lmmc_sparse_destroy(&extreme); goto done;
+            }
+            lmmc_sparse_destroy(&extreme);
+        }
     }
 
 done:

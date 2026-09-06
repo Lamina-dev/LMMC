@@ -85,6 +85,30 @@ static int test_2x2_diagonal(void)
     return 0;
 }
 
+static int test_extreme_finite_scale(void)
+{
+    const lmmc_real_t scale = 1e200;
+    const lmmc_real_t golden_ratio = (1.0 + sqrt(5.0)) * 0.5;
+    lmmc_mat_t mat;
+    lmmc_svd_result_t result;
+    lmmc_mat_create(2, 2, &mat);
+    mat.data[0] = scale; mat.data[1] = scale;
+    mat.data[2] = 0.0;   mat.data[3] = scale;
+
+    lmmc_status_t s = lmmc_svd(&mat, &result);
+    CHECK(s == LMMC_STATUS_OK,
+          "finite extreme-scale SVD should succeed, got %d", (int)s);
+    CHECK(isfinite(result.sigma.data[0]) && isfinite(result.sigma.data[1]),
+          "finite matrix must produce finite representable singular values");
+    CHECK(fabs(result.sigma.data[0] / scale - golden_ratio) < TOL &&
+              fabs(result.sigma.data[1] / scale - 1.0 / golden_ratio) < TOL,
+          "extreme-scale singular values should retain their relative spectrum");
+
+    lmmc_svd_result_destroy(&result);
+    lmmc_mat_destroy(&mat);
+    return 0;
+}
+
 
 static int test_3x3_reconstruction(void)
 {
@@ -393,6 +417,7 @@ int main(void)
         {"1x1", test_1x1},
         {"2x2_diagonal", test_2x2_diagonal},
         {"3x3_reconstruction", test_3x3_reconstruction},
+        {"extreme_finite_scale", test_extreme_finite_scale},
         {"orthogonality", test_orthogonality},
         {"descending_order", test_descending_order},
         {"wide_matrix", test_wide_matrix},

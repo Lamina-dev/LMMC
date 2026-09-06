@@ -58,8 +58,8 @@ typedef struct {
 /**
  * @brief 计算实对称矩阵的全部特征值与特征向量.
  *
- * 算法:Householder 三对角化 -> 隐式 QL 迭代.
- * 特征值按升序排列,第 i 个特征值对应 eigenvectors 的第 i 列.
+ * 算法:公共尺度归一化 -> 安全缩放的 Householder 三对角化 ->
+ * 隐式 QL 迭代.特征值按升序排列,第 i 个特征值对应 eigenvectors 的第 i 列.
  *
  * @param[in]  a          nxn 对称矩阵(不被修改).
  * @param[out] out_result 输出结果,调用方需配对调用 ::lmmc_eigen_sym_result_destroy 释放.
@@ -68,6 +68,7 @@ typedef struct {
  * - ::LMMC_STATUS_OK - 成功.
  * - ::LMMC_STATUS_INVALID_ARGUMENT - 指针为 NULL 或矩阵非方阵.
  * - ::LMMC_STATUS_CONVERGENCE_FAILED - QL 迭代未收敛(超过 30 次).
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入含非有限值或结果超出有限数值范围.
  * - ::LMMC_STATUS_ALLOCATION_FAILED - 内存分配失败.
  *
  * @par 副作用
@@ -82,8 +83,9 @@ lmmc_status_t lmmc_eigen_symmetric(
 /**
  * @brief 计算一般实矩阵的特征值(不输出特征向量).
  *
- * 算法:Householder Hessenberg 约化 -> Francis 双移位 QR 迭代.
- * 复数特征值以共轭对形式出现在 real_parts/imag_parts 中.
+ * 算法:公共尺度归一化 -> 安全缩放的 Householder Hessenberg 约化 ->
+ * Francis 双移位 QR 迭代.复数特征值以共轭对形式出现在
+ * real_parts/imag_parts 中.
  *
  * @param[in]  a          nxn 实矩阵(不被修改).
  * @param[out] out_result 输出结果,调用方需配对调用 ::lmmc_eigen_gen_result_destroy 释放.
@@ -93,6 +95,7 @@ lmmc_status_t lmmc_eigen_symmetric(
  * - ::LMMC_STATUS_INVALID_ARGUMENT - 指针为 NULL 或矩阵非方阵.
  * - ::LMMC_STATUS_CONVERGENCE_FAILED - QR 迭代未收敛.
  * - ::LMMC_STATUS_ALLOCATION_FAILED - 内存分配失败.
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入含非有限值或结果超出有限数值范围.
  *
  * @par 副作用
  * - 分配堆内存.a 不被修改.
@@ -107,6 +110,8 @@ lmmc_status_t lmmc_eigen_general(
  *
  * 算法:Householder 双对角化 -> Golub-Kahan 隐式 QR 迭代.
  * 奇异值按降序排列.
+ * 有限输入先按最大绝对元素缩放到安全范围，分解后再恢复奇异值尺度，
+ * 避免双对角化和 QR 位移中的平方发生中间溢出。
  *
  * @param[in]  a          mxn 矩阵(不被修改).
  * @param[out] out_result 输出 U(mxm),sigma(min(m,n)),Vt(nxn).
@@ -114,7 +119,8 @@ lmmc_status_t lmmc_eigen_general(
  *
  * @return
  * - ::LMMC_STATUS_OK - 成功.
- * - ::LMMC_STATUS_INVALID_ARGUMENT - 指针为 NULL.
+ * - ::LMMC_STATUS_INVALID_ARGUMENT - 矩阵描述符无效或输出指针为 NULL.
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入含非有限值或奇异值不可表示.
  * - ::LMMC_STATUS_CONVERGENCE_FAILED - 迭代未收敛.
  * - ::LMMC_STATUS_ALLOCATION_FAILED - 内存分配失败.
  *
@@ -175,10 +181,11 @@ lmmc_status_t lmmc_cond(
 /**
  * @brief 计算一般实矩阵的特征值与特征向量.
  *
- * 使用 Hessenberg 约化 + Francis 双移位 QR 迭代求特征值,
- * 再通过逆迭代(Wilkinson 移位)计算特征向量.
+ * 特征值计算复用 ::lmmc_eigen_general 的公共尺度归一化、稳定 2x2
+ * 特征根及 Hessenberg/Francis QR 路径；逆迭代在同一归一化矩阵上执行，
+ * 最后只恢复特征值尺度。这样避免维护第二套数值算法及大尺度中间溢出。
  *
- * @param[in]  a          nxn 实矩阵.
+ * @param[in]  a          含有限元素的 nxn 实矩阵.
  * @param[out] out_result 调用方需用 ::lmmc_eigen_gen_full_result_destroy 释放.
  */
 lmmc_status_t lmmc_eigen_general_full(

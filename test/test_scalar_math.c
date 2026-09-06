@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <float.h>
 
 #include "lmmc/lmmc.h"
 #include "test_common.h"
@@ -223,6 +224,34 @@ static int test_unit_domain_errors(void)
     st = lmmc_pow(-2.0, 0.5, &out);
     if (st != LMMC_STATUS_OUT_OF_RANGE) {
         printf("    pow(-2.0, 0.5) expected OUT_OF_RANGE, got %d\n", (int)st);
+        return 1;
+    }
+
+    out = 123.0;
+    st = lmmc_pow(0.0, -1.0, &out);
+    if (st != LMMC_STATUS_OUT_OF_RANGE || out != 123.0) {
+        printf("    pow(0,-1) must report a pole without writing output\n");
+        return 1;
+    }
+
+    out = 123.0;
+    st = lmmc_pow(DBL_MAX, 2.0, &out);
+    if (st != LMMC_STATUS_NUMERICAL_FAILURE || out != 123.0) {
+        printf("    overflowing pow must report numerical failure\n");
+        return 1;
+    }
+
+    out = 123.0;
+    st = lmmc_sinh(DBL_MAX, &out);
+    if (st != LMMC_STATUS_NUMERICAL_FAILURE || out != 123.0) {
+        printf("    overflowing sinh must report numerical failure\n");
+        return 1;
+    }
+
+    out = 123.0;
+    st = lmmc_asin(NAN, &out);
+    if (st != LMMC_STATUS_INVALID_ARGUMENT || out != 123.0) {
+        printf("    asin must reject NaN without writing output\n");
         return 1;
     }
 

@@ -51,7 +51,8 @@ lmmc_status_t lmmc_sparse_add(
     }
 
 
-    c_row_ptr = (size_t*)lmmc_alloc((pa->rows + 1) * sizeof(size_t));
+    c_row_ptr = (size_t*)lmmc_alloc_array_plus(
+        pa->rows, 1, sizeof(size_t));
     if (c_row_ptr == NULL) {
         st = LMMC_STATUS_ALLOCATION_FAILED;
         goto cleanup;
@@ -88,8 +89,9 @@ lmmc_status_t lmmc_sparse_add(
 
 
     if (nnz_c > 0) {
-        c_col_idx = (size_t*)lmmc_alloc(nnz_c * sizeof(size_t));
-        c_values = (lmmc_real_t*)lmmc_alloc(nnz_c * sizeof(lmmc_real_t));
+        c_col_idx = (size_t*)lmmc_alloc_array(nnz_c, sizeof(size_t));
+        c_values = (lmmc_real_t*)lmmc_alloc_array(
+            nnz_c, sizeof(lmmc_real_t));
         if (c_col_idx == NULL || c_values == NULL) {
             st = LMMC_STATUS_ALLOCATION_FAILED;
             goto cleanup;
@@ -216,10 +218,7 @@ lmmc_status_t lmmc_sparse_norm_fro(
     const lmmc_sparse_mat_t* a,
     lmmc_real_t* out_norm
 ) {
-    size_t i;
-    lmmc_real_t sum; LMMC_REAL_INIT(&sum);
-    lmmc_real_t tmp; LMMC_REAL_INIT(&tmp);
-    lmmc_real_t tmp_add; LMMC_REAL_INIT(&tmp_add);
+    lmmc_scaled_sumsq_t acc;
 
     if (a == NULL || out_norm == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
@@ -230,19 +229,11 @@ lmmc_status_t lmmc_sparse_norm_fro(
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    LMMC_REAL_SET_D(&sum, 0.0);
-
-    for (i = 0; i < a->nnz; ++i) {
-        LMMC_REAL_MUL(&tmp, &a->values[i], &a->values[i]);
-        LMMC_REAL_ADD(&tmp_add, &sum, &tmp);
-        LMMC_REAL_SET(&sum, &tmp_add);
+    lmmc_scaled_sumsq_init(&acc);
+    for (size_t i = 0; i < a->nnz; ++i) {
+        lmmc_scaled_sumsq_add(&acc, a->values[i]);
     }
-
-    LMMC_REAL_SQRT(out_norm, &sum);
-
-    LMMC_REAL_CLEAR(&sum);
-    LMMC_REAL_CLEAR(&tmp);
-    LMMC_REAL_CLEAR(&tmp_add);
+    *out_norm = lmmc_scaled_sumsq_norm(&acc);
     return LMMC_STATUS_OK;
 }
 

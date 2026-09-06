@@ -18,6 +18,7 @@
 #include <math.h>
 #include <string.h>
 #include "memory_bridge.h"
+#include "internal.h"
 #include "lmmc/config.h"
 #include "lmmc/numeric.h"
 
@@ -45,6 +46,7 @@ static size_t fft_next_power_of_two(size_t n) {
     size_t p = 1;
     if (n == 0) return 1;
     while (p < n) {
+        if (p > SIZE_MAX / 2) return 0;
         p <<= 1;
     }
     return p;
@@ -119,6 +121,7 @@ static lmmc_status_t fft_radix2(lmmc_real_t* real, lmmc_real_t* imag, size_t n, 
                 }
             }
         }
+        if (len == n) break;
     }
 
     if (inverse) {
@@ -144,6 +147,7 @@ static lmmc_status_t fft_radix2(lmmc_real_t* real, lmmc_real_t* imag, size_t n, 
  */
 static lmmc_status_t fft_bluestein(lmmc_real_t* real, lmmc_real_t* imag, size_t n, int inverse) {
     size_t m;           /* padded power-of-2 length */
+    size_t convolution_length;
     size_t k;
     double sign;
     lmmc_real_t *a_r = NULL, *a_i = NULL;
@@ -155,13 +159,18 @@ static lmmc_status_t fft_bluestein(lmmc_real_t* real, lmmc_real_t* imag, size_t 
     }
 
     /** 填充长度取不小于 2N-1 的最小 2 的幂. */
-    m = fft_next_power_of_two(2 * n - 1);
+    if (!lmmc_safe_mul_size(2, n, &convolution_length)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    --convolution_length;
+    m = fft_next_power_of_two(convolution_length);
+    if (m == 0) return LMMC_STATUS_INVALID_ARGUMENT;
 
     /** 分配工作数组. */
-    a_r = (lmmc_real_t*)lmmc_alloc(m * sizeof(lmmc_real_t));
-    a_i = (lmmc_real_t*)lmmc_alloc(m * sizeof(lmmc_real_t));
-    b_r = (lmmc_real_t*)lmmc_alloc(m * sizeof(lmmc_real_t));
-    b_i = (lmmc_real_t*)lmmc_alloc(m * sizeof(lmmc_real_t));
+    a_r = (lmmc_real_t*)lmmc_alloc_array(m, sizeof(lmmc_real_t));
+    a_i = (lmmc_real_t*)lmmc_alloc_array(m, sizeof(lmmc_real_t));
+    b_r = (lmmc_real_t*)lmmc_alloc_array(m, sizeof(lmmc_real_t));
+    b_i = (lmmc_real_t*)lmmc_alloc_array(m, sizeof(lmmc_real_t));
 
     if (a_r == NULL || a_i == NULL || b_r == NULL || b_i == NULL) {
         st = LMMC_STATUS_ALLOCATION_FAILED;
@@ -181,7 +190,8 @@ static lmmc_status_t fft_bluestein(lmmc_real_t* real, lmmc_real_t* imag, size_t 
 
     /** 构造 chirp 调制输入 a[k] = x[k] * exp(sign*i*pi*k^2/N). */
     for (k = 0; k < n; ++k) {
-        double phase = sign * LMMC_PI * (double)(k * k) / (double)n;
+        const double kd = (double)k;
+        double phase = sign * LMMC_PI * kd * kd / (double)n;
         double c = cos(phase);
         double s = sin(phase);
         /** 将输入乘以 c + i*s. */
@@ -191,7 +201,8 @@ static lmmc_status_t fft_bluestein(lmmc_real_t* real, lmmc_real_t* imag, size_t 
 
     /** 构造卷积核 b[k] = exp(-sign*i*pi*k^2/N),并为负索引设置环绕项. */
     for (k = 0; k < n; ++k) {
-        double phase = -sign * LMMC_PI * (double)(k * k) / (double)n;
+        const double kd = (double)k;
+        double phase = -sign * LMMC_PI * kd * kd / (double)n;
         double c = cos(phase);
         double s = sin(phase);
         b_r[k] = c;
@@ -224,7 +235,8 @@ static lmmc_status_t fft_bluestein(lmmc_real_t* real, lmmc_real_t* imag, size_t 
 
     /* Extract result: X[k] = a[k] * exp(sign * i * pi * k^2 / N) */
     for (k = 0; k < n; ++k) {
-        double phase = sign * LMMC_PI * (double)(k * k) / (double)n;
+        const double kd = (double)k;
+        double phase = sign * LMMC_PI * kd * kd / (double)n;
         double c = cos(phase);
         double s = sin(phase);
         /* result[k] = a[k] * exp(sign*i*pi*k^2/N) = a[k] * (c + i*s) */
@@ -250,7 +262,15 @@ cleanup:
 }
 
 lmmc_status_t lmmc_fft(lmmc_real_t* real, lmmc_real_t* imag, size_t n, int inverse) {
-    if (real == NULL || imag == NULL || n == 0) {
+    lmmc_storage_envelope_t real_envelope;
+    lmmc_storage_envelope_t imag_envelope;
+
+    if (real == NULL || imag == NULL || n == 0 ||
+        !lmmc_storage_envelope_checked(
+            real, 1, n, n, sizeof(lmmc_real_t), &real_envelope) ||
+        !lmmc_storage_envelope_checked(
+            imag, 1, n, n, sizeof(lmmc_real_t), &imag_envelope) ||
+        lmmc_storage_envelopes_overlap(&real_envelope, &imag_envelope)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (n == 1) {
@@ -282,6 +302,11 @@ lmmc_status_t lmmc_fft_radix4_pad_into(
 {
     size_t nfft = 0;
     lmmc_status_t st;
+    lmmc_storage_envelope_t real_in_envelope;
+    lmmc_storage_envelope_t imag_in_envelope;
+    lmmc_storage_envelope_t real_out_envelope;
+    lmmc_storage_envelope_t imag_out_envelope;
+    lmmc_storage_envelope_t nfft_envelope;
 
     if (real_in == NULL || imag_in == NULL || real_out == NULL ||
         imag_out == NULL || out_nfft == NULL || n == 0) {
@@ -291,6 +316,27 @@ lmmc_status_t lmmc_fft_radix4_pad_into(
     st = lmmc_fft_radix4_next_size(n, &nfft);
     if (st != LMMC_STATUS_OK) {
         return st;
+    }
+    if (!lmmc_storage_envelope_checked(
+            real_in, 1, n, n, sizeof(lmmc_real_t), &real_in_envelope) ||
+        !lmmc_storage_envelope_checked(
+            imag_in, 1, n, n, sizeof(lmmc_real_t), &imag_in_envelope) ||
+        !lmmc_storage_envelope_checked(
+            real_out, 1, nfft, nfft, sizeof(lmmc_real_t), &real_out_envelope) ||
+        !lmmc_storage_envelope_checked(
+            imag_out, 1, nfft, nfft, sizeof(lmmc_real_t), &imag_out_envelope) ||
+        !lmmc_storage_envelope_checked(
+            out_nfft, 1, 1, 1, sizeof(size_t), &nfft_envelope) ||
+        lmmc_storage_envelopes_overlap(&real_out_envelope, &imag_out_envelope) ||
+        lmmc_storage_envelopes_overlap(&real_out_envelope, &real_in_envelope) ||
+        lmmc_storage_envelopes_overlap(&real_out_envelope, &imag_in_envelope) ||
+        lmmc_storage_envelopes_overlap(&imag_out_envelope, &real_in_envelope) ||
+        lmmc_storage_envelopes_overlap(&imag_out_envelope, &imag_in_envelope) ||
+        lmmc_storage_envelopes_overlap(&nfft_envelope, &real_in_envelope) ||
+        lmmc_storage_envelopes_overlap(&nfft_envelope, &imag_in_envelope) ||
+        lmmc_storage_envelopes_overlap(&nfft_envelope, &real_out_envelope) ||
+        lmmc_storage_envelopes_overlap(&nfft_envelope, &imag_out_envelope)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
     /* Copy input data */

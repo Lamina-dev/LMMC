@@ -1,4 +1,4 @@
-#include "lmmc/lsr_stdlib.h"
+#include "lmmc/stdlib.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -9,13 +9,13 @@
 #include "lmmc/linear_algebra.h"
 #include "memory_bridge.h"
 
-#include "lsr_stdlib_internal.h"
+#include "stdlib_internal.h"
 
-lmmc_status_t lmmc_lsr_linalg_shape(const lmmc_mat_t* a,
+lmmc_status_t lmmc_std_linalg_shape(const lmmc_mat_t* a,
                                     size_t* out_rows,
                                     size_t* out_cols)
 {
-    if (!lmmc_lsr_mat_valid(a) || !out_rows || !out_cols) {
+    if (!lmmc_std_mat_valid(a) || !out_rows || !out_cols) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     *out_rows = a->rows;
@@ -23,11 +23,11 @@ lmmc_status_t lmmc_lsr_linalg_shape(const lmmc_mat_t* a,
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_lsr_linalg_shape_vec(const lmmc_mat_t* a,
+lmmc_status_t lmmc_std_linalg_shape_vec(const lmmc_mat_t* a,
                                         lmmc_vec_t* out)
 {
     lmmc_status_t status;
-    if (!lmmc_lsr_mat_valid(a) || !out) {
+    if (!lmmc_std_mat_valid(a) || !out) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     status = lmmc_vec_create(2, out);
@@ -37,53 +37,53 @@ lmmc_status_t lmmc_lsr_linalg_shape_vec(const lmmc_mat_t* a,
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_lsr_linalg_eye(size_t n, lmmc_mat_t* out)
+lmmc_status_t lmmc_std_linalg_eye(size_t n, lmmc_mat_t* out)
 {
     lmmc_status_t status;
     if (n == 0 || !out) return LMMC_STATUS_INVALID_ARGUMENT;
     status = lmmc_mat_identity(n, out);
     if (status != LMMC_STATUS_OK) return status;
-    status = lmmc_lsr_require_finite_mat(out);
+    status = lmmc_std_require_finite_mat(out);
     if (status != LMMC_STATUS_OK) lmmc_mat_destroy(out);
     return status;
 }
 
-lmmc_status_t lmmc_lsr_linalg_diag(const lmmc_vec_t* diagonal,
+lmmc_status_t lmmc_std_linalg_diag(const lmmc_vec_t* diagonal,
                                    lmmc_mat_t* out)
 {
     lmmc_status_t status;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    status = lmmc_lsr_require_finite_vec(diagonal);
+    status = lmmc_std_require_finite_vec(diagonal);
     if (status != LMMC_STATUS_OK) return status;
-    return lmmc_lsr_vec_to_diag(diagonal, diagonal->size, diagonal->size, out);
+    return lmmc_std_vec_to_diag(diagonal, diagonal->size, diagonal->size, out);
 }
 
-lmmc_status_t lmmc_lsr_linalg_dot(const lmmc_vec_t* a,
+lmmc_status_t lmmc_std_linalg_dot(const lmmc_vec_t* a,
                                   const lmmc_vec_t* b,
                                   lmmc_real_t* out)
 {
     lmmc_real_t value;
     lmmc_status_t status;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    status = lmmc_lsr_require_finite_vec(a);
+    status = lmmc_std_require_finite_vec(a);
     if (status != LMMC_STATUS_OK) return status;
-    status = lmmc_lsr_require_finite_vec(b);
+    status = lmmc_std_require_finite_vec(b);
     if (status != LMMC_STATUS_OK) return status;
     if (a->size != b->size) return LMMC_STATUS_DIMENSION_MISMATCH;
     status = lmmc_vec_dot(a, b, &value);
     if (status != LMMC_STATUS_OK) return status;
-    return lmmc_lsr_store_finite_real(value, out);
+    return lmmc_std_store_finite_real(value, out);
 }
 
-lmmc_status_t lmmc_lsr_linalg_cross(const lmmc_vec_t* a,
+lmmc_status_t lmmc_std_linalg_cross(const lmmc_vec_t* a,
                                     const lmmc_vec_t* b,
                                     lmmc_vec_t* out)
 {
     lmmc_status_t status;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    status = lmmc_lsr_require_finite_vec(a);
+    status = lmmc_std_require_finite_vec(a);
     if (status != LMMC_STATUS_OK) return status;
-    status = lmmc_lsr_require_finite_vec(b);
+    status = lmmc_std_require_finite_vec(b);
     if (status != LMMC_STATUS_OK) return status;
     if (a->size != 3 || b->size != 3) return LMMC_STATUS_DIMENSION_MISMATCH;
     status = lmmc_vec_create(3, out);
@@ -91,25 +91,25 @@ lmmc_status_t lmmc_lsr_linalg_cross(const lmmc_vec_t* a,
     out->data[0] = a->data[1] * b->data[2] - a->data[2] * b->data[1];
     out->data[1] = a->data[2] * b->data[0] - a->data[0] * b->data[2];
     out->data[2] = a->data[0] * b->data[1] - a->data[1] * b->data[0];
-    status = lmmc_lsr_require_finite_vec(out);
+    status = lmmc_std_require_finite_vec(out);
     if (status != LMMC_STATUS_OK) lmmc_vec_destroy(out);
     return status;
 }
 
-lmmc_status_t lmmc_lsr_linalg_norm(const lmmc_vec_t* x,
+lmmc_status_t lmmc_std_linalg_norm(const lmmc_vec_t* x,
                                    lmmc_real_t* out)
 {
     lmmc_real_t value;
     lmmc_status_t status;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    status = lmmc_lsr_require_finite_vec(x);
+    status = lmmc_std_require_finite_vec(x);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_vec_norm2(x, &value);
     if (status != LMMC_STATUS_OK) return status;
-    return lmmc_lsr_store_finite_real(value, out);
+    return lmmc_std_store_finite_real(value, out);
 }
 
-void lmmc_lsr_bool_vec_destroy(lmmc_lsr_bool_vec_t* vec)
+void lmmc_std_bool_vec_destroy(lmmc_std_bool_vec_t* vec)
 {
     if (!vec) return;
     if (vec->owns_data && vec->data) lmmc_free(vec->data);
@@ -118,7 +118,7 @@ void lmmc_lsr_bool_vec_destroy(lmmc_lsr_bool_vec_t* vec)
     vec->owns_data = 0;
 }
 
-void lmmc_lsr_bool_mat_destroy(lmmc_lsr_bool_mat_t* mat)
+void lmmc_std_bool_mat_destroy(lmmc_std_bool_mat_t* mat)
 {
     if (!mat) return;
     if (mat->owns_data && mat->data) lmmc_free(mat->data);
@@ -129,95 +129,95 @@ void lmmc_lsr_bool_mat_destroy(lmmc_lsr_bool_mat_t* mat)
     mat->owns_data = 0;
 }
 
-lmmc_status_t lmmc_lsr_linalg_matmul(const lmmc_mat_t* a,
+lmmc_status_t lmmc_std_linalg_matmul(const lmmc_mat_t* a,
                                      const lmmc_mat_t* b,
                                      lmmc_mat_t* out)
 {
     lmmc_status_t status;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    status = lmmc_lsr_require_finite_mat(a);
+    status = lmmc_std_require_finite_mat(a);
     if (status != LMMC_STATUS_OK) return status;
-    status = lmmc_lsr_require_finite_mat(b);
+    status = lmmc_std_require_finite_mat(b);
     if (status != LMMC_STATUS_OK) return status;
     if (a->cols != b->rows) return LMMC_STATUS_DIMENSION_MISMATCH;
     status = lmmc_mat_create(a->rows, b->cols, out);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_mat_mul(a, b, out);
-    if (status == LMMC_STATUS_OK) status = lmmc_lsr_require_finite_mat(out);
+    if (status == LMMC_STATUS_OK) status = lmmc_std_require_finite_mat(out);
     if (status != LMMC_STATUS_OK) lmmc_mat_destroy(out);
     return status;
 }
 
-lmmc_status_t lmmc_lsr_linalg_matvec(const lmmc_mat_t* a,
+lmmc_status_t lmmc_std_linalg_matvec(const lmmc_mat_t* a,
                                      const lmmc_vec_t* x,
                                      lmmc_vec_t* out)
 {
     lmmc_status_t status;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    status = lmmc_lsr_require_finite_mat(a);
+    status = lmmc_std_require_finite_mat(a);
     if (status != LMMC_STATUS_OK) return status;
-    status = lmmc_lsr_require_finite_vec(x);
+    status = lmmc_std_require_finite_vec(x);
     if (status != LMMC_STATUS_OK) return status;
     if (a->cols != x->size) return LMMC_STATUS_DIMENSION_MISMATCH;
     status = lmmc_vec_create(a->rows, out);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_mat_vec_mul(a, x, out);
-    if (status == LMMC_STATUS_OK) status = lmmc_lsr_require_finite_vec(out);
+    if (status == LMMC_STATUS_OK) status = lmmc_std_require_finite_vec(out);
     if (status != LMMC_STATUS_OK) lmmc_vec_destroy(out);
     return status;
 }
 
-lmmc_status_t lmmc_lsr_linalg_transpose(const lmmc_mat_t* a,
+lmmc_status_t lmmc_std_linalg_transpose(const lmmc_mat_t* a,
                                         lmmc_mat_t* out)
 {
     lmmc_status_t status;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    status = lmmc_lsr_require_finite_mat(a);
+    status = lmmc_std_require_finite_mat(a);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_mat_create(a->cols, a->rows, out);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_mat_transpose_to(a, out);
-    if (status == LMMC_STATUS_OK) status = lmmc_lsr_require_finite_mat(out);
+    if (status == LMMC_STATUS_OK) status = lmmc_std_require_finite_mat(out);
     if (status != LMMC_STATUS_OK) lmmc_mat_destroy(out);
     return status;
 }
 
-lmmc_status_t lmmc_lsr_linalg_adjoint(const lmmc_mat_t* a,
+lmmc_status_t lmmc_std_linalg_adjoint(const lmmc_mat_t* a,
                                       lmmc_mat_t* out)
 {
-    return lmmc_lsr_linalg_transpose(a, out);
+    return lmmc_std_linalg_transpose(a, out);
 }
 
-lmmc_status_t lmmc_lsr_linalg_det(const lmmc_mat_t* a,
+lmmc_status_t lmmc_std_linalg_det(const lmmc_mat_t* a,
                                   lmmc_real_t* out)
 {
     lmmc_real_t value;
     lmmc_status_t status;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    status = lmmc_lsr_require_finite_mat(a);
+    status = lmmc_std_require_finite_mat(a);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_mat_det(a, &value);
     if (status != LMMC_STATUS_OK) return status;
-    return lmmc_lsr_store_finite_real(value, out);
+    return lmmc_std_store_finite_real(value, out);
 }
 
-lmmc_status_t lmmc_lsr_linalg_inv(const lmmc_mat_t* a,
+lmmc_status_t lmmc_std_linalg_inv(const lmmc_mat_t* a,
                                   lmmc_mat_t* out)
 {
     lmmc_status_t status;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    status = lmmc_lsr_require_finite_mat(a);
+    status = lmmc_std_require_finite_mat(a);
     if (status != LMMC_STATUS_OK) return status;
     if (a->rows != a->cols) return LMMC_STATUS_INVALID_ARGUMENT;
     status = lmmc_mat_create(a->rows, a->cols, out);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_mat_inv(a, out);
-    if (status == LMMC_STATUS_OK) status = lmmc_lsr_require_finite_mat(out);
+    if (status == LMMC_STATUS_OK) status = lmmc_std_require_finite_mat(out);
     if (status != LMMC_STATUS_OK) lmmc_mat_destroy(out);
     return status;
 }
 
-lmmc_status_t lmmc_lsr_linalg_rank(const lmmc_mat_t* a,
+lmmc_status_t lmmc_std_linalg_rank(const lmmc_mat_t* a,
                                    size_t* out_rank)
 {
     size_t rows, cols, count, rank, col;
@@ -226,7 +226,7 @@ lmmc_status_t lmmc_lsr_linalg_rank(const lmmc_mat_t* a,
     lmmc_real_t tol;
 
     if (!out_rank) return LMMC_STATUS_INVALID_ARGUMENT;
-    lmmc_status_t input_status = lmmc_lsr_require_finite_mat(a);
+    lmmc_status_t input_status = lmmc_std_require_finite_mat(a);
     if (input_status != LMMC_STATUS_OK) return input_status;
     if (a->rows != 0 && a->cols > ((size_t)-1) / a->rows) {
         return LMMC_STATUS_INVALID_ARGUMENT;
@@ -235,7 +235,7 @@ lmmc_status_t lmmc_lsr_linalg_rank(const lmmc_mat_t* a,
     rows = a->rows;
     cols = a->cols;
     count = rows * cols;
-    work = (lmmc_real_t*)malloc(count * sizeof(lmmc_real_t));
+    work = (lmmc_real_t*)lmmc_alloc_array(count, sizeof(lmmc_real_t));
     if (!work) return LMMC_STATUS_ALLOCATION_FAILED;
 
     for (size_t i = 0; i < rows; ++i) {
@@ -247,7 +247,7 @@ lmmc_status_t lmmc_lsr_linalg_rank(const lmmc_mat_t* a,
     }
 
     if (scale == (lmmc_real_t)0) {
-        free(work);
+        lmmc_free(work);
         *out_rank = 0;
         return LMMC_STATUS_OK;
     }
@@ -288,25 +288,25 @@ lmmc_status_t lmmc_lsr_linalg_rank(const lmmc_mat_t* a,
         ++rank;
     }
 
-    free(work);
+    lmmc_free(work);
     *out_rank = rank;
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_lsr_linalg_trace(const lmmc_mat_t* a,
+lmmc_status_t lmmc_std_linalg_trace(const lmmc_mat_t* a,
                                     lmmc_real_t* out)
 {
     lmmc_real_t value;
     lmmc_status_t status;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    status = lmmc_lsr_require_finite_mat(a);
+    status = lmmc_std_require_finite_mat(a);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_mat_trace(a, &value);
     if (status != LMMC_STATUS_OK) return status;
-    return lmmc_lsr_store_finite_real(value, out);
+    return lmmc_std_store_finite_real(value, out);
 }
 
-lmmc_status_t lmmc_lsr_linalg_solve_left(const lmmc_mat_t* a,
+lmmc_status_t lmmc_std_linalg_solve_left(const lmmc_mat_t* a,
                                          const lmmc_mat_t* b,
                                          lmmc_mat_t* out)
 {
@@ -317,9 +317,9 @@ lmmc_status_t lmmc_lsr_linalg_solve_left(const lmmc_mat_t* a,
     lmmc_status_t status;
 
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    status = lmmc_lsr_require_finite_mat(a);
+    status = lmmc_std_require_finite_mat(a);
     if (status != LMMC_STATUS_OK) return status;
-    status = lmmc_lsr_require_finite_mat(b);
+    status = lmmc_std_require_finite_mat(b);
     if (status != LMMC_STATUS_OK) return status;
     if (a->rows != a->cols || b->rows != a->rows) {
         return LMMC_STATUS_DIMENSION_MISMATCH;
@@ -330,7 +330,7 @@ lmmc_status_t lmmc_lsr_linalg_solve_left(const lmmc_mat_t* a,
     status = lmmc_mat_copy(a, &lu);
     if (status != LMMC_STATUS_OK) goto cleanup;
 
-    pivots = (size_t*)malloc(a->rows * sizeof(size_t));
+    pivots = (size_t*)lmmc_alloc_array(a->rows, sizeof(size_t));
     if (!pivots) {
         status = LMMC_STATUS_ALLOCATION_FAILED;
         goto cleanup;
@@ -368,12 +368,12 @@ lmmc_status_t lmmc_lsr_linalg_solve_left(const lmmc_mat_t* a,
 cleanup:
     lmmc_vec_destroy(&sol);
     lmmc_vec_destroy(&rhs);
-    if (pivots) free(pivots);
+    if (pivots) lmmc_free(pivots);
     lmmc_mat_destroy(&lu);
     return status;
 }
 
-lmmc_status_t lmmc_lsr_linalg_solve_right(const lmmc_mat_t* b,
+lmmc_status_t lmmc_std_linalg_solve_right(const lmmc_mat_t* b,
                                           const lmmc_mat_t* a,
                                           lmmc_mat_t* out)
 {
@@ -383,21 +383,21 @@ lmmc_status_t lmmc_lsr_linalg_solve_right(const lmmc_mat_t* b,
     lmmc_status_t status;
 
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    status = lmmc_lsr_require_finite_mat(a);
+    status = lmmc_std_require_finite_mat(a);
     if (status != LMMC_STATUS_OK) return status;
-    status = lmmc_lsr_require_finite_mat(b);
+    status = lmmc_std_require_finite_mat(b);
     if (status != LMMC_STATUS_OK) return status;
     if (a->rows != a->cols || b->cols != a->rows) {
         return LMMC_STATUS_DIMENSION_MISMATCH;
     }
 
-    status = lmmc_lsr_linalg_transpose(a, &at);
+    status = lmmc_std_linalg_transpose(a, &at);
     if (status != LMMC_STATUS_OK) goto cleanup;
-    status = lmmc_lsr_linalg_transpose(b, &bt);
+    status = lmmc_std_linalg_transpose(b, &bt);
     if (status != LMMC_STATUS_OK) goto cleanup;
-    status = lmmc_lsr_linalg_solve_left(&at, &bt, &xt);
+    status = lmmc_std_linalg_solve_left(&at, &bt, &xt);
     if (status != LMMC_STATUS_OK) goto cleanup;
-    status = lmmc_lsr_linalg_transpose(&xt, out);
+    status = lmmc_std_linalg_transpose(&xt, out);
 
 cleanup:
     lmmc_mat_destroy(&xt);
@@ -406,17 +406,17 @@ cleanup:
     return status;
 }
 
-lmmc_status_t lmmc_lsr_linalg_eig(const lmmc_mat_t* a,
+lmmc_status_t lmmc_std_linalg_eig(const lmmc_mat_t* a,
                                   lmmc_eigen_gen_full_result_t* out)
 {
     lmmc_status_t status;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    status = lmmc_lsr_require_finite_mat(a);
+    status = lmmc_std_require_finite_mat(a);
     if (status != LMMC_STATUS_OK) return status;
     if (a->rows != a->cols) return LMMC_STATUS_INVALID_ARGUMENT;
     status = lmmc_eigen_general_full(a, out);
     if (status != LMMC_STATUS_OK) return status;
-    status = lmmc_lsr_require_finite_eig_result(out);
+    status = lmmc_std_require_finite_eig_result(out);
     if (status != LMMC_STATUS_OK) {
         lmmc_eigen_gen_full_result_destroy(out);
         return status;
@@ -424,16 +424,16 @@ lmmc_status_t lmmc_lsr_linalg_eig(const lmmc_mat_t* a,
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_lsr_linalg_svd(const lmmc_mat_t* a,
+lmmc_status_t lmmc_std_linalg_svd(const lmmc_mat_t* a,
                                   lmmc_svd_result_t* out)
 {
     lmmc_status_t status;
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    status = lmmc_lsr_require_finite_mat(a);
+    status = lmmc_std_require_finite_mat(a);
     if (status != LMMC_STATUS_OK) return status;
     status = lmmc_svd(a, out);
     if (status != LMMC_STATUS_OK) return status;
-    status = lmmc_lsr_require_finite_svd_result(out);
+    status = lmmc_std_require_finite_svd_result(out);
     if (status != LMMC_STATUS_OK) {
         lmmc_svd_result_destroy(out);
         return status;
@@ -441,34 +441,34 @@ lmmc_status_t lmmc_lsr_linalg_svd(const lmmc_mat_t* a,
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_lsr_linalg_eig_table(const lmmc_mat_t* a,
-                                        lmmc_lsr_eig_table_t* out)
+lmmc_status_t lmmc_std_linalg_eig_table(const lmmc_mat_t* a,
+                                        lmmc_std_eig_table_t* out)
 {
     lmmc_status_t status;
     lmmc_eigen_gen_full_result_t raw = {0};
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
     memset(out, 0, sizeof(*out));
-    status = lmmc_lsr_require_finite_mat(a);
+    status = lmmc_std_require_finite_mat(a);
     if (status != LMMC_STATUS_OK) return status;
-    status = lmmc_lsr_linalg_eig(a, &raw);
+    status = lmmc_std_linalg_eig(a, &raw);
     if (status != LMMC_STATUS_OK) return status;
 
-    status = lmmc_lsr_vec_to_column(&raw.real_parts, &out->values_real);
+    status = lmmc_std_vec_to_column(&raw.real_parts, &out->values_real);
     if (status != LMMC_STATUS_OK) goto cleanup;
-    status = lmmc_lsr_vec_to_column(&raw.imag_parts, &out->values_imag);
+    status = lmmc_std_vec_to_column(&raw.imag_parts, &out->values_imag);
     if (status != LMMC_STATUS_OK) goto cleanup;
-    status = lmmc_lsr_copy_mat(&raw.vectors_real, &out->vectors_real);
+    status = lmmc_std_copy_mat(&raw.vectors_real, &out->vectors_real);
     if (status != LMMC_STATUS_OK) goto cleanup;
-    status = lmmc_lsr_copy_mat(&raw.vectors_imag, &out->vectors_imag);
+    status = lmmc_std_copy_mat(&raw.vectors_imag, &out->vectors_imag);
     if (status != LMMC_STATUS_OK) goto cleanup;
 
 cleanup:
     lmmc_eigen_gen_full_result_destroy(&raw);
-    if (status != LMMC_STATUS_OK) lmmc_lsr_eig_table_destroy(out);
+    if (status != LMMC_STATUS_OK) lmmc_std_eig_table_destroy(out);
     return status;
 }
 
-const lmmc_mat_t* lmmc_lsr_eig_table_get(const lmmc_lsr_eig_table_t* table,
+const lmmc_mat_t* lmmc_std_eig_table_get(const lmmc_std_eig_table_t* table,
                                          const char* key)
 {
     if (!table || !key) return NULL;
@@ -479,12 +479,12 @@ const lmmc_mat_t* lmmc_lsr_eig_table_get(const lmmc_lsr_eig_table_t* table,
     return NULL;
 }
 
-size_t lmmc_lsr_eig_table_count(const lmmc_lsr_eig_table_t* table)
+size_t lmmc_std_eig_table_count(const lmmc_std_eig_table_t* table)
 {
     return table ? 4u : 0u;
 }
 
-const char* lmmc_lsr_eig_table_key(const lmmc_lsr_eig_table_t* table,
+const char* lmmc_std_eig_table_key(const lmmc_std_eig_table_t* table,
                                    size_t index)
 {
     static const char* keys[] = {
@@ -497,7 +497,7 @@ const char* lmmc_lsr_eig_table_key(const lmmc_lsr_eig_table_t* table,
     return keys[index];
 }
 
-void lmmc_lsr_eig_table_destroy(lmmc_lsr_eig_table_t* table)
+void lmmc_std_eig_table_destroy(lmmc_std_eig_table_t* table)
 {
     if (!table) return;
     lmmc_mat_destroy(&table->values_real);
@@ -506,32 +506,32 @@ void lmmc_lsr_eig_table_destroy(lmmc_lsr_eig_table_t* table)
     lmmc_mat_destroy(&table->vectors_imag);
 }
 
-lmmc_status_t lmmc_lsr_linalg_svd_table(const lmmc_mat_t* a,
-                                        lmmc_lsr_svd_table_t* out)
+lmmc_status_t lmmc_std_linalg_svd_table(const lmmc_mat_t* a,
+                                        lmmc_std_svd_table_t* out)
 {
     lmmc_status_t status;
     lmmc_svd_result_t raw = {0};
     if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
     memset(out, 0, sizeof(*out));
-    status = lmmc_lsr_require_finite_mat(a);
+    status = lmmc_std_require_finite_mat(a);
     if (status != LMMC_STATUS_OK) return status;
-    status = lmmc_lsr_linalg_svd(a, &raw);
+    status = lmmc_std_linalg_svd(a, &raw);
     if (status != LMMC_STATUS_OK) return status;
 
-    status = lmmc_lsr_copy_mat(&raw.U, &out->U);
+    status = lmmc_std_copy_mat(&raw.U, &out->U);
     if (status != LMMC_STATUS_OK) goto cleanup;
-    status = lmmc_lsr_vec_to_diag(&raw.sigma, raw.U.cols, raw.Vt.rows, &out->S);
+    status = lmmc_std_vec_to_diag(&raw.sigma, raw.U.cols, raw.Vt.rows, &out->S);
     if (status != LMMC_STATUS_OK) goto cleanup;
-    status = lmmc_lsr_copy_mat(&raw.Vt, &out->Vt);
+    status = lmmc_std_copy_mat(&raw.Vt, &out->Vt);
     if (status != LMMC_STATUS_OK) goto cleanup;
 
 cleanup:
     lmmc_svd_result_destroy(&raw);
-    if (status != LMMC_STATUS_OK) lmmc_lsr_svd_table_destroy(out);
+    if (status != LMMC_STATUS_OK) lmmc_std_svd_table_destroy(out);
     return status;
 }
 
-const lmmc_mat_t* lmmc_lsr_svd_table_get(const lmmc_lsr_svd_table_t* table,
+const lmmc_mat_t* lmmc_std_svd_table_get(const lmmc_std_svd_table_t* table,
                                          const char* key)
 {
     if (!table || !key) return NULL;
@@ -541,12 +541,12 @@ const lmmc_mat_t* lmmc_lsr_svd_table_get(const lmmc_lsr_svd_table_t* table,
     return NULL;
 }
 
-size_t lmmc_lsr_svd_table_count(const lmmc_lsr_svd_table_t* table)
+size_t lmmc_std_svd_table_count(const lmmc_std_svd_table_t* table)
 {
     return table ? 3u : 0u;
 }
 
-const char* lmmc_lsr_svd_table_key(const lmmc_lsr_svd_table_t* table,
+const char* lmmc_std_svd_table_key(const lmmc_std_svd_table_t* table,
                                    size_t index)
 {
     static const char* keys[] = {"U", "S", "Vt"};
@@ -554,7 +554,7 @@ const char* lmmc_lsr_svd_table_key(const lmmc_lsr_svd_table_t* table,
     return keys[index];
 }
 
-void lmmc_lsr_svd_table_destroy(lmmc_lsr_svd_table_t* table)
+void lmmc_std_svd_table_destroy(lmmc_std_svd_table_t* table)
 {
     if (!table) return;
     lmmc_mat_destroy(&table->U);

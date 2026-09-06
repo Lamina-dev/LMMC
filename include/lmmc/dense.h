@@ -175,8 +175,9 @@ lmmc_status_t lmmc_mat_transpose_to(const lmmc_mat_t* src, lmmc_mat_t* dst);
  *
  * @return
  * - ::LMMC_STATUS_OK - 成功.
- * - ::LMMC_STATUS_INVALID_ARGUMENT - 指针为 NULL.
- * - ::LMMC_STATUS_DIMENSION_MISMATCH - op(A) 的列数 != op(B) 的行数,或 C 维度不匹配.
+ * - ::LMMC_STATUS_INVALID_ARGUMENT - 指针为 NULL、存储包络溢出，或 C 与 A/B 重叠.
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH - op(A) 的列数 != op(B) 的行数,或 C 维度不匹配；
+ *   维度错误优先于重叠检查.
  *
  * @par 副作用
  * - 就地修改 C->data.A,B 不被修改.无内存分配.
@@ -227,6 +228,9 @@ lmmc_status_t lmmc_mat_mul(const lmmc_mat_t* a, const lmmc_mat_t* b, lmmc_mat_t*
 
 /**
  * @brief 计算矩阵的 Frobenius 范数:@f$\|A\|_F = \sqrt{\sum_{i,j} A_{ij}^2}@f$.
+ *
+ * 使用缩放平方和累加，避免元素平方造成的中间溢出或下溢；
+ * 最终数学结果超出 binary64 表示域时仍可为无穷。
  *
  * @param[in]  a        输入矩阵(不被修改).
  * @param[out] out_norm 输出范数值.
@@ -340,6 +344,8 @@ lmmc_status_t lmmc_mat_vec_mul(const lmmc_mat_t* a, const lmmc_vec_t* x, lmmc_ve
 
 /**
  * @brief 计算向量的欧几里得(L2)范数:@f$\|x\|_2 = \sqrt{\sum_i x_i^2}@f$.
+ * 使用缩放平方和累加，避免元素平方造成的中间溢出或下溢；
+ * 最终数学结果超出 binary64 表示域时仍可为无穷。
  *
  *
  * @param[in]  x        输入向量(不被修改),size 必须 > 0.

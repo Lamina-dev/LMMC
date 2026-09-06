@@ -61,11 +61,11 @@ typedef lmmc_real_t (*lmmc_opt_obj_t)(const lmmc_vec_t* x, void* user_data);
  * @brief 优化算法配置参数。
  */
 typedef struct {
-    lmmc_real_t abs_tol;       /**< 绝对收敛容差。 */
-    lmmc_real_t rel_tol;       /**< 相对收敛容差。 */
-    size_t max_iter;           /**< 最大迭代次数。 */
-    size_t lbfgs_memory;       /**< L-BFGS 存储的 (s,y) 对数，默认 10。 */
-    lmmc_real_t lm_damping;    /**< Levenberg-Marquardt 初始阻尼参数 λ。 */
+    lmmc_real_t abs_tol;       /**< 残差或梯度范数的绝对收敛容差。 */
+    lmmc_real_t rel_tol;       /**< 相对于初始范数的收敛容差，范围 [0,1)。 */
+    size_t max_iter;           /**< 最大迭代次数，必须大于 0。 */
+    size_t lbfgs_memory;       /**< L-BFGS 存储的 (s,y) 对数，必须大于 0。 */
+    lmmc_real_t lm_damping;    /**< LM 初始阻尼参数 λ，必须为有限正数。 */
     lmmc_diagnostic_sink_t diagnostics; /**< 统一诊断出口。 */
 } lmmc_optimize_config_t;
 
@@ -95,14 +95,20 @@ typedef struct {
  *
  * 默认值：abs_tol=1e-12, rel_tol=1e-10, max_iter=1000,
  * lbfgs_memory=10, lm_damping=1e-3，诊断 sink 为空。
+ * 所有求解器在分配工作区或调用用户回调前验证配置。收敛条件为
+ * `norm <= abs_tol` 或 `norm <= rel_tol * initial_norm`。
  */
 lmmc_status_t lmmc_optimize_default_config(lmmc_optimize_config_t* cfg);
 
 /**
  * @brief Newton 法求解非线性方程组 F(x) = 0。
  *
- * 每步求解 J(x)δ = -F(x)，通过 LU 分解。若 J 为 NULL，
- * 使用前向有限差分近似 Jacobian。
+ * 每步求解 J(x)δ = -F(x) 并通过 LU 分解；若 J 为 NULL，则使用
+ * 单边有限差分近似 Jacobian，默认步长大小为
+ * `sqrt(LMMC_REAL_EPSILON) * max(|x_j|, 1)`。优先使用前向扰动；
+ * 当前向点不可表示时自动改用后向扰动，并使用实际可表示步长。
+ * 残差范数采用缩放平方和计算，避免有限大残差或小残差因直接平方而
+ * 溢出或下溢。
  *
  * @param[in]     F         非线性函数回调。
  * @param[in]     J         Jacobian 回调（可为 NULL，使用有限差分）。
