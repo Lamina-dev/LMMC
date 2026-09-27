@@ -53,7 +53,8 @@ typedef struct {
     size_t restart;                                   /**< GMRES 重启长度（其它求解器忽略）。 */
     lmmc_diagnostic_sink_t diagnostics;               /**< 统一诊断出口。 */
     lmmc_matvec_op_t apply_op;                        /**< 矩阵-向量乘法算子回调，NULL 表示使用稀疏矩阵。 */
-    void* op_user_data;                               /**< 传递给 @c apply_op 的上下文。 */
+    void* op_user_data;                               /**< 传递给矩阵算子回调的共享上下文。 */
+    lmmc_matvec_op_t apply_transpose_op;              /**< 转置矩阵-向量乘法回调；仅 LSQR matrix-free 模式使用。 */
 } lmmc_itersolve_config_t;
 
 /**
@@ -176,9 +177,9 @@ lmmc_status_t lmmc_minres_solve(
 /**
  * @brief LSQR 求解最小二乘问题 min ||Ax - b||_2 。
  *
- * 基于 Golub-Kahan 双对角化。当 cfg->apply_op 非 NULL 时使用 matrix-free 模式
- * （此时 a 必须为 NULL）。若同时提供 a 和 cfg->apply_op ，
- * 返回 LMMC_STATUS_INVALID_ARGUMENT 。
+ * 基于 Golub-Kahan 双对角化。matrix-free 模式要求 cfg->apply_op 和
+ * cfg->apply_transpose_op 同时非 NULL，并分别计算 A*x 和 A^T*x，共享
+ * cfg->op_user_data；此时 a 必须为 NULL。显式矩阵模式要求两个回调均为 NULL。
  */
 lmmc_status_t lmmc_lsqr_solve(
     const lmmc_sparse_mat_t* a,

@@ -16,11 +16,13 @@
  *      "A Linear Filtering Approach to the Computation of Discrete Fourier Transform," 1970.
  */
 #include <math.h>
+#include <stdint.h>
 #include <string.h>
 #include "memory_bridge.h"
 #include "internal.h"
 #include "lmmc/config.h"
-#include "lmmc/numeric.h"
+#include "lmmc/fft.h"
+#include "lmmc/numeric_scalar.h"
 
 /**
  * @brief Check if n is a power of 2.
@@ -29,24 +31,15 @@ static int fft_is_power_of_two(size_t n) {
     return (n > 0) && ((n & (n - 1)) == 0);
 }
 
-/**
- * @brief Check if n is a power of 4.
- */
-static int fft_is_power_of_four(size_t n) {
-    if (n == 0) return 0;
-    if ((n & (n - 1)) != 0) return 0;
-    /** 2 的幂仅有一个置位;该位位于偶数位置时数值同时为 4 的幂. */
-    return (n & 0x5555555555555555ULL) != 0;
-}
 
 /**
  * @brief Compute the next power of 2 >= n.
  */
 static size_t fft_next_power_of_two(size_t n) {
     size_t p = 1;
-    if (n == 0) return 1;
+    if (n == 0) { return 1; }
     while (p < n) {
-        if (p > SIZE_MAX / 2) return 0;
+        if (p > SIZE_MAX / 2) { return 0; }
         p <<= 1;
     }
     return p;
@@ -83,7 +76,7 @@ static lmmc_status_t fft_radix2(lmmc_real_t* real, lmmc_real_t* imag, size_t n, 
     size_t len, i, j;
     double angle_sign;
 
-    if (n <= 1) return LMMC_STATUS_OK;
+    if (n <= 1) { return LMMC_STATUS_OK; }
 
     fft_bit_reverse(real, imag, n);
 
@@ -121,7 +114,7 @@ static lmmc_status_t fft_radix2(lmmc_real_t* real, lmmc_real_t* imag, size_t n, 
                 }
             }
         }
-        if (len == n) break;
+        if (len == n) { break; }
     }
 
     if (inverse) {
@@ -133,6 +126,51 @@ static lmmc_status_t fft_radix2(lmmc_real_t* real, lmmc_real_t* imag, size_t n, 
     }
 
     return LMMC_STATUS_OK;
+}
+
+static void fft_chirp_input(
+    const lmmc_real_t* real, const lmmc_real_t* imag,
+    lmmc_real_t* a_r, lmmc_real_t* a_i, size_t n, double sign)
+{
+    size_t k;
+    for (k = 0; k < n; ++k) {
+        const double kd = (double)k;
+        const double phase = sign * LMMC_PI * kd * kd / (double)n;
+        const double c = cos(phase);
+        const double s = sin(phase);
+        a_r[k] = real[k] * c - imag[k] * s;
+        a_i[k] = imag[k] * c + real[k] * s;
+    }
+}
+
+static void fft_chirp_kernel(
+    lmmc_real_t* b_r, lmmc_real_t* b_i,
+    size_t n, size_t m, double sign)
+{
+    size_t k;
+    for (k = 0; k < n; ++k) {
+        const double kd = (double)k;
+        const double phase = -sign * LMMC_PI * kd * kd / (double)n;
+        b_r[k] = cos(phase);
+        b_i[k] = sin(phase);
+    }
+    for (k = 1; k < n; ++k) {
+        b_r[m - k] = b_r[k];
+        b_i[m - k] = b_i[k];
+    }
+}
+
+static void fft_pointwise_product(
+    lmmc_real_t* a_r, lmmc_real_t* a_i,
+    const lmmc_real_t* b_r, const lmmc_real_t* b_i, size_t n)
+{
+    size_t k;
+    for (k = 0; k < n; ++k) {
+        const double tr = a_r[k] * b_r[k] - a_i[k] * b_i[k];
+        const double ti = a_r[k] * b_i[k] + a_i[k] * b_r[k];
+        a_r[k] = tr;
+        a_i[k] = ti;
+    }
 }
 
 /**
@@ -164,13 +202,13 @@ static lmmc_status_t fft_bluestein(lmmc_real_t* real, lmmc_real_t* imag, size_t 
     }
     --convolution_length;
     m = fft_next_power_of_two(convolution_length);
-    if (m == 0) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (m == 0) { return LMMC_STATUS_INVALID_ARGUMENT; }
 
     /** 分配工作数组. */
-    a_r = (lmmc_real_t*)lmmc_alloc_array(m, sizeof(lmmc_real_t));
-    a_i = (lmmc_real_t*)lmmc_alloc_array(m, sizeof(lmmc_real_t));
-    b_r = (lmmc_real_t*)lmmc_alloc_array(m, sizeof(lmmc_real_t));
-    b_i = (lmmc_real_t*)lmmc_alloc_array(m, sizeof(lmmc_real_t));
+    a_r = (lmmc_real_t*)lmmc_memory_alloc_array(m, sizeof(lmmc_real_t));
+    a_i = (lmmc_real_t*)lmmc_memory_alloc_array(m, sizeof(lmmc_real_t));
+    b_r = (lmmc_real_t*)lmmc_memory_alloc_array(m, sizeof(lmmc_real_t));
+    b_i = (lmmc_real_t*)lmmc_memory_alloc_array(m, sizeof(lmmc_real_t));
 
     if (a_r == NULL || a_i == NULL || b_r == NULL || b_i == NULL) {
         st = LMMC_STATUS_ALLOCATION_FAILED;
@@ -188,61 +226,25 @@ static lmmc_status_t fft_bluestein(lmmc_real_t* real, lmmc_real_t* imag, size_t 
      */
     sign = inverse ? 1.0 : -1.0;
 
-    /** 构造 chirp 调制输入 a[k] = x[k] * exp(sign*i*pi*k^2/N). */
-    for (k = 0; k < n; ++k) {
-        const double kd = (double)k;
-        double phase = sign * LMMC_PI * kd * kd / (double)n;
-        double c = cos(phase);
-        double s = sin(phase);
-        /** 将输入乘以 c + i*s. */
-        a_r[k] = real[k] * c - imag[k] * s;
-        a_i[k] = imag[k] * c + real[k] * s;
-    }
-
-    /** 构造卷积核 b[k] = exp(-sign*i*pi*k^2/N),并为负索引设置环绕项. */
-    for (k = 0; k < n; ++k) {
-        const double kd = (double)k;
-        double phase = -sign * LMMC_PI * kd * kd / (double)n;
-        double c = cos(phase);
-        double s = sin(phase);
-        b_r[k] = c;
-        b_i[k] = s;
-    }
-    /** 设置环绕项 b[m-k] = b[k],k = 1..n-1. */
-    for (k = 1; k < n; ++k) {
-        b_r[m - k] = b_r[k];
-        b_i[m - k] = b_i[k];
-    }
+    fft_chirp_input(real, imag, a_r, a_i, n, sign);
+    fft_chirp_kernel(b_r, b_i, n, m, sign);
 
     /** 对 a 与 b 执行长度 m 的正向 radix-2 FFT. */
     st = fft_radix2(a_r, a_i, m, 0);
-    if (st != LMMC_STATUS_OK) goto cleanup;
+    if (st != LMMC_STATUS_OK) { goto cleanup; }
 
     st = fft_radix2(b_r, b_i, m, 0);
-    if (st != LMMC_STATUS_OK) goto cleanup;
+    if (st != LMMC_STATUS_OK) { goto cleanup; }
 
     /** 逐点计算 a = a * b. */
-    for (k = 0; k < m; ++k) {
-        double tr = a_r[k] * b_r[k] - a_i[k] * b_i[k];
-        double ti = a_r[k] * b_i[k] + a_i[k] * b_r[k];
-        a_r[k] = tr;
-        a_i[k] = ti;
-    }
+    fft_pointwise_product(a_r, a_i, b_r, b_i, m);
 
     /* Inverse FFT of the product */
     st = fft_radix2(a_r, a_i, m, 1);
-    if (st != LMMC_STATUS_OK) goto cleanup;
+    if (st != LMMC_STATUS_OK) { goto cleanup; }
 
-    /* Extract result: X[k] = a[k] * exp(sign * i * pi * k^2 / N) */
-    for (k = 0; k < n; ++k) {
-        const double kd = (double)k;
-        double phase = sign * LMMC_PI * kd * kd / (double)n;
-        double c = cos(phase);
-        double s = sin(phase);
-        /* result[k] = a[k] * exp(sign*i*pi*k^2/N) = a[k] * (c + i*s) */
-        real[k] = a_r[k] * c - a_i[k] * s;
-        imag[k] = a_i[k] * c + a_r[k] * s;
-    }
+    /** @brief 解调与输入调制采用相同相位。 */
+    fft_chirp_input(a_r, a_i, real, imag, n, sign);
 
     /* For inverse FFT, normalize by 1/N */
     if (inverse) {
@@ -254,10 +256,10 @@ static lmmc_status_t fft_bluestein(lmmc_real_t* real, lmmc_real_t* imag, size_t 
     }
 
 cleanup:
-    if (a_r) lmmc_free(a_r);
-    if (a_i) lmmc_free(a_i);
-    if (b_r) lmmc_free(b_r);
-    if (b_i) lmmc_free(b_i);
+    lmmc_memory_free(a_r);
+    lmmc_memory_free(a_i);
+    lmmc_memory_free(b_r);
+    lmmc_memory_free(b_i);
     return st;
 }
 
@@ -279,7 +281,7 @@ lmmc_status_t lmmc_fft(lmmc_real_t* real, lmmc_real_t* imag, size_t n, int inver
     }
 
     /* Dispatch: power-of-4 -> radix-4, power-of-2 -> radix-2, else -> Bluestein */
-    if (fft_is_power_of_four(n)) {
+    if (lmmc_is_power_of_four(n, NULL)) {
         return lmmc_fft_radix4(real, imag, n, inverse ? 1 : 0);
     } else if (fft_is_power_of_two(n)) {
         return fft_radix2(real, imag, n, inverse ? 1 : 0);
@@ -296,6 +298,32 @@ lmmc_status_t lmmc_fft_inverse(lmmc_real_t* real, lmmc_real_t* imag, size_t n) {
     return lmmc_fft(real, imag, n, 1);
 }
 
+static int fft_padding_overlaps(
+    const lmmc_storage_envelope_t* real_in,
+    const lmmc_storage_envelope_t* imag_in,
+    const lmmc_storage_envelope_t* real_out,
+    const lmmc_storage_envelope_t* imag_out,
+    const lmmc_storage_envelope_t* nfft)
+{
+    if (lmmc_storage_envelopes_overlap(real_out, imag_out)) {
+        return 1;
+    }
+    if (lmmc_storage_envelopes_overlap(real_out, real_in) ||
+        lmmc_storage_envelopes_overlap(real_out, imag_in)) {
+        return 1;
+    }
+    if (lmmc_storage_envelopes_overlap(imag_out, real_in) ||
+        lmmc_storage_envelopes_overlap(imag_out, imag_in)) {
+        return 1;
+    }
+    if (lmmc_storage_envelopes_overlap(nfft, real_in) ||
+        lmmc_storage_envelopes_overlap(nfft, imag_in)) {
+        return 1;
+    }
+    return lmmc_storage_envelopes_overlap(nfft, real_out) ||
+           lmmc_storage_envelopes_overlap(nfft, imag_out);
+}
+
 lmmc_status_t lmmc_fft_radix4_pad_into(
     const lmmc_real_t* real_in, const lmmc_real_t* imag_in, size_t n,
     lmmc_real_t* real_out, lmmc_real_t* imag_out, size_t* out_nfft)
@@ -308,8 +336,10 @@ lmmc_status_t lmmc_fft_radix4_pad_into(
     lmmc_storage_envelope_t imag_out_envelope;
     lmmc_storage_envelope_t nfft_envelope;
 
-    if (real_in == NULL || imag_in == NULL || real_out == NULL ||
-        imag_out == NULL || out_nfft == NULL || n == 0) {
+    if (real_in == NULL || imag_in == NULL || n == 0) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (real_out == NULL || imag_out == NULL || out_nfft == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -326,16 +356,12 @@ lmmc_status_t lmmc_fft_radix4_pad_into(
         !lmmc_storage_envelope_checked(
             imag_out, 1, nfft, nfft, sizeof(lmmc_real_t), &imag_out_envelope) ||
         !lmmc_storage_envelope_checked(
-            out_nfft, 1, 1, 1, sizeof(size_t), &nfft_envelope) ||
-        lmmc_storage_envelopes_overlap(&real_out_envelope, &imag_out_envelope) ||
-        lmmc_storage_envelopes_overlap(&real_out_envelope, &real_in_envelope) ||
-        lmmc_storage_envelopes_overlap(&real_out_envelope, &imag_in_envelope) ||
-        lmmc_storage_envelopes_overlap(&imag_out_envelope, &real_in_envelope) ||
-        lmmc_storage_envelopes_overlap(&imag_out_envelope, &imag_in_envelope) ||
-        lmmc_storage_envelopes_overlap(&nfft_envelope, &real_in_envelope) ||
-        lmmc_storage_envelopes_overlap(&nfft_envelope, &imag_in_envelope) ||
-        lmmc_storage_envelopes_overlap(&nfft_envelope, &real_out_envelope) ||
-        lmmc_storage_envelopes_overlap(&nfft_envelope, &imag_out_envelope)) {
+            out_nfft, 1, 1, 1, sizeof(size_t), &nfft_envelope)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (fft_padding_overlaps(&real_in_envelope, &imag_in_envelope,
+                             &real_out_envelope, &imag_out_envelope,
+                             &nfft_envelope)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 

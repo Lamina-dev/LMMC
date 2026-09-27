@@ -110,18 +110,10 @@ lmmc_status_t lmmc_lu_decompose_inplace(lmmc_mat_t* a, size_t* pivots, size_t* o
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_lu_solve(const lmmc_mat_t* lu, const size_t* pivots, const lmmc_vec_t* b, lmmc_vec_t* x) {
-    size_t n = 0;
-    size_t i = 0;
-
-    if (lu == NULL || pivots == NULL || b == NULL || x == NULL || lu->data == NULL || b->data == NULL || x->data == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (lu->rows != lu->cols || b->size != lu->rows || x->size != lu->rows) {
-        return LMMC_STATUS_DIMENSION_MISMATCH;
-    }
-
-    n = lu->rows;
+static void lmmc_lu_forward(const lmmc_mat_t* lu, const size_t* pivots,
+    const lmmc_vec_t* b, lmmc_vec_t* x) {
+    size_t n = lu->rows;
+    size_t i;
     for (i = 0; i < n; ++i) {
         LMMC_REAL_SET(&x->data[i], &b->data[i]);
     }
@@ -148,6 +140,21 @@ lmmc_status_t lmmc_lu_solve(const lmmc_mat_t* lu, const size_t* pivots, const lm
             LMMC_REAL_CLEAR(&tmp);
         }
     }
+}
+
+lmmc_status_t lmmc_lu_solve(const lmmc_mat_t* lu, const size_t* pivots, const lmmc_vec_t* b, lmmc_vec_t* x) {
+    size_t n = 0;
+    size_t i = 0;
+
+    if (lu == NULL || pivots == NULL || b == NULL || x == NULL || lu->data == NULL || b->data == NULL || x->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (lu->rows != lu->cols || b->size != lu->rows || x->size != lu->rows) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    n = lu->rows;
+    lmmc_lu_forward(lu, pivots, b, x);
 
     lmmc_real_t eps;
     lmmc_real_t abs_lu;
@@ -296,59 +303,41 @@ lmmc_status_t lmmc_cholesky_solve(const lmmc_mat_t* l, const lmmc_vec_t* b, lmmc
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_qr_decompose_inplace(lmmc_mat_t* a, lmmc_real_t* tau, size_t tau_size) {
-    size_t m = 0;
-    size_t n = 0;
-    size_t k = 0;
+static void lmmc_qr_update_trailing(lmmc_mat_t* a,
+    const lmmc_real_t* tau, size_t k) {
+    size_t m = a->rows;
+    size_t n = a->cols;
+    size_t i, j;
+            for (j = k + 1; j < n; ++j) {
+                lmmc_real_t dot;
+                LMMC_REAL_INIT(&dot);
+                LMMC_REAL_SET(&dot, &a->data[k * a->stride + j]);
+                for (i = k + 1; i < m; ++i) {
+                    lmmc_real_t tmp;
+                    LMMC_REAL_INIT(&tmp);
+                    LMMC_REAL_MUL(&tmp, &a->data[i * a->stride + k], &a->data[i * a->stride + j]);
+                    LMMC_REAL_ADD(&dot, &dot, &tmp);
+                    LMMC_REAL_CLEAR(&tmp);
+                }
+                LMMC_REAL_MUL(&dot, &dot, &tau[k]);
 
-    if (a == NULL || tau == NULL || a->data == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
+                LMMC_REAL_SUB(&a->data[k * a->stride + j], &a->data[k * a->stride + j], &dot);
+                for (i = k + 1; i < m; ++i) {
+                    lmmc_real_t tmp;
+                    LMMC_REAL_INIT(&tmp);
+                    LMMC_REAL_MUL(&tmp, &a->data[i * a->stride + k], &dot);
+                    LMMC_REAL_SUB(&a->data[i * a->stride + j], &a->data[i * a->stride + j], &tmp);
+                    LMMC_REAL_CLEAR(&tmp);
+                }
+                LMMC_REAL_CLEAR(&dot);
+            }
+}
 
-    m = a->rows;
-    n = a->cols;
-    if (m == 0 || n == 0) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (tau_size < (m < n ? m : n)) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
-    for (k = 0; k < (m < n ? m : n); ++k) {
-        size_t i = 0;
-        size_t j = 0;
-        lmmc_real_t sigma;
-        lmmc_real_t alpha;
-        lmmc_real_t zero;
-
-        LMMC_REAL_INIT(&sigma);
-        LMMC_REAL_SET_D(&sigma, 0.0);
-        LMMC_REAL_INIT(&alpha);
-        LMMC_REAL_SET(&alpha, &a->data[k * a->stride + k]);
-
-        for (i = k + 1; i < m; ++i) {
-            lmmc_real_t v;
-            lmmc_real_t v_sq;
-            LMMC_REAL_INIT(&v);
-            LMMC_REAL_SET(&v, &a->data[i * a->stride + k]);
-            LMMC_REAL_INIT(&v_sq);
-            LMMC_REAL_MUL(&v_sq, &v, &v);
-            LMMC_REAL_ADD(&sigma, &sigma, &v_sq);
-            LMMC_REAL_CLEAR(&v_sq);
-            LMMC_REAL_CLEAR(&v);
-        }
-
-        LMMC_REAL_INIT(&zero);
-        LMMC_REAL_SET_D(&zero, 0.0);
-        if (LMMC_REAL_CMP(&sigma, &zero) == 0) {
-            LMMC_REAL_SET(&tau[k], &zero);
-            LMMC_REAL_CLEAR(&zero);
-            LMMC_REAL_CLEAR(&alpha);
-            LMMC_REAL_CLEAR(&sigma);
-            continue;
-        }
-
-        {
+static void lmmc_qr_reflector(lmmc_mat_t* a, lmmc_real_t* tau,
+    size_t k, lmmc_real_t alpha, lmmc_real_t sigma) {
+    size_t m = a->rows;
+    size_t i;
+    lmmc_real_t zero = 0.0;
             lmmc_real_t norm;
             lmmc_real_t beta;
             lmmc_real_t v0;
@@ -381,36 +370,67 @@ lmmc_status_t lmmc_qr_decompose_inplace(lmmc_mat_t* a, lmmc_real_t* tau, size_t 
             LMMC_REAL_SUB(&tau[k], &beta, &alpha);
             LMMC_REAL_DIV(&tau[k], &tau[k], &beta);
 
-            for (j = k + 1; j < n; ++j) {
-                lmmc_real_t dot;
-                LMMC_REAL_INIT(&dot);
-                LMMC_REAL_SET(&dot, &a->data[k * a->stride + j]);
-                for (i = k + 1; i < m; ++i) {
-                    lmmc_real_t tmp;
-                    LMMC_REAL_INIT(&tmp);
-                    LMMC_REAL_MUL(&tmp, &a->data[i * a->stride + k], &a->data[i * a->stride + j]);
-                    LMMC_REAL_ADD(&dot, &dot, &tmp);
-                    LMMC_REAL_CLEAR(&tmp);
-                }
-                LMMC_REAL_MUL(&dot, &dot, &tau[k]);
-
-                LMMC_REAL_SUB(&a->data[k * a->stride + j], &a->data[k * a->stride + j], &dot);
-                for (i = k + 1; i < m; ++i) {
-                    lmmc_real_t tmp;
-                    LMMC_REAL_INIT(&tmp);
-                    LMMC_REAL_MUL(&tmp, &a->data[i * a->stride + k], &dot);
-                    LMMC_REAL_SUB(&a->data[i * a->stride + j], &a->data[i * a->stride + j], &tmp);
-                    LMMC_REAL_CLEAR(&tmp);
-                }
-                LMMC_REAL_CLEAR(&dot);
-            }
+    lmmc_qr_update_trailing(a, tau, k);
 
             LMMC_REAL_CLEAR(&sum);
             LMMC_REAL_CLEAR(&alpha_sq);
             LMMC_REAL_CLEAR(&v0);
             LMMC_REAL_CLEAR(&beta);
             LMMC_REAL_CLEAR(&norm);
+}
+
+lmmc_status_t lmmc_qr_decompose_inplace(lmmc_mat_t* a, lmmc_real_t* tau, size_t tau_size) {
+    size_t m = 0;
+    size_t n = 0;
+    size_t k = 0;
+
+    if (a == NULL || tau == NULL || a->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    m = a->rows;
+    n = a->cols;
+    if (m == 0 || n == 0) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (tau_size < (m < n ? m : n)) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+
+    for (k = 0; k < (m < n ? m : n); ++k) {
+        size_t i = 0;
+        lmmc_real_t sigma;
+        lmmc_real_t alpha;
+        lmmc_real_t zero;
+
+        LMMC_REAL_INIT(&sigma);
+        LMMC_REAL_SET_D(&sigma, 0.0);
+        LMMC_REAL_INIT(&alpha);
+        LMMC_REAL_SET(&alpha, &a->data[k * a->stride + k]);
+
+        for (i = k + 1; i < m; ++i) {
+            lmmc_real_t v;
+            lmmc_real_t v_sq;
+            LMMC_REAL_INIT(&v);
+            LMMC_REAL_SET(&v, &a->data[i * a->stride + k]);
+            LMMC_REAL_INIT(&v_sq);
+            LMMC_REAL_MUL(&v_sq, &v, &v);
+            LMMC_REAL_ADD(&sigma, &sigma, &v_sq);
+            LMMC_REAL_CLEAR(&v_sq);
+            LMMC_REAL_CLEAR(&v);
         }
+
+        LMMC_REAL_INIT(&zero);
+        LMMC_REAL_SET_D(&zero, 0.0);
+        if (LMMC_REAL_CMP(&sigma, &zero) == 0) {
+            LMMC_REAL_SET(&tau[k], &zero);
+            LMMC_REAL_CLEAR(&zero);
+            LMMC_REAL_CLEAR(&alpha);
+            LMMC_REAL_CLEAR(&sigma);
+            continue;
+        }
+
+        lmmc_qr_reflector(a, tau, k, alpha, sigma);
         LMMC_REAL_CLEAR(&zero);
         LMMC_REAL_CLEAR(&alpha);
         LMMC_REAL_CLEAR(&sigma);
@@ -419,31 +439,11 @@ lmmc_status_t lmmc_qr_decompose_inplace(lmmc_mat_t* a, lmmc_real_t* tau, size_t 
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_qr_solve(const lmmc_mat_t* qr, const lmmc_real_t* tau, const lmmc_vec_t* b, lmmc_vec_t* x) {
-    size_t m = 0;
-    size_t n = 0;
-    size_t k = 0;
-    lmmc_real_t* y = NULL;
-
-    if (qr == NULL || tau == NULL || b == NULL || x == NULL || qr->data == NULL || b->data == NULL || x->data == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    m = qr->rows;
-    n = qr->cols;
-    if (m < n || b->size != m || x->size != n) {
-        return LMMC_STATUS_DIMENSION_MISMATCH;
-    }
-
-    y = (lmmc_real_t*)lmmc_alloc_array(m, sizeof(lmmc_real_t));
-    if (y == NULL) {
-        return LMMC_STATUS_ALLOCATION_FAILED;
-    }
-
-    for (k = 0; k < m; ++k) {
-        LMMC_REAL_INIT(&y[k]);
-        LMMC_REAL_SET(&y[k], &b->data[k]);
-    }
-
+static void lmmc_qr_apply_transpose(const lmmc_mat_t* qr,
+    const lmmc_real_t* tau, lmmc_real_t* y) {
+    size_t m = qr->rows;
+    size_t n = qr->cols;
+    size_t k;
     for (k = 0; k < n; ++k) {
         size_t i = 0;
         lmmc_real_t dot;
@@ -467,7 +467,12 @@ lmmc_status_t lmmc_qr_solve(const lmmc_mat_t* qr, const lmmc_real_t* tau, const 
         }
         LMMC_REAL_CLEAR(&dot);
     }
+}
 
+static lmmc_status_t lmmc_qr_back_substitute(const lmmc_mat_t* qr,
+    const lmmc_real_t* y, lmmc_vec_t* x) {
+    size_t n = qr->cols;
+    size_t k;
     lmmc_real_t eps;
     lmmc_real_t abs_qr;
     LMMC_REAL_INIT(&eps);
@@ -491,14 +496,9 @@ lmmc_status_t lmmc_qr_solve(const lmmc_mat_t* qr, const lmmc_real_t* tau, const 
         lmmc_abs_to(&abs_qr, &qr->data[k * qr->stride + k]);
 
         if (LMMC_REAL_CMP(&abs_qr, &eps) <= 0) {
-            size_t c = 0;
             LMMC_REAL_CLEAR(&abs_qr);
             LMMC_REAL_CLEAR(&eps);
             LMMC_REAL_CLEAR(&rhs);
-            for (c = 0; c < m; ++c) {
-                LMMC_REAL_CLEAR(&y[c]);
-            }
-            lmmc_free(y);
             return LMMC_STATUS_SINGULAR_MATRIX;
         }
 
@@ -508,10 +508,38 @@ lmmc_status_t lmmc_qr_solve(const lmmc_mat_t* qr, const lmmc_real_t* tau, const 
 
     LMMC_REAL_CLEAR(&abs_qr);
     LMMC_REAL_CLEAR(&eps);
+    return LMMC_STATUS_OK;
+}
 
+lmmc_status_t lmmc_qr_solve(const lmmc_mat_t* qr, const lmmc_real_t* tau, const lmmc_vec_t* b, lmmc_vec_t* x) {
+    size_t m = 0;
+    size_t n = 0;
+    size_t k = 0;
+    lmmc_real_t* y = NULL;
+
+    if (qr == NULL || tau == NULL || b == NULL || x == NULL || qr->data == NULL || b->data == NULL || x->data == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    m = qr->rows;
+    n = qr->cols;
+    if (m < n || b->size != m || x->size != n) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+
+    y = (lmmc_real_t*)lmmc_memory_alloc_array(m, sizeof(lmmc_real_t));
+    if (y == NULL) {
+        return LMMC_STATUS_ALLOCATION_FAILED;
+    }
+
+    for (k = 0; k < m; ++k) {
+        LMMC_REAL_INIT(&y[k]);
+        LMMC_REAL_SET(&y[k], &b->data[k]);
+    }
+    lmmc_qr_apply_transpose(qr, tau, y);
+    lmmc_status_t status = lmmc_qr_back_substitute(qr, y, x);
     for (k = 0; k < m; ++k) {
         LMMC_REAL_CLEAR(&y[k]);
     }
-    lmmc_free(y);
-    return LMMC_STATUS_OK;
+    lmmc_memory_free(y);
+    return status;
 }

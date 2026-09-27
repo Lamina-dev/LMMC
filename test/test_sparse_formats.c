@@ -7,305 +7,257 @@
 #include "lmmc/lmmc.h"
 #include "test_common.h"
 
-static int test_bsr_roundtrip(void) {
-    /* 创建一个 4x4 块带状稠密矩阵，block_size=2 */
-    lmmc_mat_t dense = {0}, recovered = {0};
-    lmmc_sparse_bsr_t bsr = {0};
-    lmmc_status_t st;
-    size_t i, j;
+#include <stdlib.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
+#include <cmocka.h>
 
-    st = lmmc_mat_create(4, 4, &dense);
-    if (st != LMMC_STATUS_OK) return 1;
+struct test_fixture {
+    lmmc_mat_t dense;
+    lmmc_mat_t recovered;
+    lmmc_sparse_bsr_t bsr;
+    lmmc_sparse_mat_t full_csr;
+    lmmc_sparse_sym_csr_t sym;
+    lmmc_vec_t x;
+    lmmc_vec_t y_full;
+    lmmc_vec_t y_sym;
+};
 
-    /* 填充：块 (0,0) 和 (1,1) 非零，块 (0,1) 和 (1,0) 为零 */
-    lmmc_real_t zero = 0.0;
-    lmmc_mat_fill(&dense, zero);
-
-    /* 块 (0,0): rows 0-1, cols 0-1 */
-    dense.data[0 * dense.stride + 0] = 1.0;
-    dense.data[0 * dense.stride + 1] = 2.0;
-    dense.data[1 * dense.stride + 0] = 3.0;
-    dense.data[1 * dense.stride + 1] = 4.0;
-
-    /* 块 (1,1): rows 2-3, cols 2-3 */
-    dense.data[2 * dense.stride + 2] = 5.0;
-    dense.data[2 * dense.stride + 3] = 6.0;
-    dense.data[3 * dense.stride + 2] = 7.0;
-    dense.data[3 * dense.stride + 3] = 8.0;
-
-    /* 转换为 BSR */
-    lmmc_real_t eps = 0.0;
-    st = lmmc_sparse_dense_to_bsr(&dense, 2, eps, &bsr);
-    if (st != LMMC_STATUS_OK) {
-        printf("FAIL: dense_to_bsr returned %d\n", (int)st);
-        lmmc_mat_destroy(&dense);
-        return 1;
-    }
-
-    /* 验证 BSR 结构 */
-    if (bsr.rows != 2 || bsr.cols != 2 || bsr.block_size != 2 || bsr.nnz_blocks != 2) {
-        printf("FAIL: BSR structure incorrect: rows=%zu cols=%zu bs=%zu nnz=%zu\n",
-               bsr.rows, bsr.cols, bsr.block_size, bsr.nnz_blocks);
-        lmmc_sparse_bsr_destroy(&bsr);
-        lmmc_mat_destroy(&dense);
-        return 1;
-    }
-
-    /* 转换回稠密 */
-    st = lmmc_mat_create(4, 4, &recovered);
-    if (st != LMMC_STATUS_OK) {
-        lmmc_sparse_bsr_destroy(&bsr);
-        lmmc_mat_destroy(&dense);
-        return 1;
-    }
-
-    st = lmmc_sparse_bsr_to_dense(&bsr, &recovered);
-    if (st != LMMC_STATUS_OK) {
-        printf("FAIL: bsr_to_dense returned %d\n", (int)st);
-        lmmc_mat_destroy(&recovered);
-        lmmc_sparse_bsr_destroy(&bsr);
-        lmmc_mat_destroy(&dense);
-        return 1;
-    }
-
-    /* 验证 round-trip */
-    for (i = 0; i < 4; ++i) {
-        for (j = 0; j < 4; ++j) {
-            lmmc_real_t orig = dense.data[i * dense.stride + j];
-            lmmc_real_t rec = recovered.data[i * recovered.stride + j];
-            if (!lmmc_test_nearly_equal(orig, rec, 1e-15)) {
-                printf("FAIL: BSR roundtrip mismatch at (%zu,%zu): %g vs %g\n",
-                       i, j, orig, rec);
-                lmmc_mat_destroy(&recovered);
-                lmmc_sparse_bsr_destroy(&bsr);
-                lmmc_mat_destroy(&dense);
-                return 1;
-            }
-        }
-    }
-
-    lmmc_mat_destroy(&recovered);
-    lmmc_sparse_bsr_destroy(&bsr);
-    lmmc_mat_destroy(&dense);
-    printf("PASS: test_bsr_roundtrip\n");
+static int setup(void **state) {
+    struct test_fixture *fixture = calloc(1, sizeof(*fixture));
+    *state = fixture;
+    assert_non_null(fixture);
     return 0;
 }
 
-static int test_sym_csr_spmv(void) {
+static int teardown(void **state) {
+    struct test_fixture *fixture = *state;
+    lmmc_vec_destroy(&fixture->y_sym);
+    lmmc_vec_destroy(&fixture->y_full);
+    lmmc_vec_destroy(&fixture->x);
+    lmmc_sparse_sym_csr_destroy(&fixture->sym);
+    lmmc_sparse_destroy(&fixture->full_csr);
+    lmmc_sparse_bsr_destroy(&fixture->bsr);
+    lmmc_mat_destroy(&fixture->recovered);
+    lmmc_mat_destroy(&fixture->dense);
+    free(fixture);
+    *state = NULL;
+    return 0;
+}
+
+static void check_bsr_dense_roundtrip(lmmc_mat_t *dense, lmmc_mat_t *recovered, lmmc_sparse_bsr_t *bsr) {
+
+    lmmc_status_t st;
+    st = lmmc_mat_create(4, 4, recovered);
+    assert_true(st == LMMC_STATUS_OK);
+
+    st = lmmc_sparse_bsr_to_dense(bsr, recovered);
+    assert_true(st == LMMC_STATUS_OK);
+
+    for (size_t i = 0; i < 4; ++i) {
+        for (size_t j = 0; j < 4; ++j) {
+            lmmc_real_t orig = dense->data[i * dense->stride + j];
+            lmmc_real_t rec = recovered->data[i * recovered->stride + j];
+            assert_true(lmmc_test_nearly_equal(orig, rec, 1e-15));
+        }
+    }
+}
+
+static void test_bsr_roundtrip(void **state) {
+    struct test_fixture *fixture = *state;
+
+    /* 创建一个 4x4 块带状稠密矩阵，block_size=2 */
+
+    lmmc_status_t st;
+
+    st = lmmc_mat_create(4, 4, &fixture->dense);
+    assert_true(st == LMMC_STATUS_OK);
+
+    /* 填充：块 (0,0) 和 (1,1) 非零，块 (0,1) 和 (1,0) 为零 */
+    lmmc_real_t zero = 0.0;
+    assert_int_equal(lmmc_mat_fill(&fixture->dense, zero), LMMC_STATUS_OK);
+
+    /* 块 (0,0): rows 0-1, cols 0-1 */
+    fixture->dense.data[0 * fixture->dense.stride + 0] = 1.0;
+    fixture->dense.data[0 * fixture->dense.stride + 1] = 2.0;
+    fixture->dense.data[1 * fixture->dense.stride + 0] = 3.0;
+    fixture->dense.data[1 * fixture->dense.stride + 1] = 4.0;
+
+    /* 块 (1,1): rows 2-3, cols 2-3 */
+    fixture->dense.data[2 * fixture->dense.stride + 2] = 5.0;
+    fixture->dense.data[2 * fixture->dense.stride + 3] = 6.0;
+    fixture->dense.data[3 * fixture->dense.stride + 2] = 7.0;
+    fixture->dense.data[3 * fixture->dense.stride + 3] = 8.0;
+
+    /* 转换为 BSR */
+    lmmc_real_t eps = 0.0;
+    st = lmmc_sparse_dense_to_bsr(&fixture->dense, 2, eps, &fixture->bsr);
+    assert_true(st == LMMC_STATUS_OK);
+
+    /* 验证 BSR 结构 */
+    assert_true((((fixture->bsr.rows == 2) && (fixture->bsr.cols == 2)) && (fixture->bsr.block_size == 2)) && (fixture->bsr.nnz_blocks == 2));
+
+    check_bsr_dense_roundtrip(&fixture->dense, &fixture->recovered, &fixture->bsr);
+}
+
+static void create_upper_reference_matrix(lmmc_sparse_mat_t *full_csr) {
+
+    lmmc_status_t st;
+    st = lmmc_sparse_create_csr(3, 3, 7, full_csr);
+    assert_true(st == LMMC_STATUS_OK);
+
+    full_csr->row_ptr[0] = 0;
+    full_csr->col_idx[0] = 0;
+    full_csr->values[0] = 4.0;
+    full_csr->col_idx[1] = 1;
+    full_csr->values[1] = 1.0;
+    full_csr->col_idx[2] = 2;
+    full_csr->values[2] = 2.0;
+    full_csr->row_ptr[1] = 3;
+    full_csr->col_idx[3] = 0;
+    full_csr->values[3] = 1.0;
+    full_csr->col_idx[4] = 1;
+    full_csr->values[4] = 3.0;
+    full_csr->row_ptr[2] = 5;
+    full_csr->col_idx[5] = 0;
+    full_csr->values[5] = 2.0;
+    full_csr->col_idx[6] = 2;
+    full_csr->values[6] = 5.0;
+    full_csr->row_ptr[3] = 7;
+}
+
+static void test_sym_csr_spmv(void **state) {
+    struct test_fixture *fixture = *state;
+
     /* 创建一个 3x3 对称矩阵:
      * A = [4 1 2]
      *     [1 3 0]
      *     [2 0 5]
      */
-    lmmc_sparse_mat_t full_csr = {0};
-    lmmc_sparse_sym_csr_t sym = {0};
-    lmmc_vec_t x = {0}, y_full = {0}, y_sym = {0};
+
     lmmc_status_t st;
     size_t i;
 
-    /* 构建完整 CSR：9 个非零元（含零元也存储以简化） */
-    /* 实际非零元：(0,0)=4, (0,1)=1, (0,2)=2, (1,0)=1, (1,1)=3, (2,0)=2, (2,2)=5 */
-    st = lmmc_sparse_create_csr(3, 3, 7, &full_csr);
-    if (st != LMMC_STATUS_OK) return 1;
-
-    /* Row 0: cols 0,1,2 */
-    full_csr.row_ptr[0] = 0;
-    full_csr.col_idx[0] = 0; full_csr.values[0] = 4.0;
-    full_csr.col_idx[1] = 1; full_csr.values[1] = 1.0;
-    full_csr.col_idx[2] = 2; full_csr.values[2] = 2.0;
-    /* Row 1: cols 0,1 */
-    full_csr.row_ptr[1] = 3;
-    full_csr.col_idx[3] = 0; full_csr.values[3] = 1.0;
-    full_csr.col_idx[4] = 1; full_csr.values[4] = 3.0;
-    /* Row 2: cols 0,2 */
-    full_csr.row_ptr[2] = 5;
-    full_csr.col_idx[5] = 0; full_csr.values[5] = 2.0;
-    full_csr.col_idx[6] = 2; full_csr.values[6] = 5.0;
-    full_csr.row_ptr[3] = 7;
+    create_upper_reference_matrix(&fixture->full_csr);
 
     /* 创建向量 x = [1, 2, 3] */
-    st = lmmc_vec_create(3, &x);
-    if (st != LMMC_STATUS_OK) { lmmc_sparse_destroy(&full_csr); return 1; }
-    x.data[0] = 1.0; x.data[1] = 2.0; x.data[2] = 3.0;
+    st = lmmc_vec_create(3, &fixture->x);
+    assert_true(st == LMMC_STATUS_OK);
+    fixture->x.data[0] = 1.0;
+    fixture->x.data[1] = 2.0;
+    fixture->x.data[2] = 3.0;
 
     /* 完整 CSR SpMV */
-    st = lmmc_vec_create(3, &y_full);
-    if (st != LMMC_STATUS_OK) { lmmc_vec_destroy(&x); lmmc_sparse_destroy(&full_csr); return 1; }
-    st = lmmc_sparse_mat_vec_mul(&full_csr, &x, &y_full);
-    if (st != LMMC_STATUS_OK) {
-        printf("FAIL: full CSR SpMV returned %d\n", (int)st);
-        lmmc_vec_destroy(&y_full); lmmc_vec_destroy(&x); lmmc_sparse_destroy(&full_csr);
-        return 1;
-    }
+    st = lmmc_vec_create(3, &fixture->y_full);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_sparse_mat_vec_mul(&fixture->full_csr, &fixture->x, &fixture->y_full);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* 转换为对称半存储（上三角） */
-    st = lmmc_sparse_sym_csr_from_csr(&full_csr, LMMC_SPARSE_SYM_UPPER, &sym);
-    if (st != LMMC_STATUS_OK) {
-        printf("FAIL: sym_csr_from_csr returned %d\n", (int)st);
-        lmmc_vec_destroy(&y_full); lmmc_vec_destroy(&x); lmmc_sparse_destroy(&full_csr);
-        return 1;
-    }
+    st = lmmc_sparse_sym_csr_from_csr(&fixture->full_csr, LMMC_SPARSE_SYM_UPPER, &fixture->sym);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* 对称 SpMV */
-    st = lmmc_vec_create(3, &y_sym);
-    if (st != LMMC_STATUS_OK) {
-        lmmc_sparse_sym_csr_destroy(&sym);
-        lmmc_vec_destroy(&y_full); lmmc_vec_destroy(&x); lmmc_sparse_destroy(&full_csr);
-        return 1;
-    }
-    st = lmmc_sparse_sym_spmv(&sym, &x, &y_sym);
-    if (st != LMMC_STATUS_OK) {
-        printf("FAIL: sym_spmv returned %d\n", (int)st);
-        lmmc_vec_destroy(&y_sym); lmmc_sparse_sym_csr_destroy(&sym);
-        lmmc_vec_destroy(&y_full); lmmc_vec_destroy(&x); lmmc_sparse_destroy(&full_csr);
-        return 1;
-    }
+    st = lmmc_vec_create(3, &fixture->y_sym);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_sparse_sym_spmv(&fixture->sym, &fixture->x, &fixture->y_sym);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* 比较结果 */
     for (i = 0; i < 3; ++i) {
-        if (!lmmc_test_nearly_equal(y_full.data[i], y_sym.data[i], 1e-12)) {
-            printf("FAIL: sym SpMV mismatch at [%zu]: full=%g sym=%g\n",
-                   i, y_full.data[i], y_sym.data[i]);
-            lmmc_vec_destroy(&y_sym); lmmc_sparse_sym_csr_destroy(&sym);
-            lmmc_vec_destroy(&y_full); lmmc_vec_destroy(&x); lmmc_sparse_destroy(&full_csr);
-            return 1;
-        }
+        assert_true(lmmc_test_nearly_equal(fixture->y_full.data[i], fixture->y_sym.data[i], 1e-12));
     }
-
-    lmmc_vec_destroy(&y_sym);
-    lmmc_sparse_sym_csr_destroy(&sym);
-    lmmc_vec_destroy(&y_full);
-    lmmc_vec_destroy(&x);
-    lmmc_sparse_destroy(&full_csr);
-    printf("PASS: test_sym_csr_spmv\n");
-    return 0;
 }
 
-static int test_sym_csr_lower(void) {
+static void create_lower_reference_matrix(lmmc_sparse_mat_t *full_csr) {
+
+    lmmc_status_t st;
+    st = lmmc_sparse_create_csr(3, 3, 7, full_csr);
+    assert_true(st == LMMC_STATUS_OK);
+
+    full_csr->row_ptr[0] = 0;
+    full_csr->col_idx[0] = 0;
+    full_csr->values[0] = 4.0;
+    full_csr->col_idx[1] = 1;
+    full_csr->values[1] = 1.0;
+    full_csr->col_idx[2] = 2;
+    full_csr->values[2] = 2.0;
+    full_csr->row_ptr[1] = 3;
+    full_csr->col_idx[3] = 0;
+    full_csr->values[3] = 1.0;
+    full_csr->col_idx[4] = 1;
+    full_csr->values[4] = 3.0;
+    full_csr->row_ptr[2] = 5;
+    full_csr->col_idx[5] = 0;
+    full_csr->values[5] = 2.0;
+    full_csr->col_idx[6] = 2;
+    full_csr->values[6] = 5.0;
+    full_csr->row_ptr[3] = 7;
+}
+
+static void test_sym_csr_lower(void **state) {
+    struct test_fixture *fixture = *state;
+
     /* 同样的 3x3 对称矩阵，但使用下三角存储 */
-    lmmc_sparse_mat_t full_csr = {0};
-    lmmc_sparse_sym_csr_t sym = {0};
-    lmmc_vec_t x = {0}, y_full = {0}, y_sym = {0};
+
     lmmc_status_t st;
     size_t i;
 
-    st = lmmc_sparse_create_csr(3, 3, 7, &full_csr);
-    if (st != LMMC_STATUS_OK) return 1;
+    create_lower_reference_matrix(&fixture->full_csr);
 
-    full_csr.row_ptr[0] = 0;
-    full_csr.col_idx[0] = 0; full_csr.values[0] = 4.0;
-    full_csr.col_idx[1] = 1; full_csr.values[1] = 1.0;
-    full_csr.col_idx[2] = 2; full_csr.values[2] = 2.0;
-    full_csr.row_ptr[1] = 3;
-    full_csr.col_idx[3] = 0; full_csr.values[3] = 1.0;
-    full_csr.col_idx[4] = 1; full_csr.values[4] = 3.0;
-    full_csr.row_ptr[2] = 5;
-    full_csr.col_idx[5] = 0; full_csr.values[5] = 2.0;
-    full_csr.col_idx[6] = 2; full_csr.values[6] = 5.0;
-    full_csr.row_ptr[3] = 7;
+    st = lmmc_vec_create(3, &fixture->x);
+    assert_true(st == LMMC_STATUS_OK);
+    fixture->x.data[0] = 1.0;
+    fixture->x.data[1] = 2.0;
+    fixture->x.data[2] = 3.0;
 
-    st = lmmc_vec_create(3, &x);
-    if (st != LMMC_STATUS_OK) { lmmc_sparse_destroy(&full_csr); return 1; }
-    x.data[0] = 1.0; x.data[1] = 2.0; x.data[2] = 3.0;
-
-    st = lmmc_vec_create(3, &y_full);
-    if (st != LMMC_STATUS_OK) { lmmc_vec_destroy(&x); lmmc_sparse_destroy(&full_csr); return 1; }
-    st = lmmc_sparse_mat_vec_mul(&full_csr, &x, &y_full);
-    if (st != LMMC_STATUS_OK) {
-        lmmc_vec_destroy(&y_full); lmmc_vec_destroy(&x); lmmc_sparse_destroy(&full_csr);
-        return 1;
-    }
+    st = lmmc_vec_create(3, &fixture->y_full);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_sparse_mat_vec_mul(&fixture->full_csr, &fixture->x, &fixture->y_full);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* 下三角存储 */
-    st = lmmc_sparse_sym_csr_from_csr(&full_csr, LMMC_SPARSE_SYM_LOWER, &sym);
-    if (st != LMMC_STATUS_OK) {
-        printf("FAIL: sym_csr_from_csr (lower) returned %d\n", (int)st);
-        lmmc_vec_destroy(&y_full); lmmc_vec_destroy(&x); lmmc_sparse_destroy(&full_csr);
-        return 1;
-    }
+    st = lmmc_sparse_sym_csr_from_csr(&fixture->full_csr, LMMC_SPARSE_SYM_LOWER, &fixture->sym);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_vec_create(3, &y_sym);
-    if (st != LMMC_STATUS_OK) {
-        lmmc_sparse_sym_csr_destroy(&sym);
-        lmmc_vec_destroy(&y_full); lmmc_vec_destroy(&x); lmmc_sparse_destroy(&full_csr);
-        return 1;
-    }
-    st = lmmc_sparse_sym_spmv(&sym, &x, &y_sym);
-    if (st != LMMC_STATUS_OK) {
-        printf("FAIL: sym_spmv (lower) returned %d\n", (int)st);
-        lmmc_vec_destroy(&y_sym); lmmc_sparse_sym_csr_destroy(&sym);
-        lmmc_vec_destroy(&y_full); lmmc_vec_destroy(&x); lmmc_sparse_destroy(&full_csr);
-        return 1;
-    }
+    st = lmmc_vec_create(3, &fixture->y_sym);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_sparse_sym_spmv(&fixture->sym, &fixture->x, &fixture->y_sym);
+    assert_true(st == LMMC_STATUS_OK);
 
     for (i = 0; i < 3; ++i) {
-        if (!lmmc_test_nearly_equal(y_full.data[i], y_sym.data[i], 1e-12)) {
-            printf("FAIL: sym SpMV (lower) mismatch at [%zu]: full=%g sym=%g\n",
-                   i, y_full.data[i], y_sym.data[i]);
-            lmmc_vec_destroy(&y_sym); lmmc_sparse_sym_csr_destroy(&sym);
-            lmmc_vec_destroy(&y_full); lmmc_vec_destroy(&x); lmmc_sparse_destroy(&full_csr);
-            return 1;
-        }
+        assert_true(lmmc_test_nearly_equal(fixture->y_full.data[i], fixture->y_sym.data[i], 1e-12));
     }
-
-    lmmc_vec_destroy(&y_sym);
-    lmmc_sparse_sym_csr_destroy(&sym);
-    lmmc_vec_destroy(&y_full);
-    lmmc_vec_destroy(&x);
-    lmmc_sparse_destroy(&full_csr);
-    printf("PASS: test_sym_csr_lower\n");
-    return 0;
 }
 
-static int test_bsr_error_cases(void) {
-    lmmc_sparse_bsr_t bsr = {0};
-    lmmc_mat_t dense = {0};
+static void test_bsr_error_cases(void **state) {
+    struct test_fixture *fixture = *state;
+
     lmmc_status_t st;
     lmmc_real_t eps = 0.0;
 
     /* NULL output */
     st = lmmc_sparse_bsr_create(2, 2, 2, 1, NULL);
-    if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("FAIL: bsr_create NULL should fail\n");
-        return 1;
-    }
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 
     /* Zero block_size */
-    st = lmmc_sparse_bsr_create(2, 2, 0, 1, &bsr);
-    if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("FAIL: bsr_create zero block_size should fail\n");
-        return 1;
-    }
+    st = lmmc_sparse_bsr_create(2, 2, 0, 1, &fixture->bsr);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 
     /* Dense dimensions not multiple of block_size */
-    st = lmmc_mat_create(5, 5, &dense);
-    if (st != LMMC_STATUS_OK) return 1;
-    st = lmmc_sparse_dense_to_bsr(&dense, 2, eps, &bsr);
-    if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("FAIL: dense_to_bsr non-multiple should fail\n");
-        lmmc_mat_destroy(&dense);
-        return 1;
-    }
-    lmmc_mat_destroy(&dense);
-
-    printf("PASS: test_bsr_error_cases\n");
-    return 0;
+    st = lmmc_mat_create(5, 5, &fixture->dense);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_sparse_dense_to_bsr(&fixture->dense, 2, eps, &fixture->bsr);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 }
 
 int main(void) {
-    int failures = 0;
-
-    printf("Starting sparse format tests (BSR + Symmetric CSR)...\n");
-
-    failures += test_bsr_roundtrip();
-    failures += test_sym_csr_spmv();
-    failures += test_sym_csr_lower();
-    failures += test_bsr_error_cases();
-
-    if (failures > 0) {
-        printf("\n%d test(s) FAILED\n", failures);
-        return 1;
-    }
-    printf("\nAll sparse format tests PASSED\n");
-    return 0;
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_bsr_roundtrip, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_sym_csr_spmv, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_sym_csr_lower, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_bsr_error_cases, setup, teardown),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

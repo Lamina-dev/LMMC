@@ -2,6 +2,8 @@ function(add_lmmc_example target_name source_file)
 	add_executable(${target_name} ${source_file})
 	target_link_libraries(${target_name} PRIVATE lmmc)
 	target_include_directories(${target_name} PRIVATE "${LMMP_INCLUDE_DIR}/lmmp")
+	target_compile_options(${target_name} PRIVATE ${_lmmc_warning_options})
+	lmmc_apply_instrumentation(${target_name})
 	lmmc_prepare_runtime(${target_name})
 endfunction()
 

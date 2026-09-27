@@ -111,6 +111,6 @@ static void lmmc_debug_leaks_free(void) {
 long long lmmc_debug_leaks_get_count(void) {
     const size_t count = atomic_load_explicit(
         &lmmc_debug_allocation_count, memory_order_relaxed);
-    return count > (size_t)INT64_MAX ? INT64_MAX : (long long)count;
+    return count > (size_t)INT64_MAX ? INT64_MAX : count;
 }
 #endif

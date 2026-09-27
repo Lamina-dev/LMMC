@@ -69,6 +69,14 @@ lmmc_real_t lmmc_stirling_error(lmmc_real_t x);
 lmmc_real_t lmmc_log_gamma_stirling_error(lmmc_real_t x);
 lmmc_real_t lmmc_deviance_part(lmmc_real_t x, lmmc_real_t mean);
 
+/**
+ * @brief 稳定计算 log B(a,b) 和 log(x^a complement_x^b / B(a,b))。
+ * 独立传入补数以保留微小上尾；负无穷表示有效下溢，失败时输出保持不变。
+ */
+lmmc_status_t lmmc_log_beta(double a, double b, double* out_log_beta);
+lmmc_status_t lmmc_beta_log_kernel(
+    double x, double complement_x, double a, double b, double* out_log_kernel);
+
 /* Regularized incomplete gamma/beta helpers (defined in statistics_internal.c).
  * Results are written only after a finite, in-range value has converged. */
 lmmc_status_t regularized_gamma_lower(
@@ -77,9 +85,10 @@ lmmc_status_t regularized_gamma_upper_cf(
     lmmc_real_t a, lmmc_real_t x, lmmc_real_t* out);
 lmmc_status_t regularized_gamma_upper(
     lmmc_real_t a, lmmc_real_t x, lmmc_real_t* out);
-lmmc_status_t regularized_beta_cf(
-    lmmc_real_t x, lmmc_real_t a, lmmc_real_t b, lmmc_real_t* out);
 lmmc_status_t regularized_beta(
+    lmmc_real_t x, lmmc_real_t a, lmmc_real_t b, lmmc_real_t* out);
+/** @brief 计算上尾；1 - x 舍入至端点时仍保留 x。 */
+lmmc_status_t regularized_beta_upper(
     lmmc_real_t x, lmmc_real_t a, lmmc_real_t b, lmmc_real_t* out);
 
 #endif

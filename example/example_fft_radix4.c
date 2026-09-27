@@ -9,12 +9,39 @@
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 
+enum { LOGICAL_N = 10, MAX_NFFT = 16 };
+
+static int verify_round_trip(void) {
+    double real_rt[LOGICAL_N], imag_rt[LOGICAL_N];
+    lmmc_status_t st = LMMC_STATUS_OK;
+    int equal = 0;
+    size_t i = 0;
+    for (i = 0; i < LOGICAL_N; ++i) {
+        double x = (double)i;
+        real_rt[i] = sin(0.35 * x) + 0.25 * cos(0.12 * x);
+        imag_rt[i] = 0.0;
+    }
+    st = lmmc_fft_forward(real_rt, imag_rt, LOGICAL_N);
+    if (st != LMMC_STATUS_OK) { printf("fwd failed\n"); return 1; }
+    st = lmmc_fft_inverse(real_rt, imag_rt, LOGICAL_N);
+    if (st != LMMC_STATUS_OK) { printf("inv failed\n"); return 1; }
+
+    for (i = 0; i < LOGICAL_N; ++i) {
+        double x = (double)i;
+        double expected = sin(0.35 * x) + 0.25 * cos(0.12 * x);
+        st = lmmc_double_nearly_equal_tol(real_rt[i], expected, 1e-9, 1e-9, &equal);
+        if (st != LMMC_STATUS_OK || equal != 1) {
+            printf("round-trip mismatch @ k=%zu\n", i);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int main(void) {
-    enum { LOGICAL_N = 10, MAX_NFFT = 16 };
     lmmc_status_t st = LMMC_STATUS_OK;
     size_t nfft = 0;
     size_t i = 0;
-    int equal = 0;
     double real_auto[LOGICAL_N] = {0.0};
     double imag_auto[LOGICAL_N] = {0.0};
     double real_padded[MAX_NFFT] = {0.0};
@@ -56,28 +83,9 @@ int main(void) {
     }
 
     /* Verify round-trip with lmmc_fft */
-    {
-        double real_rt[LOGICAL_N], imag_rt[LOGICAL_N];
-        for (i = 0; i < LOGICAL_N; ++i) {
-            double x = (double)i;
-            real_rt[i] = sin(0.35 * x) + 0.25 * cos(0.12 * x);
-            imag_rt[i] = 0.0;
+    if (verify_round_trip() != 0) {
+            return 1;
         }
-        st = lmmc_fft_forward(real_rt, imag_rt, LOGICAL_N);
-        if (st != LMMC_STATUS_OK) { printf("fwd failed\n"); return 1; }
-        st = lmmc_fft_inverse(real_rt, imag_rt, LOGICAL_N);
-        if (st != LMMC_STATUS_OK) { printf("inv failed\n"); return 1; }
-
-        for (i = 0; i < LOGICAL_N; ++i) {
-            double x = (double)i;
-            double expected = sin(0.35 * x) + 0.25 * cos(0.12 * x);
-            st = lmmc_double_nearly_equal_tol(real_rt[i], expected, 1e-9, 1e-9, &equal);
-            if (st != LMMC_STATUS_OK || equal != 1) {
-                printf("round-trip mismatch @ k=%zu\n", i);
-                return 1;
-            }
-        }
-    }
 
     printf("verified\n");
     return 0;

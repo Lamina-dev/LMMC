@@ -52,6 +52,13 @@ describe.txt
 __pycache__/
 *.pyc
 *.py
+## @brief 将维护中的 CMake 检查脚本纳入源码。
+!/cmake/check_quality.py
+!/cmake/check_package.py
+!/cmake/check_naming.py
+!/cmake/check_integers.py
+!/cmake/naming_negative_fixtures.py
+!/cmake/prepare_quality_consumers.py
 
 .kiro/
 

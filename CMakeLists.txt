@@ -1,8 +1,12 @@
 cmake_minimum_required(VERSION 3.26)
-project(LMMC VERSION 1.0.0 LANGUAGES C)
+project(LMMC LANGUAGES C)
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
+option(BUILD_TESTING "Build development tests" OFF)
+include(CTest)
+
+configure_file(Doxyfile.in Doxyfile @ONLY)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -16,24 +20,31 @@ if(MSVC)
 endif()
 
 # GCC/Clang: be explicit that source and execution charset are UTF-8.
-if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
     add_compile_options(
         $<$<COMPILE_LANGUAGE:C>:-finput-charset=UTF-8>
         $<$<COMPILE_LANGUAGE:C>:-fexec-charset=UTF-8>
     )
 endif()
 
-option(LMMC_BUILD_TESTS "Build LMMC tests" ${PROJECT_IS_TOP_LEVEL})
+option(LMMC_BUILD_TESTS "Build LMMC cmocka tests" ${BUILD_TESTING})
 option(LMMC_BUILD_EXAMPLES "Build LMMC examples" ${PROJECT_IS_TOP_LEVEL})
 option(LMMC_BUILD_SHARED "Build LMMC as a shared library" ON)
 set(LMMC_LMMP_ASM "AUTO" CACHE STRING "LMMP assembly mode")
 set_property(CACHE LMMC_LMMP_ASM PROPERTY STRINGS GENERIC X64 ARM64 AUTO)
+set(LMMC_PACKAGE_SYSTEM_NAME "${CMAKE_SYSTEM_NAME}" CACHE INTERNAL
+    "Target system recorded for installed-package verification" FORCE)
 option(LMMC_WARNINGS_AS_ERRORS "Treat LMMC compiler warnings as errors" OFF)
 option(LMMC_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(LMMC_ENABLE_TSAN "Enable ThreadSanitizer" OFF)
 option(LMMC_ENABLE_COVERAGE "Enable compiler coverage instrumentation" OFF)
 option(LMMC_ENABLE_CLANG_TIDY "Run clang-tidy on LMMC C sources" OFF)
 option(LMMC_DEBUG_LEAKS "Track live persistent bridge allocations" OFF)
+option(LMMC_ENABLE_QUALITY_GATES "Enable reproducible first-party quality gates" OFF)
+if(LMMC_ENABLE_QUALITY_GATES)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/QualityGates.cmake")
+    lmmc_quality_require_tools()
+endif()
 
 if(LMMC_ENABLE_SANITIZERS AND LMMC_ENABLE_TSAN)
     message(FATAL_ERROR "LMMC_ENABLE_SANITIZERS and LMMC_ENABLE_TSAN are mutually exclusive")
@@ -64,11 +75,19 @@ set(LMMC_SOURCES
     src/eigen_general.c
     src/eigen_internal.c
     src/eigen_symmetric.c
-    src/singular_value_decomposition.c
+    src/eigen_svd.c
+    src/eigen_svd_bidiagonal.c
+    src/eigen_svd_iteration.c
+    src/eigen_svd_factorization.c
     src/fft.c
     src/init.c
     src/memory_bridge.c
     src/interp.c
+    src/interp_spline.c
+    src/interp_spline_boundary.c
+    src/interp_shape.c
+    src/interp_lagrange.c
+    src/interp_grid.c
     src/itersolve.c
     src/stdlib_boolean_sets.c
     src/stdlib_complex_sets.c
@@ -77,9 +96,15 @@ set(LMMC_SOURCES
     src/stdlib_linalg_structural.c
     src/stdlib_numeric_sets.c
     src/stdlib_scalar_functions.c
-    src/stdlib_statistics_random.c
+    src/stdlib_statistics.c
+    src/stdlib_random.c
     src/stdlib_text_sets.c
-    src/itersolve_minres_lsqr.c
+    src/itersolve_cg.c
+    src/itersolve_bicgstab.c
+    src/itersolve_gmres.c
+    src/itersolve_gmres_support.c
+    src/itersolve_minres.c
+    src/itersolve_lsqr.c
     src/linear_algebra.c
     src/nonlinear.c
     src/numeric.c
@@ -90,7 +115,13 @@ set(LMMC_SOURCES
     src/ode_singly_diagonally_implicit.c
     src/optimize.c
     src/precond.c
-    src/quadrature.c
+    src/quadrature_common.c
+    src/quadrature_fixed.c
+    src/quadrature_gaussian.c
+    src/quadrature_weighted.c
+    src/quadrature_adaptive.c
+    src/quadrature_extrapolation.c
+    src/quadrature_tanh_sinh.c
     src/random.c
     src/sparse_arithmetic.c
     src/sparse_block.c
@@ -106,12 +137,47 @@ set(LMMC_SOURCES
     src/statistics_descriptive.c
     src/statistics_internal.c
     src/status.c
-    src/tensor.c
+    src/tensor3_storage.c
+    src/tensor3_ops.c
+    src/tensor3_views.c
+    src/tensor_nd_storage.c
+    src/tensor_nd_views.c
+    src/tensor_nd_products.c
+    src/precond_workspace.c
+    src/precond_row.c
+    src/precond_ilu0.c
+    src/precond_ilut.c
+    src/precond_apply.c
+    src/sparse_reordering.c
+    src/sparse_lu.c
+    src/sparse_cholesky.c
+    src/eigen_schur.c
+    src/eigen_general_small.c
+    src/eigen_general_vectors.c
+    src/eigen_inverse_iteration.c
+    src/numeric_scalar.c
+    src/special_functions.c
+    src/fft_radix4.c
+    src/optimize_gradient.c
+    src/optimize_newton.c
+    src/optimize_broyden.c
+    src/optimize_lbfgs.c
+    src/optimize_lm.c
+    src/ode_support.c
+    src/ode_jacobian.c
+    src/nonlinear_bisection.c
+    src/nonlinear_newton.c
+    src/nonlinear_secant.c
+    src/random_normal.c
+    src/random_continuous.c
+    src/random_discrete.c
+    src/probability_quantiles.c
+    src/statistics_selection.c
 )
 
 function(lmmc_apply_instrumentation target_name)
     if(LMMC_ENABLE_SANITIZERS OR LMMC_ENABLE_TSAN)
-        if(WIN32 OR NOT CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        if(WIN32 OR NOT CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
             message(FATAL_ERROR "The configured LMMC sanitizer requires GCC or Clang on a non-Windows platform")
         endif()
         if(LMMC_ENABLE_SANITIZERS)
@@ -126,7 +192,7 @@ function(lmmc_apply_instrumentation target_name)
         target_link_options(${target_name} PRIVATE
             ${_lmmc_instrumentation_flags})
     elseif(LMMC_ENABLE_COVERAGE)
-        if(WIN32 OR NOT CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        if(WIN32 OR NOT CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
             message(FATAL_ERROR "LMMC coverage requires GCC or Clang on a non-Windows platform")
         endif()
         # Threaded tests share coverage counters even for thread-local APIs.
@@ -141,13 +207,19 @@ if(LMMC_BUILD_SHARED)
     set_target_properties(lmmc PROPERTIES
         OUTPUT_NAME lmmc
         EXPORT_NAME lmmc
-        VERSION "${PROJECT_VERSION}"
-        SOVERSION "${PROJECT_VERSION_MAJOR}"
     )
 else()
     add_library(lmmc STATIC ${LMMC_SOURCES})
 endif()
+target_compile_features(lmmc PUBLIC c_std_11)
+set_target_properties(lmmc PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(APPLE AND LMMC_BUILD_SHARED)
+    set_target_properties(lmmc PROPERTIES
+        MACOSX_RPATH ON
+        INSTALL_NAME_DIR "@rpath")
+endif()
 target_include_directories(lmmc
+    PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src"
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
@@ -168,7 +240,9 @@ if(NOT _lmmc_export_symbols)
         "LMMC public symbol list is empty: ${_lmmc_public_symbol_file}")
 endif()
 if(LMMC_BUILD_TESTS)
-    list(APPEND _lmmc_export_symbols lmmc_memory_fail_after_for_test)
+    list(APPEND _lmmc_export_symbols
+        lmmc_memory_fail_after_for_test
+        lmmc_quad_gauss_hermite_with_iteration_limit_for_test)
 endif()
 if(LMMC_DEBUG_LEAKS)
     list(APPEND _lmmc_export_symbols lmmc_debug_leaks_get_count)
@@ -176,14 +250,7 @@ endif()
 list(REMOVE_DUPLICATES _lmmc_export_symbols)
 list(SORT _lmmc_export_symbols)
 
-if(WIN32 AND LMMC_BUILD_SHARED)
-    set(_lmmc_export_file "${CMAKE_CURRENT_BINARY_DIR}/lmmc.exports.def")
-    file(WRITE "${_lmmc_export_file}" "EXPORTS\n")
-    foreach(_lmmc_symbol IN LISTS _lmmc_export_symbols)
-        file(APPEND "${_lmmc_export_file}" "    ${_lmmc_symbol}\n")
-    endforeach()
-    target_sources(lmmc PRIVATE "${_lmmc_export_file}")
-elseif(APPLE AND LMMC_BUILD_SHARED)
+if(APPLE AND LMMC_BUILD_SHARED)
     set(_lmmc_export_file "${CMAKE_CURRENT_BINARY_DIR}/lmmc.exports")
     file(WRITE "${_lmmc_export_file}" "")
     foreach(_lmmc_symbol IN LISTS _lmmc_export_symbols)
@@ -191,9 +258,16 @@ elseif(APPLE AND LMMC_BUILD_SHARED)
     endforeach()
     target_link_options(lmmc PRIVATE
         "LINKER:-exported_symbols_list,${_lmmc_export_file}")
+elseif(WIN32 AND LMMC_BUILD_SHARED)
+    set(_lmmc_export_file "${CMAKE_CURRENT_BINARY_DIR}/lmmc.exports.def")
+    file(WRITE "${_lmmc_export_file}" "EXPORTS\n")
+    foreach(_lmmc_symbol IN LISTS _lmmc_export_symbols)
+        file(APPEND "${_lmmc_export_file}" "    ${_lmmc_symbol}\n")
+    endforeach()
+    target_sources(lmmc PRIVATE "${_lmmc_export_file}")
 elseif(UNIX AND LMMC_BUILD_SHARED)
     set(_lmmc_export_file "${CMAKE_CURRENT_BINARY_DIR}/lmmc.exports.map")
-    file(WRITE "${_lmmc_export_file}" "LMMC_1.0 {\n  global:\n")
+    file(WRITE "${_lmmc_export_file}" "{\n  global:\n")
     foreach(_lmmc_symbol IN LISTS _lmmc_export_symbols)
         file(APPEND "${_lmmc_export_file}" "    ${_lmmc_symbol};\n")
     endforeach()
@@ -287,6 +361,11 @@ elseif(EXISTS "${_lmmc_lmmp_root}/CMakeLists.txt")
                 "${CMAKE_CURRENT_BINARY_DIR}/lmmp/dist/lmmp/lib"
         )
     endforeach()
+    if(APPLE)
+        set_target_properties(liblmmp PROPERTIES
+            MACOSX_RPATH ON
+            INSTALL_NAME_DIR "@rpath")
+    endif()
     target_link_libraries(lmmc PUBLIC lmmp)
     message(STATUS "LMMC: building LMMP from ${_lmmc_lmmp_root}")
 else()
@@ -322,14 +401,8 @@ if(PROJECT_IS_TOP_LEVEL AND _lmmc_bundled_lmmp)
         ${CMAKE_CURRENT_BINARY_DIR}/LMMCConfig.cmake
         INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/LMMC
     )
-    write_basic_package_version_file(
-        ${CMAKE_CURRENT_BINARY_DIR}/LMMCConfigVersion.cmake
-        VERSION ${PROJECT_VERSION}
-        COMPATIBILITY ExactVersion
-    )
     install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/LMMCConfig.cmake
-        ${CMAKE_CURRENT_BINARY_DIR}/LMMCConfigVersion.cmake
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/LMMC
     )
 elseif(PROJECT_IS_TOP_LEVEL)
@@ -347,11 +420,17 @@ set(_lmmc_warning_options
     $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:-Wextra>
     $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:-Wpedantic>
     $<$<COMPILE_LANG_AND_ID:C,MSVC>:/W4>
+    $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wall>
+    $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wextra>
+    $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Wpedantic>
+    $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/W4>
 )
 if(LMMC_WARNINGS_AS_ERRORS)
     list(APPEND _lmmc_warning_options
         $<$<COMPILE_LANG_AND_ID:C,GNU,Clang,AppleClang>:-Werror>
         $<$<COMPILE_LANG_AND_ID:C,MSVC>:/WX>
+        $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-Werror>
+        $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/WX>
     )
 endif()
 target_compile_options(lmmc PRIVATE ${_lmmc_warning_options})
@@ -385,7 +464,35 @@ if(LMMC_BUILD_TESTS)
     target_compile_definitions(lmmc PRIVATE LMMC_BUILD_TESTS=1)
 endif()
 
+if(BUILD_TESTING OR LMMC_BUILD_TESTS)
+    enable_language(CXX)
+    file(GLOB_RECURSE _lmmc_selfcheck_headers CONFIGURE_DEPENDS
+        RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/lmmc/*.h")
+    set(_lmmc_selfcheck_sources "")
+    foreach(_header IN LISTS _lmmc_selfcheck_headers)
+        string(MAKE_C_IDENTIFIER "${_header}" _header_id)
+        foreach(_extension IN ITEMS c cpp)
+            set(_source
+                "${CMAKE_CURRENT_BINARY_DIR}/header_${_header_id}.${_extension}")
+            file(GENERATE OUTPUT "${_source}"
+                CONTENT "#include <${_header}>\ntypedef int lmmc_header_anchor_${_header_id};\n")
+            list(APPEND _lmmc_selfcheck_sources "${_source}")
+        endforeach()
+    endforeach()
+    add_library(lmmc_public_header_checks OBJECT ${_lmmc_selfcheck_sources})
+    target_link_libraries(lmmc_public_header_checks PRIVATE lmmc)
+    target_compile_options(lmmc_public_header_checks PRIVATE ${_lmmc_warning_options})
+    lmmc_apply_instrumentation(lmmc_public_header_checks)
+    set_target_properties(lmmc_public_header_checks PROPERTIES
+        CXX_EXTENSIONS OFF EXCLUDE_FROM_ALL FALSE)
+endif()
+
 if(LMMC_BUILD_TESTS)
     enable_testing()
     add_subdirectory(test)
+endif()
+
+if(LMMC_ENABLE_QUALITY_GATES)
+    lmmc_add_quality_gates(lmmc "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()

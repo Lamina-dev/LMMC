@@ -2,246 +2,228 @@
  * @file test_rng_jump.c
  * RNG 种子、jump、long_jump、clone 单元测试。
  */
-#include <stdio.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
+#include <cmocka.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <string.h>
 
 #include "lmmc/random.h"
 #include "lmmc/status.h"
 
-static int test_failures = 0;
-
-#define CHECK(cond, msg, ...) do { \
-    if (!(cond)) { \
-        printf("  FAIL: " msg "\n", ##__VA_ARGS__); \
-        test_failures++; \
-        return 1; \
-    } \
-} while (0)
-
 /**
  * 两个不指定种子的 RNG 在同一秒内创建，应产生不同序列。
  */
-static int test_unique_default_seeds(void)
-{
-    lmmc_rng_t* rng1 = NULL;
-    lmmc_rng_t* rng2 = NULL;
+struct test_fixture {
+    lmmc_rng_t *rng1;
+    lmmc_rng_t *rng2;
+    lmmc_rng_t *rng;
+    lmmc_rng_t *clone;
+    lmmc_rng_t *out;
+    lmmc_rng_t *rng_jump;
+    lmmc_rng_t *rng_long;
+};
+
+static int setup(void **state) {
+    struct test_fixture *fixture = calloc(1, sizeof(*fixture));
+    assert_non_null(fixture);
+    *state = fixture;
+    return 0;
+}
+
+static int teardown(void **state) {
+    struct test_fixture *fixture = *state;
+    lmmc_rng_destroy(fixture->rng1);
+    lmmc_rng_destroy(fixture->rng2);
+    lmmc_rng_destroy(fixture->rng);
+    lmmc_rng_destroy(fixture->clone);
+    lmmc_rng_destroy(fixture->out);
+    lmmc_rng_destroy(fixture->rng_jump);
+    lmmc_rng_destroy(fixture->rng_long);
+    free(fixture);
+    *state = NULL;
+    return 0;
+}
+
+static void test_unique_default_seeds(void **state) {
+    struct test_fixture *fixture = *state;
+
     lmmc_status_t st;
     int found_diff = 0;
     int i;
 
-    st = lmmc_rng_create(&rng1);
-    CHECK(st == LMMC_STATUS_OK, "Failed to create rng1");
+    st = lmmc_rng_create(&fixture->rng1);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_rng_create(&rng2);
-    CHECK(st == LMMC_STATUS_OK, "Failed to create rng2");
+    st = lmmc_rng_create(&fixture->rng2);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* Check first 16 samples differ in at least one position */
     for (i = 0; i < 16; i++) {
-        uint64_t v1 = lmmc_rng_next_u64(rng1);
-        uint64_t v2 = lmmc_rng_next_u64(rng2);
+        uint64_t v1 = lmmc_rng_next_u64(fixture->rng1);
+        uint64_t v2 = lmmc_rng_next_u64(fixture->rng2);
         if (v1 != v2) {
             found_diff = 1;
             break;
         }
     }
 
-    CHECK(found_diff,
-          "Two RNGs created without explicit seed produced identical first 16 samples");
-
-    lmmc_rng_destroy(rng1);
-    lmmc_rng_destroy(rng2);
-    return 0;
+    assert_true(found_diff);
 }
 
 /* clone 应产生独立的深拷贝。 */
-static int test_clone_deep_copy(void)
-{
-    lmmc_rng_t* rng = NULL;
-    lmmc_rng_t* clone = NULL;
+static void test_clone_deep_copy(void **state) {
+    struct test_fixture *fixture = *state;
+
     lmmc_status_t st;
     int i;
 
-    st = lmmc_rng_create(&rng);
-    CHECK(st == LMMC_STATUS_OK, "Failed to create rng");
+    st = lmmc_rng_create(&fixture->rng);
+    assert_true(st == LMMC_STATUS_OK);
 
-    lmmc_rng_seed(rng, 42);
+    assert_int_equal(lmmc_rng_seed(fixture->rng, 42), LMMC_STATUS_OK);
 
-    st = lmmc_rng_clone(rng, &clone);
-    CHECK(st == LMMC_STATUS_OK, "Failed to clone rng");
-    CHECK(clone != NULL, "Clone returned NULL");
-    CHECK(clone != rng, "Clone returned same pointer");
+    st = lmmc_rng_clone(fixture->rng, &fixture->clone);
+    assert_true(st == LMMC_STATUS_OK);
+    assert_true(fixture->clone != NULL);
+    assert_true(fixture->clone != fixture->rng);
 
     /* Both should produce identical sequences */
     for (i = 0; i < 100; i++) {
-        uint64_t v1 = lmmc_rng_next_u64(rng);
-        uint64_t v2 = lmmc_rng_next_u64(clone);
-        CHECK(v1 == v2,
-              "Clone diverged at index %d: original=%llu, clone=%llu",
-              i, (unsigned long long)v1, (unsigned long long)v2);
+        uint64_t v1 = lmmc_rng_next_u64(fixture->rng);
+        uint64_t v2 = lmmc_rng_next_u64(fixture->clone);
+        assert_true(v1 == v2);
     }
-
-    lmmc_rng_destroy(rng);
-    lmmc_rng_destroy(clone);
-    return 0;
 }
 
 /* jump 后 clone 与原始 RNG 应产生不同序列。 */
-static int test_clone_then_jump_diverges(void)
-{
-    lmmc_rng_t* rng = NULL;
-    lmmc_rng_t* clone = NULL;
+static void test_clone_then_jump_diverges(void **state) {
+    struct test_fixture *fixture = *state;
+
     lmmc_status_t st;
     int found_diff = 0;
     int i;
 
-    st = lmmc_rng_create(&rng);
-    CHECK(st == LMMC_STATUS_OK, "Failed to create rng");
+    st = lmmc_rng_create(&fixture->rng);
+    assert_true(st == LMMC_STATUS_OK);
 
-    lmmc_rng_seed(rng, 12345);
+    assert_int_equal(lmmc_rng_seed(fixture->rng, 12345), LMMC_STATUS_OK);
 
-    st = lmmc_rng_clone(rng, &clone);
-    CHECK(st == LMMC_STATUS_OK, "Failed to clone rng");
+    st = lmmc_rng_clone(fixture->rng, &fixture->clone);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* Apply jump to the clone */
-    st = lmmc_rng_jump(clone);
-    CHECK(st == LMMC_STATUS_OK, "Failed to jump clone");
+    st = lmmc_rng_jump(fixture->clone);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* Sequences should now differ */
     for (i = 0; i < 16; i++) {
-        uint64_t v1 = lmmc_rng_next_u64(rng);
-        uint64_t v2 = lmmc_rng_next_u64(clone);
+        uint64_t v1 = lmmc_rng_next_u64(fixture->rng);
+        uint64_t v2 = lmmc_rng_next_u64(fixture->clone);
         if (v1 != v2) {
             found_diff = 1;
             break;
         }
     }
 
-    CHECK(found_diff,
-          "After jump, clone and original still produce identical sequences");
-
-    lmmc_rng_destroy(rng);
-    lmmc_rng_destroy(clone);
-    return 0;
+    assert_true(found_diff);
 }
 
 /* NULL 参数应返回 LMMC_STATUS_INVALID_ARGUMENT。 */
-static int test_jump_null_returns_error(void)
-{
+static void test_jump_null_returns_error(void **state) {
+    (void)state;
     lmmc_status_t st;
 
     st = lmmc_rng_jump(NULL);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
-          "lmmc_rng_jump(NULL) returned %d, expected INVALID_ARGUMENT", (int)st);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 
     st = lmmc_rng_long_jump(NULL);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
-          "lmmc_rng_long_jump(NULL) returned %d, expected INVALID_ARGUMENT", (int)st);
-
-    return 0;
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 }
 
 /**
  * Test: lmmc_rng_clone with NULL src or out returns LMMC_STATUS_INVALID_ARGUMENT.
  */
-static int test_clone_null_returns_error(void)
-{
-    lmmc_rng_t* rng = NULL;
-    lmmc_rng_t* out = NULL;
+static void test_clone_null_returns_error(void **state) {
+    struct test_fixture *fixture = *state;
+
     lmmc_status_t st;
 
-    st = lmmc_rng_clone(NULL, &out);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
-          "lmmc_rng_clone(NULL, &out) returned %d", (int)st);
+    st = lmmc_rng_clone(NULL, &fixture->out);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 
-    st = lmmc_rng_create(&rng);
-    CHECK(st == LMMC_STATUS_OK, "Failed to create rng");
+    st = lmmc_rng_create(&fixture->rng);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_rng_clone(rng, NULL);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
-          "lmmc_rng_clone(rng, NULL) returned %d", (int)st);
-
-    lmmc_rng_destroy(rng);
-    return 0;
+    st = lmmc_rng_clone(fixture->rng, NULL);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 }
 
 /**
  * Test: lmmc_rng_jump is deterministic — same state + jump = same result.
  */
-static int test_jump_deterministic(void)
-{
-    lmmc_rng_t* rng1 = NULL;
-    lmmc_rng_t* rng2 = NULL;
+static void test_jump_deterministic(void **state) {
+    struct test_fixture *fixture = *state;
+
     lmmc_status_t st;
     int i;
 
-    st = lmmc_rng_create(&rng1);
-    CHECK(st == LMMC_STATUS_OK, "Failed to create rng1");
-    st = lmmc_rng_create(&rng2);
-    CHECK(st == LMMC_STATUS_OK, "Failed to create rng2");
+    st = lmmc_rng_create(&fixture->rng1);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_rng_create(&fixture->rng2);
+    assert_true(st == LMMC_STATUS_OK);
 
-    lmmc_rng_seed(rng1, 99999);
-    lmmc_rng_seed(rng2, 99999);
+    assert_int_equal(lmmc_rng_seed(fixture->rng1, 99999), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(fixture->rng2, 99999), LMMC_STATUS_OK);
 
-    st = lmmc_rng_jump(rng1);
-    CHECK(st == LMMC_STATUS_OK, "Failed to jump rng1");
-    st = lmmc_rng_jump(rng2);
-    CHECK(st == LMMC_STATUS_OK, "Failed to jump rng2");
+    st = lmmc_rng_jump(fixture->rng1);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_rng_jump(fixture->rng2);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* After identical jump, sequences should be identical */
     for (i = 0; i < 100; i++) {
-        uint64_t v1 = lmmc_rng_next_u64(rng1);
-        uint64_t v2 = lmmc_rng_next_u64(rng2);
-        CHECK(v1 == v2,
-              "After jump, rng1 and rng2 diverged at index %d", i);
+        uint64_t v1 = lmmc_rng_next_u64(fixture->rng1);
+        uint64_t v2 = lmmc_rng_next_u64(fixture->rng2);
+        assert_true(v1 == v2);
     }
-
-    lmmc_rng_destroy(rng1);
-    lmmc_rng_destroy(rng2);
-    return 0;
 }
 
 /**
  * Test: lmmc_rng_long_jump is deterministic and differs from jump.
  */
-static int test_long_jump_deterministic_and_different(void)
-{
-    lmmc_rng_t* rng_jump = NULL;
-    lmmc_rng_t* rng_long = NULL;
+static void test_long_jump_deterministic_and_different(void **state) {
+    struct test_fixture *fixture = *state;
+
     lmmc_status_t st;
     int found_diff = 0;
     int i;
 
-    st = lmmc_rng_create(&rng_jump);
-    CHECK(st == LMMC_STATUS_OK, "Failed to create rng_jump");
-    st = lmmc_rng_create(&rng_long);
-    CHECK(st == LMMC_STATUS_OK, "Failed to create rng_long");
+    st = lmmc_rng_create(&fixture->rng_jump);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_rng_create(&fixture->rng_long);
+    assert_true(st == LMMC_STATUS_OK);
 
-    lmmc_rng_seed(rng_jump, 77777);
-    lmmc_rng_seed(rng_long, 77777);
+    assert_int_equal(lmmc_rng_seed(fixture->rng_jump, 77777), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(fixture->rng_long, 77777), LMMC_STATUS_OK);
 
-    st = lmmc_rng_jump(rng_jump);
-    CHECK(st == LMMC_STATUS_OK, "Failed to jump");
-    st = lmmc_rng_long_jump(rng_long);
-    CHECK(st == LMMC_STATUS_OK, "Failed to long_jump");
+    st = lmmc_rng_jump(fixture->rng_jump);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_rng_long_jump(fixture->rng_long);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* jump and long_jump should produce different sequences */
     for (i = 0; i < 16; i++) {
-        uint64_t v1 = lmmc_rng_next_u64(rng_jump);
-        uint64_t v2 = lmmc_rng_next_u64(rng_long);
+        uint64_t v1 = lmmc_rng_next_u64(fixture->rng_jump);
+        uint64_t v2 = lmmc_rng_next_u64(fixture->rng_long);
         if (v1 != v2) {
             found_diff = 1;
             break;
         }
     }
 
-    CHECK(found_diff,
-          "jump and long_jump produced identical sequences from same seed");
-
-    lmmc_rng_destroy(rng_jump);
-    lmmc_rng_destroy(rng_long);
-    return 0;
+    assert_true(found_diff);
 }
 
 /**
@@ -249,32 +231,31 @@ static int test_long_jump_deterministic_and_different(void)
  * This is a statistical check — draw many samples from both and verify
  * no common values appear .
  */
-static int test_jump_no_overlap_short(void)
-{
-    lmmc_rng_t* rng = NULL;
-    lmmc_rng_t* clone = NULL;
+static void test_jump_no_overlap_short(void **state) {
+    struct test_fixture *fixture = *state;
+
     lmmc_status_t st;
     int i, j;
     int found_overlap = 0;
 
-    /* Use a smaller sample for unit test speed */
-    #define OVERLAP_SAMPLES 1000
+/* Use a smaller sample for unit test speed */
+#define OVERLAP_SAMPLES 1000
     static uint64_t seq_orig[OVERLAP_SAMPLES];
     static uint64_t seq_clone[OVERLAP_SAMPLES];
 
-    st = lmmc_rng_create(&rng);
-    CHECK(st == LMMC_STATUS_OK, "Failed to create rng");
-    lmmc_rng_seed(rng, 54321);
+    st = lmmc_rng_create(&fixture->rng);
+    assert_true(st == LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(fixture->rng, 54321), LMMC_STATUS_OK);
 
-    st = lmmc_rng_clone(rng, &clone);
-    CHECK(st == LMMC_STATUS_OK, "Failed to clone");
+    st = lmmc_rng_clone(fixture->rng, &fixture->clone);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_rng_jump(clone);
-    CHECK(st == LMMC_STATUS_OK, "Failed to jump clone");
+    st = lmmc_rng_jump(fixture->clone);
+    assert_true(st == LMMC_STATUS_OK);
 
     for (i = 0; i < OVERLAP_SAMPLES; i++) {
-        seq_orig[i] = lmmc_rng_next_u64(rng);
-        seq_clone[i] = lmmc_rng_next_u64(clone);
+        seq_orig[i] = lmmc_rng_next_u64(fixture->rng);
+        seq_clone[i] = lmmc_rng_next_u64(fixture->clone);
     }
 
     /* Simple O(n^2) check for small sample — no value should appear in both */
@@ -288,60 +269,21 @@ static int test_jump_no_overlap_short(void)
     }
 
     /* With 2^64 range and 1000 samples each, collision probability is negligible */
-    CHECK(!found_overlap,
-          "Found overlapping value between original and jumped clone sequences");
+    assert_true(!found_overlap);
 
-    lmmc_rng_destroy(rng);
-    lmmc_rng_destroy(clone);
-    return 0;
-    #undef OVERLAP_SAMPLES
+#undef OVERLAP_SAMPLES
 }
 
-
-int main(void)
-{
-    int rc = 0;
-
-    printf("=== RNG Jump/Clone/Seeding Unit Tests ===\n");
-
-    printf("--- Unique default seeds ---\n");
-    if (test_unique_default_seeds()) { rc = 1; }
-    else { printf("  [PASS] Two RNGs created without seed produce different sequences\n"); }
-
-    printf("--- Clone deep copy ---\n");
-    if (test_clone_deep_copy()) { rc = 1; }
-    else { printf("  [PASS] Clone produces identical sequence\n"); }
-
-    printf("--- Clone then jump diverges ---\n");
-    if (test_clone_then_jump_diverges()) { rc = 1; }
-    else { printf("  [PASS] After jump, clone diverges from original\n"); }
-
-    printf("--- Jump/long_jump NULL returns error ---\n");
-    if (test_jump_null_returns_error()) { rc = 1; }
-    else { printf("  [PASS] NULL handle returns INVALID_ARGUMENT\n"); }
-
-    printf("--- Clone NULL returns error ---\n");
-    if (test_clone_null_returns_error()) { rc = 1; }
-    else { printf("  [PASS] NULL src/out returns INVALID_ARGUMENT\n"); }
-
-    printf("--- Jump is deterministic ---\n");
-    if (test_jump_deterministic()) { rc = 1; }
-    else { printf("  [PASS] Same seed + jump = same sequence\n"); }
-
-    printf("--- Long jump differs from jump ---\n");
-    if (test_long_jump_deterministic_and_different()) { rc = 1; }
-    else { printf("  [PASS] long_jump produces different sequence than jump\n"); }
-
-    printf("--- No overlap between original and jumped clone ---\n");
-    if (test_jump_no_overlap_short()) { rc = 1; }
-    else { printf("  [PASS] No overlapping values in 1000-sample check\n"); }
-
-    printf("\n");
-    if (rc == 0) {
-        printf("All RNG jump/clone/seeding tests PASSED.\n");
-    } else {
-        printf("Some RNG jump/clone/seeding tests FAILED (%d failures).\n", test_failures);
-    }
-
-    return rc;
+int main(void) {
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_unique_default_seeds, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_clone_deep_copy, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_clone_then_jump_diverges, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_jump_null_returns_error, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_clone_null_returns_error, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_jump_deterministic, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_long_jump_deterministic_and_different, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_jump_no_overlap_short, setup, teardown),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

@@ -8,19 +8,7 @@
 #include "lmmc/lmmc.h"
 #include "test_common.h"
 
-static int test_count = 0;
-static int pass_count = 0;
-
-#define TEST_ASSERT(cond, msg) do { \
-    test_count++; \
-    if (!(cond)) { \
-        printf("  FAIL: %s\n", msg); \
-    } else { \
-        pass_count++; \
-    } \
-} while(0)
-
-/* --------------------------------------------------------------------------
+/*
  * Helper: Build an arrowhead SPD matrix of size n in CSC format.
  *
  * Structure:
@@ -31,28 +19,112 @@ static int pass_count = 0;
  * This is symmetric positive definite and produces significant fill-in
  * during factorization because the first row/column connects to all
  * other rows/columns.
- * -------------------------------------------------------------------------- */
-static lmmc_status_t build_arrowhead_spd(size_t n, lmmc_sparse_mat_t* out)
-{
-    lmmc_sparse_builder_t* builder = NULL;
+ */
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
+#include <cmocka.h>
+
+struct test_fixture {
+    lmmc_sparse_mat_t lu_tridiagonal_fillin_A;
+    lmmc_sparse_lu_t *lu_tridiagonal_fillin_lu;
+    lmmc_vec_t lu_tridiagonal_fillin_b;
+    lmmc_vec_t lu_tridiagonal_fillin_x;
+    lmmc_sparse_mat_t lu_large_tridiagonal_A;
+    lmmc_sparse_lu_t *lu_large_tridiagonal_lu;
+    lmmc_vec_t lu_large_tridiagonal_b;
+    lmmc_vec_t lu_large_tridiagonal_x;
+    lmmc_sparse_mat_t cholesky_dense_fillin_A;
+    lmmc_sparse_chol_t *cholesky_dense_fillin_chol;
+    lmmc_vec_t cholesky_dense_fillin_b;
+    lmmc_vec_t cholesky_dense_fillin_x;
+    lmmc_vec_t cholesky_dense_fillin_x_exact;
+    lmmc_sparse_mat_t cholesky_arrowhead_fillin_A;
+    lmmc_sparse_chol_t *cholesky_arrowhead_fillin_chol;
+    lmmc_vec_t cholesky_arrowhead_fillin_b;
+    lmmc_vec_t cholesky_arrowhead_fillin_x;
+    lmmc_vec_t cholesky_arrowhead_fillin_x_exact;
+    lmmc_sparse_builder_t *destroy_after_failed_cholesky_builder;
+    lmmc_sparse_mat_t destroy_after_failed_cholesky_A;
+    lmmc_sparse_chol_t *destroy_after_failed_cholesky_chol;
+    lmmc_sparse_builder_t *destroy_after_failed_lu_builder;
+    lmmc_sparse_mat_t destroy_after_failed_lu_A;
+    lmmc_sparse_lu_t *destroy_after_failed_lu_lu;
+    lmmc_sparse_mat_t successful_factorize_then_destroy_A;
+    lmmc_sparse_lu_t *successful_factorize_then_destroy_lu;
+    lmmc_sparse_chol_t *successful_factorize_then_destroy_chol;
+};
+
+static int setup(void **state) {
+    struct test_fixture *fixture = calloc(1, sizeof(*fixture));
+    assert_non_null(fixture);
+    *state = fixture;
+    return 0;
+}
+
+static int teardown(void **state) {
+    struct test_fixture *fixture = *state;
+    lmmc_sparse_chol_destroy(fixture->successful_factorize_then_destroy_chol);
+    lmmc_sparse_lu_destroy(fixture->successful_factorize_then_destroy_lu);
+    lmmc_sparse_destroy(&fixture->successful_factorize_then_destroy_A);
+    lmmc_sparse_lu_destroy(fixture->destroy_after_failed_lu_lu);
+    lmmc_sparse_destroy(&fixture->destroy_after_failed_lu_A);
+    lmmc_sparse_builder_destroy(fixture->destroy_after_failed_lu_builder);
+    lmmc_sparse_chol_destroy(fixture->destroy_after_failed_cholesky_chol);
+    lmmc_sparse_destroy(&fixture->destroy_after_failed_cholesky_A);
+    lmmc_sparse_builder_destroy(fixture->destroy_after_failed_cholesky_builder);
+    lmmc_vec_destroy(&fixture->cholesky_arrowhead_fillin_x_exact);
+    lmmc_vec_destroy(&fixture->cholesky_arrowhead_fillin_x);
+    lmmc_vec_destroy(&fixture->cholesky_arrowhead_fillin_b);
+    lmmc_sparse_chol_destroy(fixture->cholesky_arrowhead_fillin_chol);
+    lmmc_sparse_destroy(&fixture->cholesky_arrowhead_fillin_A);
+    lmmc_vec_destroy(&fixture->cholesky_dense_fillin_x_exact);
+    lmmc_vec_destroy(&fixture->cholesky_dense_fillin_x);
+    lmmc_vec_destroy(&fixture->cholesky_dense_fillin_b);
+    lmmc_sparse_chol_destroy(fixture->cholesky_dense_fillin_chol);
+    lmmc_sparse_destroy(&fixture->cholesky_dense_fillin_A);
+    lmmc_vec_destroy(&fixture->lu_large_tridiagonal_x);
+    lmmc_vec_destroy(&fixture->lu_large_tridiagonal_b);
+    lmmc_sparse_lu_destroy(fixture->lu_large_tridiagonal_lu);
+    lmmc_sparse_destroy(&fixture->lu_large_tridiagonal_A);
+    lmmc_vec_destroy(&fixture->lu_tridiagonal_fillin_x);
+    lmmc_vec_destroy(&fixture->lu_tridiagonal_fillin_b);
+    lmmc_sparse_lu_destroy(fixture->lu_tridiagonal_fillin_lu);
+    lmmc_sparse_destroy(&fixture->lu_tridiagonal_fillin_A);
+    free(fixture);
+    return 0;
+}
+
+static lmmc_status_t build_arrowhead_spd(size_t n, lmmc_sparse_mat_t *out) {
+    lmmc_sparse_builder_t *builder = NULL;
     lmmc_status_t st;
     lmmc_real_t diag_val = (lmmc_real_t)(n + 1);
 
     st = lmmc_sparse_builder_create(n, n, 3 * n, &builder);
-    if (st != LMMC_STATUS_OK) return st;
+    if (st != LMMC_STATUS_OK)
+        return st;
 
     for (size_t i = 0; i < n; i++) {
         /* Diagonal */
         st = lmmc_sparse_builder_add(builder, i, i, diag_val);
-        if (st != LMMC_STATUS_OK) { lmmc_sparse_builder_destroy(builder); return st; }
+        if (st != LMMC_STATUS_OK) {
+            lmmc_sparse_builder_destroy(builder);
+            return st;
+        }
 
         if (i > 0) {
             /* First row */
             st = lmmc_sparse_builder_add(builder, 0, i, 1.0);
-            if (st != LMMC_STATUS_OK) { lmmc_sparse_builder_destroy(builder); return st; }
+            if (st != LMMC_STATUS_OK) {
+                lmmc_sparse_builder_destroy(builder);
+                return st;
+            }
             /* First column */
             st = lmmc_sparse_builder_add(builder, i, 0, 1.0);
-            if (st != LMMC_STATUS_OK) { lmmc_sparse_builder_destroy(builder); return st; }
+            if (st != LMMC_STATUS_OK) {
+                lmmc_sparse_builder_destroy(builder);
+                return st;
+            }
         }
     }
 
@@ -61,19 +133,13 @@ static lmmc_status_t build_arrowhead_spd(size_t n, lmmc_sparse_mat_t* out)
     return st;
 }
 
-/* --------------------------------------------------------------------------
- * Helper: Build a dense SPD matrix stored in sparse format.
- *
- * A[i][j] = min(i,j) + 1 + (i==j)*n
- * This is diagonally dominant and SPD, and fully dense.
- * -------------------------------------------------------------------------- */
-static lmmc_status_t build_dense_spd_as_sparse(size_t n, lmmc_sparse_mat_t* out)
-{
-    lmmc_sparse_builder_t* builder = NULL;
+static lmmc_status_t build_dense_spd_as_sparse(size_t n, lmmc_sparse_mat_t *out) {
+    lmmc_sparse_builder_t *builder = NULL;
     lmmc_status_t st;
 
     st = lmmc_sparse_builder_create(n, n, n * n, &builder);
-    if (st != LMMC_STATUS_OK) return st;
+    if (st != LMMC_STATUS_OK)
+        return st;
 
     for (size_t i = 0; i < n; i++) {
         for (size_t j = 0; j < n; j++) {
@@ -82,7 +148,10 @@ static lmmc_status_t build_dense_spd_as_sparse(size_t n, lmmc_sparse_mat_t* out)
                 val += (lmmc_real_t)n;
             }
             st = lmmc_sparse_builder_add(builder, i, j, val);
-            if (st != LMMC_STATUS_OK) { lmmc_sparse_builder_destroy(builder); return st; }
+            if (st != LMMC_STATUS_OK) {
+                lmmc_sparse_builder_destroy(builder);
+                return st;
+            }
         }
     }
 
@@ -91,27 +160,33 @@ static lmmc_status_t build_dense_spd_as_sparse(size_t n, lmmc_sparse_mat_t* out)
     return st;
 }
 
-/* --------------------------------------------------------------------------
- * Helper: Build a tridiagonal diagonally-dominant matrix for LU testing.
- * -------------------------------------------------------------------------- */
-static lmmc_status_t build_tridiagonal(size_t n, lmmc_sparse_mat_t* out)
-{
-    lmmc_sparse_builder_t* builder = NULL;
+static lmmc_status_t build_tridiagonal(size_t n, lmmc_sparse_mat_t *out) {
+    lmmc_sparse_builder_t *builder = NULL;
     lmmc_status_t st;
 
     st = lmmc_sparse_builder_create(n, n, 3 * n, &builder);
-    if (st != LMMC_STATUS_OK) return st;
+    if (st != LMMC_STATUS_OK)
+        return st;
 
     for (size_t i = 0; i < n; i++) {
         st = lmmc_sparse_builder_add(builder, i, i, 4.0);
-        if (st != LMMC_STATUS_OK) { lmmc_sparse_builder_destroy(builder); return st; }
+        if (st != LMMC_STATUS_OK) {
+            lmmc_sparse_builder_destroy(builder);
+            return st;
+        }
         if (i > 0) {
             st = lmmc_sparse_builder_add(builder, i, i - 1, 1.0);
-            if (st != LMMC_STATUS_OK) { lmmc_sparse_builder_destroy(builder); return st; }
+            if (st != LMMC_STATUS_OK) {
+                lmmc_sparse_builder_destroy(builder);
+                return st;
+            }
         }
         if (i < n - 1) {
             st = lmmc_sparse_builder_add(builder, i, i + 1, 1.0);
-            if (st != LMMC_STATUS_OK) { lmmc_sparse_builder_destroy(builder); return st; }
+            if (st != LMMC_STATUS_OK) {
+                lmmc_sparse_builder_destroy(builder);
+                return st;
+            }
         }
     }
 
@@ -120,17 +195,14 @@ static lmmc_status_t build_tridiagonal(size_t n, lmmc_sparse_mat_t* out)
     return st;
 }
 
-/* --------------------------------------------------------------------------
- * Helper: Compute residual norm ||Ax - b||_2 for sparse A.
- * -------------------------------------------------------------------------- */
-static lmmc_real_t compute_residual(const lmmc_sparse_mat_t* A,
-                                    const lmmc_vec_t* x,
-                                    const lmmc_vec_t* b)
-{
+static lmmc_real_t compute_residual(const lmmc_sparse_mat_t *A,
+                                    const lmmc_vec_t *x,
+                                    const lmmc_vec_t *b) {
     lmmc_vec_t Ax = {0};
     lmmc_real_t norm = 0.0;
 
-    if (lmmc_vec_create(b->size, &Ax) != LMMC_STATUS_OK) return 1e30;
+    if (lmmc_vec_create(b->size, &Ax) != LMMC_STATUS_OK)
+        return 1e30;
     if (lmmc_sparse_mat_vec_mul(A, x, &Ax) != LMMC_STATUS_OK) {
         lmmc_vec_destroy(&Ax);
         return 1e30;
@@ -145,339 +217,316 @@ static lmmc_real_t compute_residual(const lmmc_sparse_mat_t* A,
     return sqrt(norm);
 }
 
-static void test_lu_tridiagonal_fillin(void)
-{
-    printf("Test: Sparse LU factorization with tridiagonal (n=20)\n");
+static void test_lu_tridiagonal_fillin(void **state) {
+    struct test_fixture *fixture = *state;
 
     const size_t n = 20;
-    lmmc_sparse_mat_t A = {0};
-    lmmc_sparse_lu_t* lu = NULL;
-    lmmc_vec_t b = {0}, x = {0};
+
     lmmc_status_t st;
 
-    st = build_tridiagonal(n, &A);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "build tridiagonal matrix");
-    TEST_ASSERT(A.nnz < n * n, "matrix is sparse");
+    st = build_tridiagonal(n, &fixture->lu_tridiagonal_fillin_A);
+    assert_true(st == LMMC_STATUS_OK);
+    assert_true(fixture->lu_tridiagonal_fillin_A.nnz < n * n);
 
-    st = lmmc_sparse_lu_symbolic(&A, &lu);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "LU symbolic succeeds");
+    st = lmmc_sparse_lu_symbolic(&fixture->lu_tridiagonal_fillin_A, &fixture->lu_tridiagonal_fillin_lu);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_sparse_lu_numeric(&A, lu);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "LU numeric succeeds (capacity tracking works)");
+    st = lmmc_sparse_lu_numeric(&fixture->lu_tridiagonal_fillin_A, fixture->lu_tridiagonal_fillin_lu);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* Verify solve doesn't crash on the reallocated buffers */
-    st = lmmc_vec_create(n, &b);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "create b");
-    st = lmmc_vec_create(n, &x);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "create x");
+    st = lmmc_vec_create(n, &fixture->lu_tridiagonal_fillin_b);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_vec_create(n, &fixture->lu_tridiagonal_fillin_x);
+    assert_true(st == LMMC_STATUS_OK);
 
-    for (size_t i = 0; i < n; i++) b.data[i] = 1.0;
+    for (size_t i = 0; i < n; i++)
+        fixture->lu_tridiagonal_fillin_b.data[i] = 1.0;
 
-    st = lmmc_sparse_lu_solve(lu, &b, &x);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "LU solve completes without error");
+    st = lmmc_sparse_lu_solve(fixture->lu_tridiagonal_fillin_lu, &fixture->lu_tridiagonal_fillin_b, &fixture->lu_tridiagonal_fillin_x);
+    assert_true(st == LMMC_STATUS_OK);
 
-    lmmc_sparse_lu_destroy(lu);
-    lmmc_vec_destroy(&b);
-    lmmc_vec_destroy(&x);
-    lmmc_sparse_destroy(&A);
+    lmmc_sparse_lu_destroy(fixture->lu_tridiagonal_fillin_lu);
+    fixture->lu_tridiagonal_fillin_lu = NULL;
+    lmmc_vec_destroy(&fixture->lu_tridiagonal_fillin_b);
+    lmmc_vec_destroy(&fixture->lu_tridiagonal_fillin_x);
+    lmmc_sparse_destroy(&fixture->lu_tridiagonal_fillin_A);
 }
 
-static void test_lu_large_tridiagonal(void)
-{
-    printf("Test: Sparse LU with tridiagonal (n=100, stress reallocation)\n");
+static void test_lu_large_tridiagonal(void **state) {
+    struct test_fixture *fixture = *state;
 
     const size_t n = 100;
-    lmmc_sparse_mat_t A = {0};
-    lmmc_sparse_lu_t* lu = NULL;
-    lmmc_vec_t b = {0}, x = {0};
+
     lmmc_status_t st;
 
-    st = build_tridiagonal(n, &A);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "build n=100 tridiagonal");
+    st = build_tridiagonal(n, &fixture->lu_large_tridiagonal_A);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_sparse_lu_symbolic(&A, &lu);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "LU symbolic");
+    st = lmmc_sparse_lu_symbolic(&fixture->lu_large_tridiagonal_A, &fixture->lu_large_tridiagonal_lu);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_sparse_lu_numeric(&A, lu);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "LU numeric succeeds (reallocation exercised)");
+    st = lmmc_sparse_lu_numeric(&fixture->lu_large_tridiagonal_A, fixture->lu_large_tridiagonal_lu);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* Verify solve doesn't crash */
-    st = lmmc_vec_create(n, &b);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "create b");
-    st = lmmc_vec_create(n, &x);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "create x");
+    st = lmmc_vec_create(n, &fixture->lu_large_tridiagonal_b);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_vec_create(n, &fixture->lu_large_tridiagonal_x);
+    assert_true(st == LMMC_STATUS_OK);
 
-    for (size_t i = 0; i < n; i++) b.data[i] = 1.0;
+    for (size_t i = 0; i < n; i++)
+        fixture->lu_large_tridiagonal_b.data[i] = 1.0;
 
-    st = lmmc_sparse_lu_solve(lu, &b, &x);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "LU solve completes without error");
+    st = lmmc_sparse_lu_solve(fixture->lu_large_tridiagonal_lu, &fixture->lu_large_tridiagonal_b, &fixture->lu_large_tridiagonal_x);
+    assert_true(st == LMMC_STATUS_OK);
 
-    lmmc_sparse_lu_destroy(lu);
-    lmmc_vec_destroy(&b);
-    lmmc_vec_destroy(&x);
-    lmmc_sparse_destroy(&A);
+    lmmc_sparse_lu_destroy(fixture->lu_large_tridiagonal_lu);
+    fixture->lu_large_tridiagonal_lu = NULL;
+    lmmc_vec_destroy(&fixture->lu_large_tridiagonal_b);
+    lmmc_vec_destroy(&fixture->lu_large_tridiagonal_x);
+    lmmc_sparse_destroy(&fixture->lu_large_tridiagonal_A);
 }
 
-static void test_cholesky_dense_fillin(void)
-{
-    printf("Test: Sparse Cholesky with dense SPD matrix (n=15, max fill-in)\n");
+static void test_cholesky_dense_fillin(void **state) {
+    struct test_fixture *fixture = *state;
 
     const size_t n = 15;
-    lmmc_sparse_mat_t A = {0};
-    lmmc_sparse_chol_t* chol = NULL;
-    lmmc_vec_t b = {0}, x = {0};
+
     lmmc_status_t st;
 
-    st = build_dense_spd_as_sparse(n, &A);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "build dense SPD as sparse");
+    st = build_dense_spd_as_sparse(n, &fixture->cholesky_dense_fillin_A);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_sparse_chol_symbolic(&A, &chol);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "Cholesky symbolic");
+    st = lmmc_sparse_chol_symbolic(&fixture->cholesky_dense_fillin_A, &fixture->cholesky_dense_fillin_chol);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_sparse_chol_numeric(&A, chol);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "Cholesky numeric succeeds (reallocation exercised)");
+    st = lmmc_sparse_chol_numeric(&fixture->cholesky_dense_fillin_A, fixture->cholesky_dense_fillin_chol);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* Solve with known solution */
-    st = lmmc_vec_create(n, &b);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "create b");
-    st = lmmc_vec_create(n, &x);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "create x");
+    st = lmmc_vec_create(n, &fixture->cholesky_dense_fillin_b);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_vec_create(n, &fixture->cholesky_dense_fillin_x);
+    assert_true(st == LMMC_STATUS_OK);
 
     {
-        lmmc_vec_t x_exact = {0};
-        st = lmmc_vec_create(n, &x_exact);
-        TEST_ASSERT(st == LMMC_STATUS_OK, "create x_exact");
+
+        st = lmmc_vec_create(n, &fixture->cholesky_dense_fillin_x_exact);
+        assert_true(st == LMMC_STATUS_OK);
         for (size_t i = 0; i < n; i++) {
-            x_exact.data[i] = (lmmc_real_t)(i + 1);
+            fixture->cholesky_dense_fillin_x_exact.data[i] = (lmmc_real_t)(i + 1);
         }
-        st = lmmc_sparse_mat_vec_mul(&A, &x_exact, &b);
-        TEST_ASSERT(st == LMMC_STATUS_OK, "compute b = A * x_exact");
-        lmmc_vec_destroy(&x_exact);
+        st = lmmc_sparse_mat_vec_mul(&fixture->cholesky_dense_fillin_A, &fixture->cholesky_dense_fillin_x_exact, &fixture->cholesky_dense_fillin_b);
+        assert_true(st == LMMC_STATUS_OK);
+        lmmc_vec_destroy(&fixture->cholesky_dense_fillin_x_exact);
     }
 
-    st = lmmc_sparse_chol_solve(chol, &b, &x);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "Cholesky solve succeeds");
+    st = lmmc_sparse_chol_solve(fixture->cholesky_dense_fillin_chol, &fixture->cholesky_dense_fillin_b, &fixture->cholesky_dense_fillin_x);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* Residual check: ||Ax - b||_2 should be small */
     {
-        lmmc_real_t residual = compute_residual(&A, &x, &b);
+        lmmc_real_t residual = compute_residual(&fixture->cholesky_dense_fillin_A, &fixture->cholesky_dense_fillin_x, &fixture->cholesky_dense_fillin_b);
         lmmc_real_t b_norm = 0.0;
-        for (size_t i = 0; i < n; i++) b_norm += b.data[i] * b.data[i];
+        for (size_t i = 0; i < n; i++)
+            b_norm += fixture->cholesky_dense_fillin_b.data[i] * fixture->cholesky_dense_fillin_b.data[i];
         b_norm = sqrt(b_norm);
 
-        TEST_ASSERT(residual <= 1e-8 * (1.0 + b_norm),
-                    "Cholesky solve residual within tolerance");
+        assert_true(isfinite(residual) && isfinite(b_norm) && residual <= 1e-8 * (1.0 + b_norm));
     }
 
-    lmmc_sparse_chol_destroy(chol);
-    lmmc_vec_destroy(&b);
-    lmmc_vec_destroy(&x);
-    lmmc_sparse_destroy(&A);
+    lmmc_sparse_chol_destroy(fixture->cholesky_dense_fillin_chol);
+    fixture->cholesky_dense_fillin_chol = NULL;
+    lmmc_vec_destroy(&fixture->cholesky_dense_fillin_b);
+    lmmc_vec_destroy(&fixture->cholesky_dense_fillin_x);
+    lmmc_sparse_destroy(&fixture->cholesky_dense_fillin_A);
 }
 
-static void test_cholesky_arrowhead_fillin(void)
-{
-    printf("Test: Sparse Cholesky with arrowhead SPD (n=30)\n");
+static void test_cholesky_arrowhead_fillin(void **state) {
+    struct test_fixture *fixture = *state;
 
     const size_t n = 30;
-    lmmc_sparse_mat_t A = {0};
-    lmmc_sparse_chol_t* chol = NULL;
-    lmmc_vec_t b = {0}, x = {0};
+
     lmmc_status_t st;
 
-    st = build_arrowhead_spd(n, &A);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "build arrowhead SPD");
+    st = build_arrowhead_spd(n, &fixture->cholesky_arrowhead_fillin_A);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_sparse_chol_symbolic(&A, &chol);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "Cholesky symbolic");
+    st = lmmc_sparse_chol_symbolic(&fixture->cholesky_arrowhead_fillin_A, &fixture->cholesky_arrowhead_fillin_chol);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_sparse_chol_numeric(&A, chol);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "Cholesky numeric succeeds");
+    st = lmmc_sparse_chol_numeric(&fixture->cholesky_arrowhead_fillin_A, fixture->cholesky_arrowhead_fillin_chol);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* Solve with known solution x = [1, 1, ..., 1] */
-    st = lmmc_vec_create(n, &b);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "create b");
-    st = lmmc_vec_create(n, &x);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "create x");
+    st = lmmc_vec_create(n, &fixture->cholesky_arrowhead_fillin_b);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_vec_create(n, &fixture->cholesky_arrowhead_fillin_x);
+    assert_true(st == LMMC_STATUS_OK);
 
     {
-        lmmc_vec_t x_exact = {0};
-        st = lmmc_vec_create(n, &x_exact);
-        TEST_ASSERT(st == LMMC_STATUS_OK, "create x_exact");
+
+        st = lmmc_vec_create(n, &fixture->cholesky_arrowhead_fillin_x_exact);
+        assert_true(st == LMMC_STATUS_OK);
         for (size_t i = 0; i < n; i++) {
-            x_exact.data[i] = 1.0;
+            fixture->cholesky_arrowhead_fillin_x_exact.data[i] = 1.0;
         }
-        st = lmmc_sparse_mat_vec_mul(&A, &x_exact, &b);
-        TEST_ASSERT(st == LMMC_STATUS_OK, "compute b");
-        lmmc_vec_destroy(&x_exact);
+        st = lmmc_sparse_mat_vec_mul(&fixture->cholesky_arrowhead_fillin_A, &fixture->cholesky_arrowhead_fillin_x_exact, &fixture->cholesky_arrowhead_fillin_b);
+        assert_true(st == LMMC_STATUS_OK);
+        lmmc_vec_destroy(&fixture->cholesky_arrowhead_fillin_x_exact);
     }
 
-    st = lmmc_sparse_chol_solve(chol, &b, &x);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "solve succeeds");
+    st = lmmc_sparse_chol_solve(fixture->cholesky_arrowhead_fillin_chol, &fixture->cholesky_arrowhead_fillin_b, &fixture->cholesky_arrowhead_fillin_x);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* Check solution: all entries should be 1.0 */
     {
         lmmc_real_t max_err = 0.0;
         for (size_t i = 0; i < n; i++) {
-            lmmc_real_t err = fabs(x.data[i] - 1.0);
-            if (err > max_err) max_err = err;
+            lmmc_real_t err = fabs(fixture->cholesky_arrowhead_fillin_x.data[i] - 1.0);
+            assert_true(isfinite(err));
+            if (err > max_err)
+                max_err = err;
         }
-        TEST_ASSERT(max_err < 1e-8, "Cholesky arrowhead solution correct");
+        assert_true(max_err < 1e-8);
     }
 
-    lmmc_sparse_chol_destroy(chol);
-    lmmc_vec_destroy(&b);
-    lmmc_vec_destroy(&x);
-    lmmc_sparse_destroy(&A);
+    lmmc_sparse_chol_destroy(fixture->cholesky_arrowhead_fillin_chol);
+    fixture->cholesky_arrowhead_fillin_chol = NULL;
+    lmmc_vec_destroy(&fixture->cholesky_arrowhead_fillin_b);
+    lmmc_vec_destroy(&fixture->cholesky_arrowhead_fillin_x);
+    lmmc_sparse_destroy(&fixture->cholesky_arrowhead_fillin_A);
 }
 
-static void test_destroy_after_failed_cholesky(void)
-{
-    printf("Test: Destroy after failed Cholesky (non-SPD matrix)\n");
+static void test_destroy_after_failed_cholesky(void **state) {
+    struct test_fixture *fixture = *state;
 
     /* Build a non-SPD matrix */
     lmmc_real_t data[] = {
         1.0, 2.0, 0.0,
         2.0, 1.0, 0.0,
-        0.0, 0.0, 1.0
-    };
+        0.0, 0.0, 1.0};
 
-    lmmc_sparse_builder_t* builder = NULL;
-    lmmc_sparse_mat_t A = {0};
-    lmmc_sparse_chol_t* chol = NULL;
     lmmc_status_t st;
 
-    st = lmmc_sparse_builder_create(3, 3, 9, &builder);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "create builder");
+    st = lmmc_sparse_builder_create(3, 3, 9, &fixture->destroy_after_failed_cholesky_builder);
+    assert_true(st == LMMC_STATUS_OK);
 
     for (size_t i = 0; i < 3; i++) {
         for (size_t j = 0; j < 3; j++) {
             if (data[i * 3 + j] != 0.0) {
-                st = lmmc_sparse_builder_add(builder, i, j, data[i * 3 + j]);
-                TEST_ASSERT(st == LMMC_STATUS_OK, "add entry");
+                st = lmmc_sparse_builder_add(fixture->destroy_after_failed_cholesky_builder, i, j, data[i * 3 + j]);
+                assert_true(st == LMMC_STATUS_OK);
             }
         }
     }
 
-    st = lmmc_sparse_builder_build(builder, LMMC_SPARSE_CSC, &A);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "build matrix");
-    lmmc_sparse_builder_destroy(builder);
+    st = lmmc_sparse_builder_build(fixture->destroy_after_failed_cholesky_builder, LMMC_SPARSE_CSC, &fixture->destroy_after_failed_cholesky_A);
+    assert_true(st == LMMC_STATUS_OK);
+    lmmc_sparse_builder_destroy(fixture->destroy_after_failed_cholesky_builder);
+    fixture->destroy_after_failed_cholesky_builder = NULL;
 
-    st = lmmc_sparse_chol_symbolic(&A, &chol);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "symbolic succeeds");
+    st = lmmc_sparse_chol_symbolic(&fixture->destroy_after_failed_cholesky_A, &fixture->destroy_after_failed_cholesky_chol);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* Numeric should fail because matrix is not SPD */
-    st = lmmc_sparse_chol_numeric(&A, chol);
-    TEST_ASSERT(st == LMMC_STATUS_NOT_POSITIVE_DEFINITE,
-                "numeric returns NOT_POSITIVE_DEFINITE");
+    st = lmmc_sparse_chol_numeric(&fixture->destroy_after_failed_cholesky_A, fixture->destroy_after_failed_cholesky_chol);
+    assert_true(st == LMMC_STATUS_NOT_POSITIVE_DEFINITE);
 
     /* Destroy should not crash even after failed factorization */
-    lmmc_sparse_chol_destroy(chol);
-    TEST_ASSERT(1, "destroy after failed Cholesky does not crash");
+    lmmc_sparse_chol_destroy(fixture->destroy_after_failed_cholesky_chol);
+    fixture->destroy_after_failed_cholesky_chol = NULL;
 
-    lmmc_sparse_destroy(&A);
+    lmmc_sparse_destroy(&fixture->destroy_after_failed_cholesky_A);
 }
 
-static void test_destroy_after_failed_lu(void)
-{
-    printf("Test: Destroy after failed LU (singular matrix)\n");
+static void test_destroy_after_failed_lu(void **state) {
+    struct test_fixture *fixture = *state;
 
-    lmmc_sparse_builder_t* builder = NULL;
-    lmmc_sparse_mat_t A = {0};
-    lmmc_sparse_lu_t* lu = NULL;
     lmmc_status_t st;
 
-    st = lmmc_sparse_builder_create(3, 3, 9, &builder);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "create builder");
+    st = lmmc_sparse_builder_create(3, 3, 9, &fixture->destroy_after_failed_lu_builder);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* Matrix: [[1, 0, 0], [0, 0, 0], [0, 0, 1]]
      * Column 1 is all zeros -> singular, detected during factorization. */
-    lmmc_sparse_builder_add(builder, 0, 0, 1.0);
-    lmmc_sparse_builder_add(builder, 2, 2, 1.0);
+    assert_int_equal(lmmc_sparse_builder_add(fixture->destroy_after_failed_lu_builder, 0, 0, 1.0), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_sparse_builder_add(fixture->destroy_after_failed_lu_builder, 2, 2, 1.0), LMMC_STATUS_OK);
 
-    st = lmmc_sparse_builder_build(builder, LMMC_SPARSE_CSC, &A);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "build singular matrix");
-    lmmc_sparse_builder_destroy(builder);
+    st = lmmc_sparse_builder_build(fixture->destroy_after_failed_lu_builder, LMMC_SPARSE_CSC, &fixture->destroy_after_failed_lu_A);
+    assert_true(st == LMMC_STATUS_OK);
+    lmmc_sparse_builder_destroy(fixture->destroy_after_failed_lu_builder);
+    fixture->destroy_after_failed_lu_builder = NULL;
 
-    st = lmmc_sparse_lu_symbolic(&A, &lu);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "LU symbolic succeeds");
+    st = lmmc_sparse_lu_symbolic(&fixture->destroy_after_failed_lu_A, &fixture->destroy_after_failed_lu_lu);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* Numeric should fail because matrix is singular */
-    st = lmmc_sparse_lu_numeric(&A, lu);
-    TEST_ASSERT(st == LMMC_STATUS_SINGULAR_MATRIX,
-                "LU numeric returns SINGULAR_MATRIX");
+    st = lmmc_sparse_lu_numeric(&fixture->destroy_after_failed_lu_A, fixture->destroy_after_failed_lu_lu);
+    assert_true(st == LMMC_STATUS_SINGULAR_MATRIX);
 
     /* Destroy should not crash even after failed factorization */
-    lmmc_sparse_lu_destroy(lu);
-    TEST_ASSERT(1, "destroy after failed LU does not crash");
+    lmmc_sparse_lu_destroy(fixture->destroy_after_failed_lu_lu);
+    fixture->destroy_after_failed_lu_lu = NULL;
 
-    lmmc_sparse_destroy(&A);
+    lmmc_sparse_destroy(&fixture->destroy_after_failed_lu_A);
 }
 
-static void test_destroy_null(void)
-{
-    printf("Test: Destroy NULL contexts\n");
+static void test_destroy_null(void **state) {
+    (void)state;
 
     lmmc_sparse_lu_destroy(NULL);
-    TEST_ASSERT(1, "LU destroy NULL does not crash");
 
     lmmc_sparse_chol_destroy(NULL);
-    TEST_ASSERT(1, "Cholesky destroy NULL does not crash");
 }
 
-static void test_successful_factorize_then_destroy(void)
-{
-    printf("Test: Successful factorization then destroy (lifecycle)\n");
+static void test_successful_factorize_then_destroy(void **state) {
+    struct test_fixture *fixture = *state;
 
     const size_t n = 10;
-    lmmc_sparse_mat_t A = {0};
-    lmmc_sparse_lu_t* lu = NULL;
-    lmmc_sparse_chol_t* chol = NULL;
+
     lmmc_status_t st;
 
-    st = build_tridiagonal(n, &A);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "build tridiagonal matrix");
+    st = build_tridiagonal(n, &fixture->successful_factorize_then_destroy_A);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_sparse_lu_symbolic(&A, &lu);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "LU symbolic");
+    st = lmmc_sparse_lu_symbolic(&fixture->successful_factorize_then_destroy_A, &fixture->successful_factorize_then_destroy_lu);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_sparse_lu_numeric(&A, lu);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "LU numeric");
+    st = lmmc_sparse_lu_numeric(&fixture->successful_factorize_then_destroy_A, fixture->successful_factorize_then_destroy_lu);
+    assert_true(st == LMMC_STATUS_OK);
 
-    lmmc_sparse_lu_destroy(lu);
-    TEST_ASSERT(1, "LU destroy after success does not crash");
-    lmmc_sparse_destroy(&A);
+    lmmc_sparse_lu_destroy(fixture->successful_factorize_then_destroy_lu);
+    fixture->successful_factorize_then_destroy_lu = NULL;
 
-    st = build_arrowhead_spd(n, &A);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "build SPD matrix");
+    lmmc_sparse_destroy(&fixture->successful_factorize_then_destroy_A);
 
-    st = lmmc_sparse_chol_symbolic(&A, &chol);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "Cholesky symbolic");
+    st = build_arrowhead_spd(n, &fixture->successful_factorize_then_destroy_A);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_sparse_chol_numeric(&A, chol);
-    TEST_ASSERT(st == LMMC_STATUS_OK, "Cholesky numeric");
+    st = lmmc_sparse_chol_symbolic(&fixture->successful_factorize_then_destroy_A, &fixture->successful_factorize_then_destroy_chol);
+    assert_true(st == LMMC_STATUS_OK);
 
-    lmmc_sparse_chol_destroy(chol);
-    TEST_ASSERT(1, "Cholesky destroy after success does not crash");
-    lmmc_sparse_destroy(&A);
+    st = lmmc_sparse_chol_numeric(&fixture->successful_factorize_then_destroy_A, fixture->successful_factorize_then_destroy_chol);
+    assert_true(st == LMMC_STATUS_OK);
+
+    lmmc_sparse_chol_destroy(fixture->successful_factorize_then_destroy_chol);
+    fixture->successful_factorize_then_destroy_chol = NULL;
+
+    lmmc_sparse_destroy(&fixture->successful_factorize_then_destroy_A);
 }
 
-/* ========================================================================== */
-
-int main(void)
-{
-    printf("=== Sparse Buffer Safety Tests ===\n\n");
-
-    test_lu_tridiagonal_fillin();
-    test_lu_large_tridiagonal();
-    test_cholesky_dense_fillin();
-    test_cholesky_arrowhead_fillin();
-    test_destroy_after_failed_cholesky();
-    test_destroy_after_failed_lu();
-    test_destroy_null();
-    test_successful_factorize_then_destroy();
-
-    printf("\n=== Results: %d/%d tests passed ===\n", pass_count, test_count);
-
-    return (pass_count == test_count) ? 0 : 1;
+int main(void) {
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_lu_tridiagonal_fillin, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_lu_large_tridiagonal, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_cholesky_dense_fillin, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_cholesky_arrowhead_fillin, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_destroy_after_failed_cholesky, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_destroy_after_failed_lu, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_destroy_null, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_successful_factorize_then_destroy, setup, teardown),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

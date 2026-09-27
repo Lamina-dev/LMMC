@@ -1,11 +1,49 @@
 find_package(Threads REQUIRED)
 
+find_package(cmocka 1.1.7 CONFIG QUIET)
+if(NOT TARGET cmocka AND TARGET cmocka::cmocka)
+	add_library(cmocka ALIAS cmocka::cmocka)
+endif()
+if(NOT TARGET cmocka)
+	include(FetchContent)
+	FetchContent_Declare(cmocka
+		GIT_REPOSITORY https://gitlab.com/cmocka/cmocka.git
+		GIT_TAG a01cc69ee9536f90e57c61a198f2d1944d3d4313
+		SOURCE_SUBDIR development-only)
+	FetchContent_MakeAvailable(cmocka)
+	set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+	set(BUILD_SHARED_LIBS OFF)
+	set(UNIT_TESTING OFF)
+	set(WITH_EXAMPLES OFF)
+	set(WITH_CMOCKERY_SUPPORT OFF)
+	set(CMAKE_DISABLE_FIND_PACKAGE_Doxygen TRUE)
+	add_subdirectory("${cmocka_SOURCE_DIR}" "${cmocka_BINARY_DIR}" EXCLUDE_FROM_ALL SYSTEM)
+endif()
+
 function(add_lmmc_test target_name source_file)
+	cmake_path(ABSOLUTE_PATH source_file BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE)
+	get_property(_registered GLOBAL PROPERTY LMMC_REGISTERED_TEST_SOURCES)
+	if(source_file IN_LIST _registered)
+		message(FATAL_ERROR "Test source registered more than once: ${source_file}")
+	endif()
+	set_property(GLOBAL APPEND PROPERTY LMMC_REGISTERED_TEST_SOURCES "${source_file}")
 	add_executable(${target_name} ${source_file})
-	target_link_libraries(${target_name} PRIVATE lmmc)
+	target_link_libraries(${target_name} PRIVATE lmmc cmocka)
+	set_target_properties(${target_name} PROPERTIES
+		C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS OFF EXCLUDE_FROM_ALL FALSE)
 	target_include_directories(${target_name} PRIVATE "${LMMP_INCLUDE_DIR}/lmmp")
 	lmmc_apply_instrumentation(${target_name})
+	target_compile_options(${target_name} PRIVATE ${_lmmc_warning_options})
 	lmmc_prepare_runtime(${target_name})
+	if(WIN32)
+		get_target_property(_cmocka_type cmocka TYPE)
+		if(_cmocka_type STREQUAL "SHARED_LIBRARY")
+			add_custom_command(TARGET ${target_name} POST_BUILD
+				COMMAND ${CMAKE_COMMAND} -E copy_if_different
+					"$<TARGET_FILE:cmocka>" "$<TARGET_FILE_DIR:${target_name}>"
+				VERBATIM)
+		endif()
+	endif()
 	add_test(NAME ${target_name} COMMAND ${target_name})
 	set_tests_properties(${target_name} PROPERTIES LABELS "lmmc")
 endfunction()
@@ -21,7 +59,12 @@ add_lmmc_test(lmmc_test_numeric test_numeric.c)
 add_lmmc_test(lmmc_test_sparse test_sparse.c)
 add_lmmc_test(lmmc_test_csc test_csc.c)
 add_lmmc_test(lmmc_test_spgemm test_spgemm.c)
-add_lmmc_test(lmmc_test_stats test_stats.c)
+add_lmmc_test(lmmc_test_stats_moments test_stats_moments.c)
+add_lmmc_test(lmmc_test_stats_scaled_moments test_stats_scaled_moments.c)
+add_lmmc_test(lmmc_test_stats_covariance_scales test_stats_covariance_scales.c)
+add_lmmc_test(lmmc_test_stats_covariance_matrix_scales test_stats_covariance_matrix_scales.c)
+add_lmmc_test(lmmc_test_stats_matrix test_stats_matrix.c)
+add_lmmc_test(lmmc_test_stats_boundaries test_stats_boundaries.c)
 add_lmmc_test(lmmc_test_tensor test_tensor.c)
 add_lmmc_test(lmmc_test_nonlinear test_nonlinear.c)
 add_lmmc_test(lmmc_test_ode test_ode.c)
@@ -60,6 +103,7 @@ add_lmmc_test(lmmc_test_eigen_gen_prop test_eigen_gen_prop.c)
 add_lmmc_test(lmmc_test_eigen_sym_prop test_eigen_sym_prop.c)
 
 add_lmmc_test(lmmc_test_svd test_svd.c)
+add_lmmc_test(lmmc_test_svd_pinv_finite test_svd_pinv_finite.c)
 
 add_lmmc_test(lmmc_test_random_dist test_random_dist.c)
 
@@ -68,6 +112,7 @@ add_lmmc_test(lmmc_test_sparse_cholesky test_sparse_cholesky.c)
 add_lmmc_test(lmmc_test_random_rng test_random_rng.c)
 
 add_lmmc_test(lmmc_test_quadrature test_quadrature.c)
+add_lmmc_test(lmmc_test_quadrature_adaptive test_quadrature_adaptive.c)
 
 
 add_lmmc_test(lmmc_test_interp_linear test_interp_linear.c)
@@ -78,12 +123,23 @@ add_lmmc_test(lmmc_test_init test_init.c)
 target_link_libraries(lmmc_test_init PRIVATE Threads::Threads)
 
 add_lmmc_test(lmmc_test_linalg_extended test_linalg_extended.c)
+add_lmmc_test(lmmc_test_linalg_errors test_linalg_errors.c)
 
-add_lmmc_test(lmmc_test_eigen_extended test_eigen_extended.c)
+add_lmmc_test(lmmc_test_eigen_extended_symmetric test_eigen_extended_symmetric.c)
+add_lmmc_test(lmmc_test_eigen_extended_general test_eigen_extended_general.c)
+add_lmmc_test(lmmc_test_eigen_extended_svd test_eigen_extended_svd.c)
+add_lmmc_test(lmmc_test_eigen_extended_pseudoinverse test_eigen_extended_pseudoinverse.c)
+add_lmmc_test(lmmc_test_eigen_extended_condition test_eigen_extended_condition.c)
+add_lmmc_test(lmmc_test_eigen_extended_boundaries test_eigen_extended_boundaries.c)
 
 add_lmmc_test(lmmc_test_itersolve_extended test_itersolve_extended.c)
 
-add_lmmc_test(lmmc_test_dense_extended test_dense_extended.c)
+add_lmmc_test(lmmc_test_dense_extended_multiplication test_dense_extended_multiplication.c)
+add_lmmc_test(lmmc_test_dense_extended_transpose test_dense_extended_transpose.c)
+add_lmmc_test(lmmc_test_dense_extended_invariants test_dense_extended_invariants.c)
+add_lmmc_test(lmmc_test_dense_extended_vector_operations test_dense_extended_vector_operations.c)
+add_lmmc_test(lmmc_test_dense_extended_norms test_dense_extended_norms.c)
+add_lmmc_test(lmmc_test_dense_extended_aliasing test_dense_extended_aliasing.c)
 
 add_lmmc_test(lmmc_test_interp_extended test_interp_extended.c)
 
@@ -100,10 +156,17 @@ add_lmmc_test(lmmc_test_numeric_extended test_numeric_extended.c)
 add_lmmc_test(lmmc_test_stats_extended test_stats_extended.c)
 
 add_lmmc_test(lmmc_test_random_extended test_random_extended.c)
+add_lmmc_test(lmmc_test_random_distribution_extremes test_random_distribution_extremes.c)
 
-add_lmmc_test(lmmc_test_sparse_extended test_sparse_extended.c)
+add_lmmc_test(lmmc_test_sparse_extended_conversion test_sparse_extended_conversion.c)
+add_lmmc_test(lmmc_test_sparse_extended_products test_sparse_extended_products.c)
+add_lmmc_test(lmmc_test_sparse_extended_addition test_sparse_extended_addition.c)
+add_lmmc_test(lmmc_test_sparse_extended_solvers test_sparse_extended_solvers.c)
+add_lmmc_test(lmmc_test_sparse_extended_boundaries test_sparse_extended_boundaries.c)
+add_lmmc_test(lmmc_test_sparse_extended_norms test_sparse_extended_norms.c)
 
 add_lmmc_test(lmmc_test_tensor_extended test_tensor_extended.c)
+add_lmmc_test(lmmc_test_tensor_extended_views test_tensor_extended_views.c)
 
 add_lmmc_test(lmmc_test_lambertw test_lambertw.c)
 
@@ -124,8 +187,17 @@ add_lmmc_test(lmmc_test_fft_roundtrip_prop test_fft_roundtrip_prop.c)
 add_lmmc_test(lmmc_test_eigen_residual_prop test_eigen_residual_prop.c)
 
 add_lmmc_test(lmmc_test_tensor_nd test_tensor_nd.c)
+add_lmmc_test(lmmc_test_tensor_nd_products test_tensor_nd_products.c)
 
-add_lmmc_test(lmmc_test_optimize test_optimize.c)
+add_lmmc_test(lmmc_test_optimize_lbfgs test_optimize_lbfgs.c)
+add_lmmc_test(lmmc_test_optimize_newton_linear test_optimize_newton_linear.c)
+add_lmmc_test(lmmc_test_optimize_newton_boundaries test_optimize_newton_boundaries.c)
+add_lmmc_test(lmmc_test_optimize_broyden test_optimize_broyden.c)
+add_lmmc_test(lmmc_test_optimize_gradient_descent test_optimize_gradient_descent.c)
+add_lmmc_test(lmmc_test_optimize_least_squares test_optimize_least_squares.c)
+add_lmmc_test(lmmc_test_optimize_root_final_state test_optimize_root_final_state.c)
+add_lmmc_test(lmmc_test_optimize_gradient_final_state test_optimize_gradient_final_state.c)
+add_lmmc_test(lmmc_test_optimize_least_squares_final_state test_optimize_least_squares_final_state.c)
 
 add_lmmc_test(lmmc_test_gemm_accuracy_prop test_gemm_accuracy_prop.c)
 
@@ -140,12 +212,24 @@ add_lmmc_test(lmmc_test_special_functions test_special_functions.c)
 add_lmmc_test(lmmc_test_ode_implicit test_ode_implicit_quick.c)
 
 add_lmmc_test(lmmc_test_ode_implicit_solvers test_ode_implicit_solvers.c)
+add_lmmc_test(lmmc_test_ode_sdirk_state test_ode_sdirk_state.c)
 
 add_lmmc_test(lmmc_test_interp_advanced test_interp_advanced.c)
+add_lmmc_test(lmmc_test_interp_grid test_interp_grid.c)
 
-add_lmmc_test(lmmc_test_stats_dist test_stats_dist.c)
+add_lmmc_test(lmmc_test_stats_dist_descriptive test_stats_dist_descriptive.c)
+add_lmmc_test(lmmc_test_stats_dist_normal test_stats_dist_normal.c)
+add_lmmc_test(lmmc_test_stats_dist_student_t test_stats_dist_student_t.c)
+add_lmmc_test(lmmc_test_stats_dist_chi_square_f test_stats_dist_chi_square_f.c)
+add_lmmc_test(lmmc_test_stats_dist_gamma test_stats_dist_gamma.c)
+add_lmmc_test(lmmc_test_stats_dist_beta test_stats_dist_beta.c)
+add_lmmc_test(lmmc_test_stats_dist_quantile_tails test_stats_dist_quantile_tails.c)
+add_lmmc_test(lmmc_test_stats_dist_boundaries test_stats_dist_boundaries.c)
+add_lmmc_test(lmmc_test_stats_dist_discrete test_stats_dist_discrete.c)
 
-add_lmmc_test(lmmc_test_quadrature_new test_quadrature_new.c)
+add_lmmc_test(lmmc_test_quadrature_romberg test_quadrature_romberg.c)
+add_lmmc_test(lmmc_test_quadrature_tanh_sinh test_quadrature_tanh_sinh.c)
+add_lmmc_test(lmmc_test_quadrature_weighted test_quadrature_weighted.c)
 
 add_lmmc_test(lmmc_test_dist_roundtrip_prop test_dist_roundtrip_prop.c)
 
@@ -157,11 +241,15 @@ add_lmmc_test(lmmc_test_random_dist_stats test_random_dist_stats.c)
 
 add_lmmc_test(lmmc_test_mat_inv_trisolve test_mat_inv_trisolve.c)
 
-add_lmmc_test(lmmc_test_complex test_complex.c)
+add_lmmc_test(lmmc_test_complex_properties test_complex_properties.c)
+add_lmmc_test(lmmc_test_complex_status test_complex_status.c)
+add_lmmc_test(lmmc_test_complex_scaled_arithmetic test_complex_scaled_arithmetic.c)
+add_lmmc_test(lmmc_test_complex_principal_branches test_complex_principal_branches.c)
 
 add_lmmc_test(lmmc_test_elementwise test_elementwise.c)
 
-add_lmmc_test(lmmc_test_mat_extended test_mat_extended.c)
+add_lmmc_test(lmmc_test_mat_extended_properties test_mat_extended_properties.c)
+add_lmmc_test(lmmc_test_mat_extended_boundaries test_mat_extended_boundaries.c)
 
 add_lmmc_test(lmmc_test_vectorized test_vectorized.c)
 
@@ -169,5 +257,18 @@ add_lmmc_test(lmmc_test_scalar_math test_scalar_math.c)
 
 add_lmmc_test(lmmc_test_complex_transcendental test_complex_transcendental.c)
 
-add_lmmc_test(lmmc_test_stdlib test_stdlib.c)
+add_lmmc_test(lmmc_test_stdlib_constants_units test_stdlib_constants_units.c)
+add_lmmc_test(lmmc_test_stdlib_numeric_sets test_stdlib_numeric_sets.c)
+add_lmmc_test(lmmc_test_stdlib_boolean_sets test_stdlib_boolean_sets.c)
+add_lmmc_test(lmmc_test_stdlib_text_sets test_stdlib_text_sets.c)
+add_lmmc_test(lmmc_test_stdlib_complex_sets test_stdlib_complex_sets.c)
+add_lmmc_test(lmmc_test_stdlib_scalar_math test_stdlib_scalar_math.c)
+add_lmmc_test(lmmc_test_stdlib_statistics test_stdlib_statistics.c)
+add_lmmc_test(lmmc_test_stdlib_random test_stdlib_random.c)
+add_lmmc_test(lmmc_test_stdlib_vector_operations test_stdlib_vector_operations.c)
+add_lmmc_test(lmmc_test_stdlib_matrix_operations test_stdlib_matrix_operations.c)
+add_lmmc_test(lmmc_test_stdlib_matrix_operations_arguments test_stdlib_matrix_operations_arguments.c)
+add_lmmc_test(lmmc_test_stdlib_matrix_operations_descriptors test_stdlib_matrix_operations_descriptors.c)
+add_lmmc_test(lmmc_test_stdlib_matrix_operations_nonfinite test_stdlib_matrix_operations_nonfinite.c)
+add_lmmc_test(lmmc_test_stdlib_matrix_factorizations test_stdlib_matrix_factorizations.c)
 add_lmmc_test(lmmc_test_lmmp_ext test_lmmp_ext.c)

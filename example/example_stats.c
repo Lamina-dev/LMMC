@@ -5,6 +5,108 @@
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 
+static int create_samples(lmmc_vec_t* x, lmmc_vec_t* y) {
+    lmmc_status_t st = LMMC_STATUS_OK;
+    st = lmmc_vec_create(5, x);
+    if (st != LMMC_STATUS_OK) {
+        printf("vec_create x failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    st = lmmc_vec_create(5, y);
+    if (st != LMMC_STATUS_OK) {
+        printf("vec_create y failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+
+    x->data[0] = 1.0; y->data[0] = 2.0;
+    x->data[1] = 2.0; y->data[1] = 4.0;
+    x->data[2] = 3.0; y->data[2] = 6.0;
+    x->data[3] = 4.0; y->data[3] = 8.0;
+    x->data[4] = 5.0; y->data[4] = 10.0;
+    return 0;
+}
+
+static int compute_vector_statistics(const lmmc_vec_t* x, const lmmc_vec_t* y, double* mean_x, double* var_x_s, double* std_x_s, double* cov_xy_s, double* corr_xy_s) {
+    lmmc_status_t st = LMMC_STATUS_OK;
+    st = lmmc_vec_mean(x, mean_x);
+    if (st != LMMC_STATUS_OK) {
+        printf("vec_mean failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    st = lmmc_vec_variance_sample(x, var_x_s);
+    if (st != LMMC_STATUS_OK) {
+        printf("vec_variance_sample failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    st = lmmc_vec_stddev_sample(x, std_x_s);
+    if (st != LMMC_STATUS_OK) {
+        printf("vec_stddev_sample failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    st = lmmc_vec_covariance_sample(x, y, cov_xy_s);
+    if (st != LMMC_STATUS_OK) {
+        printf("vec_covariance_sample failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    st = lmmc_vec_correlation_sample(x, y, corr_xy_s);
+    if (st != LMMC_STATUS_OK) {
+        printf("vec_correlation_sample failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    return 0;
+}
+
+static int create_sample_matrix(const lmmc_vec_t* x, const lmmc_vec_t* y, lmmc_mat_t* data, lmmc_vec_t* means, lmmc_mat_t* cov, lmmc_mat_t* corr) {
+    lmmc_status_t st = LMMC_STATUS_OK;
+    st = lmmc_mat_create(5, 2, data);
+    if (st != LMMC_STATUS_OK) {
+        printf("mat_create data failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    st = lmmc_vec_create(2, means);
+    if (st != LMMC_STATUS_OK) {
+        printf("vec_create means failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    st = lmmc_mat_create(2, 2, cov);
+    if (st != LMMC_STATUS_OK) {
+        printf("mat_create cov failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    st = lmmc_mat_create(2, 2, corr);
+    if (st != LMMC_STATUS_OK) {
+        printf("mat_create corr failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+
+    data->data[0] = x->data[0]; data->data[1] = y->data[0];
+    data->data[2] = x->data[1]; data->data[3] = y->data[1];
+    data->data[4] = x->data[2]; data->data[5] = y->data[2];
+    data->data[6] = x->data[3]; data->data[7] = y->data[3];
+    data->data[8] = x->data[4]; data->data[9] = y->data[4];
+    return 0;
+}
+
+static int compute_matrix_statistics(const lmmc_mat_t* data, lmmc_vec_t* means, lmmc_mat_t* cov, lmmc_mat_t* corr) {
+    lmmc_status_t st = LMMC_STATUS_OK;
+    st = lmmc_mat_column_mean(data, means);
+    if (st != LMMC_STATUS_OK) {
+        printf("mat_column_mean failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    st = lmmc_mat_covariance_sample(data, cov);
+    if (st != LMMC_STATUS_OK) {
+        printf("mat_covariance_sample failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    st = lmmc_mat_correlation_sample(data, corr);
+    if (st != LMMC_STATUS_OK) {
+        printf("mat_correlation_sample failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    return 0;
+}
+
 int main(void) {
     lmmc_vec_t x = {0};
     lmmc_vec_t y = {0};
@@ -12,7 +114,6 @@ int main(void) {
     lmmc_mat_t data = {0};
     lmmc_mat_t cov = {0};
     lmmc_mat_t corr = {0};
-    lmmc_status_t st = LMMC_STATUS_OK;
     double mean_x = 0.0;
     double var_x_s = 0.0;
     double std_x_s = 0.0;
@@ -20,103 +121,20 @@ int main(void) {
     double corr_xy_s = 0.0;
     int rc = 0;
 
-    st = lmmc_vec_create(5, &x);
-    if (st != LMMC_STATUS_OK) {
-        printf("vec_create x failed: %s\n", lmmc_status_string(st));
-        rc = 1;
+    rc = create_samples(&x, &y);
+    if (rc != 0) {
         goto cleanup;
     }
-    st = lmmc_vec_create(5, &y);
-    if (st != LMMC_STATUS_OK) {
-        printf("vec_create y failed: %s\n", lmmc_status_string(st));
-        rc = 1;
+    rc = compute_vector_statistics(&x, &y, &mean_x, &var_x_s, &std_x_s, &cov_xy_s, &corr_xy_s);
+    if (rc != 0) {
         goto cleanup;
     }
-
-    x.data[0] = 1.0; y.data[0] = 2.0;
-    x.data[1] = 2.0; y.data[1] = 4.0;
-    x.data[2] = 3.0; y.data[2] = 6.0;
-    x.data[3] = 4.0; y.data[3] = 8.0;
-    x.data[4] = 5.0; y.data[4] = 10.0;
-
-    st = lmmc_vec_mean(&x, &mean_x);
-    if (st != LMMC_STATUS_OK) {
-        printf("vec_mean failed: %s\n", lmmc_status_string(st));
-        rc = 1;
+    rc = create_sample_matrix(&x, &y, &data, &means, &cov, &corr);
+    if (rc != 0) {
         goto cleanup;
     }
-    st = lmmc_vec_variance_sample(&x, &var_x_s);
-    if (st != LMMC_STATUS_OK) {
-        printf("vec_variance_sample failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-    st = lmmc_vec_stddev_sample(&x, &std_x_s);
-    if (st != LMMC_STATUS_OK) {
-        printf("vec_stddev_sample failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-    st = lmmc_vec_covariance_sample(&x, &y, &cov_xy_s);
-    if (st != LMMC_STATUS_OK) {
-        printf("vec_covariance_sample failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-    st = lmmc_vec_correlation_sample(&x, &y, &corr_xy_s);
-    if (st != LMMC_STATUS_OK) {
-        printf("vec_correlation_sample failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-
-    st = lmmc_mat_create(5, 2, &data);
-    if (st != LMMC_STATUS_OK) {
-        printf("mat_create data failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-    st = lmmc_vec_create(2, &means);
-    if (st != LMMC_STATUS_OK) {
-        printf("vec_create means failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-    st = lmmc_mat_create(2, 2, &cov);
-    if (st != LMMC_STATUS_OK) {
-        printf("mat_create cov failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-    st = lmmc_mat_create(2, 2, &corr);
-    if (st != LMMC_STATUS_OK) {
-        printf("mat_create corr failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-
-    data.data[0] = x.data[0]; data.data[1] = y.data[0];
-    data.data[2] = x.data[1]; data.data[3] = y.data[1];
-    data.data[4] = x.data[2]; data.data[5] = y.data[2];
-    data.data[6] = x.data[3]; data.data[7] = y.data[3];
-    data.data[8] = x.data[4]; data.data[9] = y.data[4];
-
-    st = lmmc_mat_column_mean(&data, &means);
-    if (st != LMMC_STATUS_OK) {
-        printf("mat_column_mean failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-    st = lmmc_mat_covariance_sample(&data, &cov);
-    if (st != LMMC_STATUS_OK) {
-        printf("mat_covariance_sample failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-    st = lmmc_mat_correlation_sample(&data, &corr);
-    if (st != LMMC_STATUS_OK) {
-        printf("mat_correlation_sample failed: %s\n", lmmc_status_string(st));
-        rc = 1;
+    rc = compute_matrix_statistics(&data, &means, &cov, &corr);
+    if (rc != 0) {
         goto cleanup;
     }
 

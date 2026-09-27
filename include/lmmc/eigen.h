@@ -133,23 +133,28 @@ lmmc_status_t lmmc_svd(
 );
 
 /**
- * @brief 计算 Moore-Penrose 伪逆 A^+.
+ * @brief 计算 Moore-Penrose 伪逆 A^+。
  *
  * 内部通过 SVD 实现:A^+ = V * Σ^{-1}_trunc * U^T,
- * 其中奇异值 < tol * sigma_max 的被截断为零.
+ * 仅保留严格大于截断阈值的奇异值，其余项截断为零。
  *
- * @param[in]  a        mxn 矩阵(不被修改).
- * @param[in]  tol      奇异值截断阈值;<=0 时使用 max(m,n)*eps*sigma_max.
- * @param[out] out_pinv nxm 输出矩阵,须已创建.
+ * @param[in]  a        mxn 矩阵(不被修改)。
+ * @param[in]  tol      奇异值截断阈值;<=0 时使用 max(m,n)*eps*sigma_max。
+ * @param[out] out_pinv nxm 输出矩阵,须已创建。
  *
  * @return
- * - ::LMMC_STATUS_OK - 成功.
- * - ::LMMC_STATUS_INVALID_ARGUMENT - 指针为 NULL.
- * - ::LMMC_STATUS_DIMENSION_MISMATCH - out_pinv 维度与 nxm 不匹配.
- * - ::LMMC_STATUS_ALLOCATION_FAILED - 内存分配失败.
+ * - ::LMMC_STATUS_OK - 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT - 指针为 NULL 或矩阵描述符无效。
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH - out_pinv 维度与 nxm 不匹配。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED - 内存分配失败。
+ * - ::LMMC_STATUS_CONVERGENCE_FAILED - SVD 迭代未收敛。
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 输入、tol、阈值、奇异值、向量因子、
+ *   被保留奇异值的倒数或重构中间量非有限。
  *
- * @par 副作用
- * - 覆写 out_pinv->data.内部分配并释放 SVD 工作空间.
+ * @note
+ * 仅在成功时提交有限结果到 out_pinv->data，保留行步长和填充区。
+ *   失败时 out_pinv 保持不变，允许输入与输出存储重叠。
+ *   内部分配并释放 SVD 工作空间及临时输出缓冲区。
  */
 lmmc_status_t lmmc_pinv(
     const lmmc_mat_t* a,

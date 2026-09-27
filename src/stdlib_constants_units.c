@@ -2,7 +2,6 @@
 
 #include <ctype.h>
 #include <math.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "stdlib_internal.h"
@@ -44,7 +43,7 @@ static size_t lmmc_std_constants_length(void)
 static const lmmc_std_constant_entry_t*
 lmmc_std_find_constant(const char* name)
 {
-    if (!name) return NULL;
+    if (!name) { return NULL; }
     for (size_t i = 0; i < lmmc_std_constants_length(); ++i) {
         if (strcmp(lmmc_std_constants[i].name, name) == 0) {
             return &lmmc_std_constants[i];
@@ -130,12 +129,50 @@ static int lmmc_std_parse_int(const char** cursor, int* out)
         value = value * 10 + digit;
         ++(*cursor);
     }
-    if (!have_digit) return 0;
+    if (!have_digit) { return 0; }
     *out = sign * value;
     if (*out < -LMMC_STD_MAX_UNIT_EXPONENT ||
         *out > LMMC_STD_MAX_UNIT_EXPONENT) {
         return 0;
     }
+    return 1;
+}
+
+static int lmmc_std_accumulate_unit(
+    const lmmc_std_unit_entry_t* unit, int exponent, lmmc_std_unit_sig_t* out)
+{
+    out->scale *= pow(unit->scale, (double)exponent);
+    if (!isfinite(out->scale)) { return 0; }
+    for (size_t i = 0; i < LMMC_STD_UNIT_DIM_COUNT; ++i) {
+        out->dims[i] += unit->dims[i] * exponent;
+        if (out->dims[i] < -LMMC_STD_MAX_UNIT_EXPONENT ||
+            out->dims[i] > LMMC_STD_MAX_UNIT_EXPONENT) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int lmmc_std_parse_unit_factor(
+    const char** position, int op_sign, lmmc_std_unit_sig_t* out)
+{
+    const char* cursor = *position;
+    const char* name_begin = cursor;
+    int exponent = 1;
+    while (isalpha((unsigned char)*cursor) || *cursor == '_') ++cursor;
+    if (cursor == name_begin) { return 0; }
+    const lmmc_std_unit_entry_t* unit =
+        lmmc_std_find_unit(name_begin, (size_t)(cursor - name_begin));
+    if (!unit) { return 0; }
+    if (*cursor == '^') {
+        ++cursor;
+        if (!lmmc_std_parse_int(&cursor, &exponent)) { return 0; }
+    }
+    exponent *= op_sign;
+    if (!lmmc_std_accumulate_unit(unit, exponent, out)) {
+        return 0;
+    }
+    *position = cursor;
     return 1;
 }
 
@@ -145,31 +182,13 @@ static int lmmc_std_parse_unit_expr(const char* text,
     const char* cursor = text;
     int op_sign = 1;
     lmmc_std_unit_identity(out);
-    if (!text || !*text) return 0;
-    if (strcmp(text, "1") == 0) return 1;
+    if (!text || !*text) { return 0; }
+    if (strcmp(text, "1") == 0) { return 1; }
     while (*cursor) {
-        const char* name_begin = cursor;
-        int exponent = 1;
-        while (isalpha((unsigned char)*cursor) || *cursor == '_') ++cursor;
-        if (cursor == name_begin) return 0;
-        const lmmc_std_unit_entry_t* unit =
-            lmmc_std_find_unit(name_begin, (size_t)(cursor - name_begin));
-        if (!unit) return 0;
-        if (*cursor == '^') {
-            ++cursor;
-            if (!lmmc_std_parse_int(&cursor, &exponent)) return 0;
+        if (!lmmc_std_parse_unit_factor(&cursor, op_sign, out)) {
+            return 0;
         }
-        exponent *= op_sign;
-        out->scale *= pow(unit->scale, (double)exponent);
-        if (!isfinite(out->scale)) return 0;
-        for (size_t i = 0; i < LMMC_STD_UNIT_DIM_COUNT; ++i) {
-            out->dims[i] += unit->dims[i] * exponent;
-            if (out->dims[i] < -LMMC_STD_MAX_UNIT_EXPONENT ||
-                out->dims[i] > LMMC_STD_MAX_UNIT_EXPONENT) {
-                return 0;
-            }
-        }
-        if (*cursor == '\0') break;
+        if (*cursor == '\0') { break; }
         if (*cursor == '*') {
             op_sign = 1;
         } else if (*cursor == '/') {
@@ -178,7 +197,7 @@ static int lmmc_std_parse_unit_expr(const char* text,
             return 0;
         }
         ++cursor;
-        if (*cursor == '\0') return 0;
+        if (*cursor == '\0') { return 0; }
     }
     return 1;
 }
@@ -187,7 +206,7 @@ static int lmmc_std_same_dimension(const lmmc_std_unit_sig_t* lhs,
                                    const lmmc_std_unit_sig_t* rhs)
 {
     for (size_t i = 0; i < LMMC_STD_UNIT_DIM_COUNT; ++i) {
-        if (lhs->dims[i] != rhs->dims[i]) return 0;
+        if (lhs->dims[i] != rhs->dims[i]) { return 0; }
     }
     return 1;
 }
@@ -195,7 +214,7 @@ static int lmmc_std_same_dimension(const lmmc_std_unit_sig_t* lhs,
 static int lmmc_std_dimensionless_sig(const lmmc_std_unit_sig_t* sig)
 {
     for (size_t i = 0; i < LMMC_STD_UNIT_DIM_COUNT; ++i) {
-        if (sig->dims[i] != 0) return 0;
+        if (sig->dims[i] != 0) { return 0; }
     }
     return 1;
 }
@@ -221,14 +240,14 @@ size_t lmmc_std_constants_count(void)
 
 const char* lmmc_std_constants_name(size_t index)
 {
-    if (index >= lmmc_std_constants_length()) return NULL;
+    if (index >= lmmc_std_constants_length()) { return NULL; }
     return lmmc_std_constants[index].name;
 }
 
 lmmc_status_t lmmc_std_constants_get(const char* name, lmmc_real_t* out)
 {
     const lmmc_std_constant_entry_t* entry = lmmc_std_find_constant(name);
-    if (!entry || !out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!entry || !out) { return LMMC_STATUS_INVALID_ARGUMENT; }
     *out = entry->value;
     return LMMC_STATUS_OK;
 }
@@ -256,7 +275,7 @@ lmmc_status_t lmmc_std_constants_entry(size_t index,
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_std_math_I(lmmc_complex_t* out)
+lmmc_status_t lmmc_std_math_i(lmmc_complex_t* out)
 {
     return lmmc_complex_create((lmmc_real_t)0, (lmmc_real_t)1, out);
 }
@@ -268,8 +287,8 @@ lmmc_status_t lmmc_std_units_convert(lmmc_real_t x,
     lmmc_std_unit_sig_t from_sig;
     lmmc_std_unit_sig_t to_sig;
     double converted;
-    if (!out || !from_unit || !to_unit) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (!lmmc_std_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    if (!out || !from_unit || !to_unit) { return LMMC_STATUS_INVALID_ARGUMENT; }
+    if (!lmmc_std_real_is_finite(x)) { return LMMC_STATUS_NUMERICAL_FAILURE; }
     if (!lmmc_std_parse_unit_expr(from_unit, &from_sig) ||
         !lmmc_std_parse_unit_expr(to_unit, &to_sig)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
@@ -287,8 +306,8 @@ lmmc_status_t lmmc_std_units_convert_from_si(lmmc_real_t x,
 {
     lmmc_std_unit_sig_t to_sig;
     double converted;
-    if (!out || !to_unit) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (!lmmc_std_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    if (!out || !to_unit) { return LMMC_STATUS_INVALID_ARGUMENT; }
+    if (!lmmc_std_real_is_finite(x)) { return LMMC_STATUS_NUMERICAL_FAILURE; }
     if (!lmmc_std_parse_unit_expr(to_unit, &to_sig)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
@@ -317,11 +336,11 @@ lmmc_status_t lmmc_std_units_strip_num(lmmc_real_t x,
 {
     lmmc_std_unit_sig_t sig;
     double value;
-    if (!unit || !out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!unit || !out) { return LMMC_STATUS_INVALID_ARGUMENT; }
     if (strstr(unit, "num<") != NULL || strstr(unit, "scalar<") != NULL) {
         return LMMC_STATUS_UNIT_STRIP_LEGACY_SYNTAX;
     }
-    if (!lmmc_std_real_is_finite(x)) return LMMC_STATUS_UNIT_STRIP_OVERFLOW;
+    if (!lmmc_std_real_is_finite(x)) { return LMMC_STATUS_UNIT_STRIP_OVERFLOW; }
     if (!lmmc_std_parse_unit_expr(unit, &sig)) {
         return LMMC_STATUS_UNIT_STRIP_INVALID;
     }
@@ -345,8 +364,8 @@ lmmc_status_t lmmc_std_units_strip_scalar(lmmc_real_t x, lmmc_real_t* out)
 
 lmmc_status_t lmmc_std_units_is_dimensionless_num(lmmc_real_t x, int* out)
 {
-    if (!out) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (!lmmc_std_real_is_finite(x)) return LMMC_STATUS_NUMERICAL_FAILURE;
+    if (!out) { return LMMC_STATUS_INVALID_ARGUMENT; }
+    if (!lmmc_std_real_is_finite(x)) { return LMMC_STATUS_NUMERICAL_FAILURE; }
     *out = 1;
     return LMMC_STATUS_OK;
 }
@@ -354,7 +373,7 @@ lmmc_status_t lmmc_std_units_is_dimensionless_num(lmmc_real_t x, int* out)
 lmmc_status_t lmmc_std_units_is_dimensionless(const char* unit, int* out)
 {
     lmmc_std_unit_sig_t sig;
-    if (!unit || !out) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (!unit || !out) { return LMMC_STATUS_INVALID_ARGUMENT; }
     if (!lmmc_std_parse_unit_expr(unit, &sig)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }

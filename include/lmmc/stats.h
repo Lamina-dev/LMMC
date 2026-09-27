@@ -2,7 +2,7 @@
  * @file stats.h
  * @brief 基础统计量与组合数学接口。
  *
- * 提供阶乘、排列数 nPr、组合数 nCr，以及一维向量与列优先矩阵的
+ * 提供阶乘、排列数 npr、组合数 ncr，以及一维向量与列优先矩阵的
  * 均值、方差、标准差、协方差、相关系数等。
  */
 #ifndef LMMC_STATS_H
@@ -19,9 +19,13 @@ extern "C" {
 /** @brief 计算 @f$n!@f$ ，溢出时按 IEEE-754 规则返回 inf 。 */
 void lmmc_stats_factorial(lmmc_real_t* out_val, uint32_t n);
 /** @brief 计算排列数 @f$P(n,r)=n!/(n-r)!@f$ 。 */
-void lmmc_stats_nPr(lmmc_real_t* out_val, uint32_t n, uint32_t r);
-/** @brief 计算组合数 @f$C(n,r)=\binom{n}{r}@f$ 。 */
-void lmmc_stats_nCr(lmmc_real_t* out_val, uint32_t n, uint32_t r);
+void lmmc_stats_npr(lmmc_real_t* out_val, uint32_t n, uint32_t r);
+/**
+ * @brief 计算组合数 @f$C(n,r)=\binom{n}{r}@f$ 的近似 binary64 值。
+ * r>n 返回 0；r=0 或 r=n 返回 1。乘除递推处理可溢出的中间乘积，
+ * 仅最终结果不可表示时返回正 inf。输出为 NULL 时直接返回。
+ */
+void lmmc_stats_ncr(lmmc_real_t* out_val, uint32_t n, uint32_t r);
 
 /**
  * @brief 计算向量样本均值 @f$\bar{x} = \frac{1}{n}\sum_{i=1}^{n} x_i@f$ 。
@@ -60,9 +64,17 @@ lmmc_status_t lmmc_vec_variance_population(const lmmc_vec_t* x, lmmc_real_t* out
  */
 lmmc_status_t lmmc_vec_variance_sample(const lmmc_vec_t* x, lmmc_real_t* out_variance);
 
-/** @brief 总体标准差。 */
+/**
+ * @brief 总体标准差。
+ * 缩放计算支持方差超出 binary64 范围的情况。
+ * 输入非有限或标准差结果溢出时返回 ::LMMC_STATUS_NUMERICAL_FAILURE。
+ */
 lmmc_status_t lmmc_vec_stddev_population(const lmmc_vec_t* x, lmmc_real_t* out_stddev);
-/** @brief 样本标准差，要求 n>=2 。 */
+/**
+ * @brief 样本标准差，要求 n>=2 。
+ * 缩放计算支持方差超出 binary64 范围的情况。
+ * 输入非有限或标准差结果溢出时返回 ::LMMC_STATUS_NUMERICAL_FAILURE。
+ */
 lmmc_status_t lmmc_vec_stddev_sample(const lmmc_vec_t* x, lmmc_real_t* out_stddev);
 
 /** @brief 总体协方差 @f$\mathrm{Cov}(X,Y)@f$ 。 */
@@ -73,8 +85,10 @@ lmmc_status_t lmmc_vec_covariance_sample(const lmmc_vec_t* x, const lmmc_vec_t* 
 /**
  * @brief 总体 Pearson 相关系数。
  *
- * 两个输入分别按其最大绝对值缩放后累计中心矩，利用相关系数的尺度
- * 不变性避免原始中心矩和方差乘积发生不必要的溢出。
+ * 两列分别平移原点、按二进制缩放，再缩放中心偏差；以联合补偿累计
+ * 修正中心矩，在缩放域完成零分配计算。
+ * 常量列或非有限输入返回 ::LMMC_STATUS_NUMERICAL_FAILURE；
+ * 输出仅成功时写入，仅将舍入误差范围内的越界结果截断至 [-1,1]。
  */
 lmmc_status_t lmmc_vec_correlation_population(const lmmc_vec_t* x, const lmmc_vec_t* y, lmmc_real_t* out_correlation);
 /** @brief 样本 Pearson 相关系数；使用同一缩放累计路径，要求 n>=2。 */
@@ -112,8 +126,9 @@ lmmc_status_t lmmc_mat_covariance_sample(const lmmc_mat_t* x, lmmc_mat_t* out_co
 /**
  * @brief 计算总体 Pearson 相关矩阵。
  *
- * 每一列对分别复用缩放后的中心矩累计，不构造可能溢出的原尺度方差或
- * 标准差，也不分配临时均值和标准差向量。
+ * 对每对列使用原点平移、二进制缩放及联合修正中心矩，在缩放域完成
+ * 零分配计算。常量列（包括对角项）或非有限输入返回
+ * ::LMMC_STATUS_NUMERICAL_FAILURE。
  */
 lmmc_status_t lmmc_mat_correlation_population(const lmmc_mat_t* x, lmmc_mat_t* out_correlation);
 /** @brief 使用同一缩放路径计算样本 Pearson 相关矩阵，要求行数 >= 2。 */

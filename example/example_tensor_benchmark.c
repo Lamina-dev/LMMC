@@ -21,7 +21,7 @@ typedef struct {
     double alpha;
 } bench_options_t;
 
-typedef lmmc_status_t (*tensor_binary_op_t)(const lmmc_tensor_t*, const lmmc_tensor_t*, lmmc_tensor_t*);
+typedef lmmc_status_t (*tensor_binary_op_t)(const lmmc_tensor3_t*, const lmmc_tensor3_t*, lmmc_tensor3_t*);
 
 static double now_seconds(void) {
 #if defined(_WIN32)
@@ -51,7 +51,7 @@ static int mul_overflow_size(size_t a, size_t b, size_t* out) {
     return 0;
 }
 
-static int tensor_numel(const lmmc_tensor_t* t, size_t* out_numel) {
+static int tensor_numel(const lmmc_tensor3_t* t, size_t* out_numel) {
     size_t n = 0;
     if (t == NULL || out_numel == NULL) {
         return 1;
@@ -66,23 +66,26 @@ static int tensor_numel(const lmmc_tensor_t* t, size_t* out_numel) {
 static void parse_args(int argc, char** argv, bench_options_t* opts) {
     int i = 0;
     for (i = 1; i < argc; ++i) {
-        if (strcmp(argv[i], "--dim0") == 0 && i + 1 < argc) {
+        if (i + 1 >= argc) {
+            continue;
+        }
+        if (strcmp(argv[i], "--dim0") == 0) {
             opts->dim0 = (size_t)strtoull(argv[++i], NULL, 10);
-        } else if (strcmp(argv[i], "--dim1") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--dim1") == 0) {
             opts->dim1 = (size_t)strtoull(argv[++i], NULL, 10);
-        } else if (strcmp(argv[i], "--dim2") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--dim2") == 0) {
             opts->dim2 = (size_t)strtoull(argv[++i], NULL, 10);
-        } else if (strcmp(argv[i], "--iters") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--iters") == 0) {
             opts->iters = (size_t)strtoull(argv[++i], NULL, 10);
-        } else if (strcmp(argv[i], "--iters-view") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--iters-view") == 0) {
             opts->iters_view = (size_t)strtoull(argv[++i], NULL, 10);
-        } else if (strcmp(argv[i], "--alpha") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--alpha") == 0) {
             opts->alpha = strtod(argv[++i], NULL);
         }
     }
 }
 
-static void init_tensor_data(lmmc_tensor_t* a, lmmc_tensor_t* b) {
+static void init_tensor_data(lmmc_tensor3_t* a, lmmc_tensor3_t* b) {
     size_t i = 0;
     size_t j = 0;
     size_t k = 0;
@@ -100,7 +103,7 @@ static void init_tensor_data(lmmc_tensor_t* a, lmmc_tensor_t* b) {
     }
 }
 
-static double checksum_tensor(const lmmc_tensor_t* t) {
+static double checksum_tensor(const lmmc_tensor3_t* t) {
     size_t i = 0;
     size_t j = 0;
     size_t k = 0;
@@ -155,9 +158,9 @@ static void print_bench_line(
 static int bench_binary_op(
     const char* op_name,
     const bench_options_t* opts,
-    const lmmc_tensor_t* a,
-    const lmmc_tensor_t* b,
-    lmmc_tensor_t* out,
+    const lmmc_tensor3_t* a,
+    const lmmc_tensor3_t* b,
+    lmmc_tensor3_t* out,
     tensor_binary_op_t op
 ) {
     size_t elem_count = 0;
@@ -195,8 +198,8 @@ static int bench_binary_op(
 
 static int bench_scale_op(
     const bench_options_t* opts,
-    const lmmc_tensor_t* a,
-    lmmc_tensor_t* out
+    const lmmc_tensor3_t* a,
+    lmmc_tensor3_t* out
 ) {
     size_t elem_count = 0;
     size_t i = 0;
@@ -211,7 +214,7 @@ static int bench_scale_op(
 
     t0 = now_seconds();
     for (i = 0; i < opts->iters; ++i) {
-        st = lmmc_tensor_scale(a, opts->alpha, out);
+        st = lmmc_tensor3_scale(a, opts->alpha, out);
         if (st != LMMC_STATUS_OK) {
             fprintf(stderr, "scale failed: %s\n", lmmc_status_string(st));
             return 1;
@@ -233,7 +236,7 @@ static int bench_scale_op(
 
 static int bench_sum_axis_op(
     const bench_options_t* opts,
-    const lmmc_tensor_t* a,
+    const lmmc_tensor3_t* a,
     size_t axis,
     lmmc_mat_t* out,
     const char* op_name
@@ -251,7 +254,7 @@ static int bench_sum_axis_op(
 
     t0 = now_seconds();
     for (i = 0; i < opts->iters; ++i) {
-        st = lmmc_tensor_sum_axis(a, axis, out);
+        st = lmmc_tensor3_sum_axis(a, axis, out);
         if (st != LMMC_STATUS_OK) {
             fprintf(stderr, "%s failed: %s\n", op_name, lmmc_status_string(st));
             return 1;
@@ -273,9 +276,9 @@ static int bench_sum_axis_op(
 
 static int bench_reshape_view_op(
     const bench_options_t* opts,
-    const lmmc_tensor_t* a
+    const lmmc_tensor3_t* a
 ) {
-    lmmc_tensor_t view = {0};
+    lmmc_tensor3_t view = {0};
     size_t elem_count = 0;
     size_t new_dim0 = 0;
     size_t new_dim1 = 0;
@@ -299,7 +302,7 @@ static int bench_reshape_view_op(
 
     t0 = now_seconds();
     for (i = 0; i < opts->iters_view; ++i) {
-        st = lmmc_tensor_reshape_view(a, new_dim0, new_dim1, new_dim2, &view);
+        st = lmmc_tensor3_reshape_view(a, new_dim0, new_dim1, new_dim2, &view);
         if (st != LMMC_STATUS_OK) {
             fprintf(stderr, "reshape_view failed: %s\n", lmmc_status_string(st));
             return 1;
@@ -322,9 +325,9 @@ static int bench_reshape_view_op(
 
 static int bench_slice_view_op(
     const bench_options_t* opts,
-    const lmmc_tensor_t* a
+    const lmmc_tensor3_t* a
 ) {
-    lmmc_tensor_t view = {0};
+    lmmc_tensor3_t view = {0};
     size_t elem_count = 0;
     size_t i = 0;
     size_t end1 = a->dim1 / 2;
@@ -344,7 +347,7 @@ static int bench_slice_view_op(
 
     t0 = now_seconds();
     for (i = 0; i < opts->iters_view; ++i) {
-        st = lmmc_tensor_slice_view(a, 0, a->dim0, 0, end1, 0, a->dim2, &view);
+        st = lmmc_tensor3_slice_view(a, 0, a->dim0, 0, end1, 0, a->dim2, &view);
         if (st != LMMC_STATUS_OK) {
             fprintf(stderr, "slice_view failed: %s\n", lmmc_status_string(st));
             return 1;
@@ -365,15 +368,85 @@ static int bench_slice_view_op(
     return 0;
 }
 
+static int create_benchmark_buffers(
+    const bench_options_t* opts,
+    lmmc_tensor3_t* a, lmmc_tensor3_t* b, lmmc_tensor3_t* out,
+    lmmc_mat_t* axis0, lmmc_mat_t* axis1, lmmc_mat_t* axis2
+) {
+    lmmc_status_t st = LMMC_STATUS_OK;
+    st = lmmc_tensor3_create(opts->dim0, opts->dim1, opts->dim2, a);
+    if (st != LMMC_STATUS_OK) {
+        fprintf(stderr, "tensor3_create(a) failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    st = lmmc_tensor3_create(opts->dim0, opts->dim1, opts->dim2, b);
+    if (st != LMMC_STATUS_OK) {
+        fprintf(stderr, "tensor3_create(b) failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    st = lmmc_tensor3_create(opts->dim0, opts->dim1, opts->dim2, out);
+    if (st != LMMC_STATUS_OK) {
+        fprintf(stderr, "tensor3_create(out) failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    st = lmmc_mat_create(opts->dim1, opts->dim2, axis0);
+    if (st != LMMC_STATUS_OK) {
+        fprintf(stderr, "mat_create(axis0) failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    st = lmmc_mat_create(opts->dim0, opts->dim2, axis1);
+    if (st != LMMC_STATUS_OK) {
+        fprintf(stderr, "mat_create(axis1) failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    st = lmmc_mat_create(opts->dim0, opts->dim1, axis2);
+    if (st != LMMC_STATUS_OK) {
+        fprintf(stderr, "mat_create(axis2) failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    return 0;
+}
+
+static int run_benchmark_operations(
+    const bench_options_t* opts,
+    const lmmc_tensor3_t* a, const lmmc_tensor3_t* b, lmmc_tensor3_t* out,
+    lmmc_mat_t* axis0, lmmc_mat_t* axis1, lmmc_mat_t* axis2
+) {
+    if (bench_binary_op("add", opts, a, b, out, lmmc_tensor3_add) != 0) {
+        return 1;
+    }
+    if (bench_binary_op("mul", opts, a, b, out, lmmc_tensor3_mul) != 0) {
+        return 1;
+    }
+    if (bench_scale_op(opts, a, out) != 0) {
+        return 1;
+    }
+    if (bench_sum_axis_op(opts, a, 0, axis0, "sum_axis0") != 0) {
+        return 1;
+    }
+    if (bench_sum_axis_op(opts, a, 1, axis1, "sum_axis1") != 0) {
+        return 1;
+    }
+    if (bench_sum_axis_op(opts, a, 2, axis2, "sum_axis2") != 0) {
+        return 1;
+    }
+    if (bench_reshape_view_op(opts, a) != 0) {
+        return 1;
+    }
+    if (bench_slice_view_op(opts, a) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
 int main(int argc, char** argv) {
     bench_options_t opts = {64, 64, 8, 200, 200000, 0.75};
-    lmmc_tensor_t a = {0};
-    lmmc_tensor_t b = {0};
-    lmmc_tensor_t out = {0};
+    lmmc_tensor3_t a = {0};
+    lmmc_tensor3_t b = {0};
+    lmmc_tensor3_t out = {0};
     lmmc_mat_t axis0 = {0};
     lmmc_mat_t axis1 = {0};
     lmmc_mat_t axis2 = {0};
-    lmmc_status_t st = LMMC_STATUS_OK;
     int rc = 0;
 
     parse_args(argc, argv, &opts);
@@ -383,45 +456,8 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    st = lmmc_tensor3_create(opts.dim0, opts.dim1, opts.dim2, &a);
-    if (st != LMMC_STATUS_OK) {
-        fprintf(stderr, "tensor3_create(a) failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-
-    st = lmmc_tensor3_create(opts.dim0, opts.dim1, opts.dim2, &b);
-    if (st != LMMC_STATUS_OK) {
-        fprintf(stderr, "tensor3_create(b) failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-
-    st = lmmc_tensor3_create(opts.dim0, opts.dim1, opts.dim2, &out);
-    if (st != LMMC_STATUS_OK) {
-        fprintf(stderr, "tensor3_create(out) failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-
-    st = lmmc_mat_create(opts.dim1, opts.dim2, &axis0);
-    if (st != LMMC_STATUS_OK) {
-        fprintf(stderr, "mat_create(axis0) failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-
-    st = lmmc_mat_create(opts.dim0, opts.dim2, &axis1);
-    if (st != LMMC_STATUS_OK) {
-        fprintf(stderr, "mat_create(axis1) failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-
-    st = lmmc_mat_create(opts.dim0, opts.dim1, &axis2);
-    if (st != LMMC_STATUS_OK) {
-        fprintf(stderr, "mat_create(axis2) failed: %s\n", lmmc_status_string(st));
-        rc = 1;
+    rc = create_benchmark_buffers(&opts, &a, &b, &out, &axis0, &axis1, &axis2);
+    if (rc != 0) {
         goto cleanup;
     }
 
@@ -429,47 +465,14 @@ int main(int argc, char** argv) {
 
     printf("op,dim0,dim1,dim2,iters,total_ms,ns_per_elem,checksum\n");
 
-    if (bench_binary_op("add", &opts, &a, &b, &out, lmmc_tensor_add) != 0) {
-        rc = 1;
-        goto cleanup;
-    }
-    if (bench_binary_op("mul", &opts, &a, &b, &out, lmmc_tensor_mul) != 0) {
-        rc = 1;
-        goto cleanup;
-    }
-    if (bench_scale_op(&opts, &a, &out) != 0) {
-        rc = 1;
-        goto cleanup;
-    }
-
-    if (bench_sum_axis_op(&opts, &a, 0, &axis0, "sum_axis0") != 0) {
-        rc = 1;
-        goto cleanup;
-    }
-    if (bench_sum_axis_op(&opts, &a, 1, &axis1, "sum_axis1") != 0) {
-        rc = 1;
-        goto cleanup;
-    }
-    if (bench_sum_axis_op(&opts, &a, 2, &axis2, "sum_axis2") != 0) {
-        rc = 1;
-        goto cleanup;
-    }
-
-    if (bench_reshape_view_op(&opts, &a) != 0) {
-        rc = 1;
-        goto cleanup;
-    }
-    if (bench_slice_view_op(&opts, &a) != 0) {
-        rc = 1;
-        goto cleanup;
-    }
+    rc = run_benchmark_operations(&opts, &a, &b, &out, &axis0, &axis1, &axis2);
 
 cleanup:
     lmmc_mat_destroy(&axis2);
     lmmc_mat_destroy(&axis1);
     lmmc_mat_destroy(&axis0);
-    lmmc_tensor_destroy(&out);
-    lmmc_tensor_destroy(&b);
-    lmmc_tensor_destroy(&a);
+    lmmc_tensor3_destroy(&out);
+    lmmc_tensor3_destroy(&b);
+    lmmc_tensor3_destroy(&a);
     return rc;
 }

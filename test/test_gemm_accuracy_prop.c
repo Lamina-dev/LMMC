@@ -23,9 +23,9 @@
  * @param C0      Original C matrix (before GEMM).
  * @param C_ref   Output reference result (pre-created, same dims as C).
  */
-static void naive_gemm(lmmc_real_t alpha, const lmmc_mat_t* A, int transA,
-                        const lmmc_mat_t* B, int transB, lmmc_real_t beta,
-                        const lmmc_mat_t* C0, lmmc_mat_t* C_ref) {
+static void naive_gemm(lmmc_real_t alpha, const lmmc_mat_t *A, int transA,
+                       const lmmc_mat_t *B, int transB, lmmc_real_t beta,
+                       const lmmc_mat_t *C0, lmmc_mat_t *C_ref) {
     size_t M = transA ? A->cols : A->rows;
     size_t K = transA ? A->rows : A->cols;
     size_t N = transB ? B->rows : B->cols;
@@ -59,161 +59,129 @@ static void naive_gemm(lmmc_real_t alpha, const lmmc_mat_t* A, int transA,
  *
  * Returns 0, 1, -1, or a random value in [-5, 5] to cover edge cases.
  */
-static lmmc_real_t random_scalar(lmmc_rng_t* rng) {
+static lmmc_real_t random_scalar(lmmc_rng_t *rng) {
     lmmc_real_t u;
-    lmmc_rng_uniform(rng, 0.0, 1.0, &u);
-    if (u < 0.15) return 0.0;
-    if (u < 0.30) return 1.0;
-    if (u < 0.40) return -1.0;
+    assert_int_equal(lmmc_rng_uniform(rng, 0.0, 1.0, &u),
+                     LMMC_STATUS_OK);
+    if (u < 0.15) {
+        return 0.0;
+    }
+    if (u < 0.30) {
+        return 1.0;
+    }
+    if (u < 0.40) {
+        return -1.0;
+    }
     lmmc_real_t val;
-    lmmc_rng_uniform(rng, -5.0, 5.0, &val);
+    assert_int_equal(lmmc_rng_uniform(rng, -5.0, 5.0, &val),
+                     LMMC_STATUS_OK);
     return val;
 }
 
 /**
  * @brief Fill a matrix with random values in [-1, 1].
  */
-static void fill_random_matrix(lmmc_rng_t* rng, lmmc_mat_t* mat) {
+static void fill_random_matrix(lmmc_rng_t *rng, lmmc_mat_t *mat) {
     for (size_t i = 0; i < mat->rows; i++) {
         for (size_t j = 0; j < mat->cols; j++) {
             lmmc_real_t val;
-            lmmc_rng_uniform(rng, -1.0, 1.0, &val);
+            assert_int_equal(lmmc_rng_uniform(rng, -1.0, 1.0, &val),
+                             LMMC_STATUS_OK);
             mat->data[i * mat->stride + j] = val;
         }
     }
 }
 
-/**
- * @brief Test GEMM accuracy for a single random configuration.
- *
- * @param rng    Random number generator.
- * @param M      Rows of op(A) and C.
- * @param K      Cols of op(A) / rows of op(B).
- * @param N      Cols of op(B) and C.
- * @param trial  Trial number for reporting.
- * @return 0 on success, 1 on failure.
- */
-static int test_gemm_accuracy(lmmc_rng_t* rng, size_t M, size_t K, size_t N, int trial) {
-    lmmc_mat_t A = {0}, B = {0}, C = {0}, C0 = {0}, C_ref = {0};
-    lmmc_status_t st;
-    int rc = 0;
+typedef struct {
+    lmmc_rng_t *rng;
+    lmmc_mat_t A, B, C, C0, C_ref;
+    size_t M, K, N;
+    int trial, transA, transB;
+    lmmc_real_t alpha, beta;
+} gemm_trial_t;
 
-    /* Generate random transA, transB */
-    lmmc_real_t u;
-    lmmc_rng_uniform(rng, 0.0, 1.0, &u);
-    int transA = (u > 0.5) ? 1 : 0;
-    lmmc_rng_uniform(rng, 0.0, 1.0, &u);
-    int transB = (u > 0.5) ? 1 : 0;
-
-    /* Determine physical dimensions of A and B based on transpose flags */
-    size_t A_rows = transA ? K : M;
-    size_t A_cols = transA ? M : K;
-    size_t B_rows = transB ? N : K;
-    size_t B_cols = transB ? K : N;
-
-    /* Generate random alpha and beta */
-    lmmc_real_t alpha = random_scalar(rng);
-    lmmc_real_t beta = random_scalar(rng);
-
-    /* Create matrices */
-    st = lmmc_mat_create(A_rows, A_cols, &A);
-    if (st != LMMC_STATUS_OK) { printf("  [FAIL] trial %d: A create failed\n", trial); return 1; }
-
-    st = lmmc_mat_create(B_rows, B_cols, &B);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&A); printf("  [FAIL] trial %d: B create failed\n", trial); return 1; }
-
-    st = lmmc_mat_create(M, N, &C);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&B); lmmc_mat_destroy(&A); printf("  [FAIL] trial %d: C create failed\n", trial); return 1; }
-
-    st = lmmc_mat_create(M, N, &C0);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&C); lmmc_mat_destroy(&B); lmmc_mat_destroy(&A); printf("  [FAIL] trial %d: C0 create failed\n", trial); return 1; }
-
-    st = lmmc_mat_create(M, N, &C_ref);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&C0); lmmc_mat_destroy(&C); lmmc_mat_destroy(&B); lmmc_mat_destroy(&A); printf("  [FAIL] trial %d: C_ref create failed\n", trial); return 1; }
-
-    /* Fill matrices with random values */
-    fill_random_matrix(rng, &A);
-    fill_random_matrix(rng, &B);
-    fill_random_matrix(rng, &C0);
-
-    /* Copy C0 into C (GEMM will modify C in-place) */
-    st = lmmc_mat_copy(&C0, &C);
-    if (st != LMMC_STATUS_OK) {
-        printf("  [FAIL] trial %d: mat_copy failed\n", trial);
-        rc = 1; goto cleanup;
-    }
-
-    /* Compute reference result using naive triple-loop */
-    naive_gemm(alpha, &A, transA, &B, transB, beta, &C0, &C_ref);
-
-    /* Compute result using lmmc_mat_gemm */
-    st = lmmc_mat_gemm(alpha, &A, transA, &B, transB, beta, &C);
-    if (st != LMMC_STATUS_OK) {
-        printf("  [FAIL] trial %d: lmmc_mat_gemm returned %s\n", trial, lmmc_status_string(st));
-        rc = 1; goto cleanup;
-    }
-
-    /* Compute norms for tolerance bound */
-    lmmc_real_t norm_A, norm_B, norm_C0;
-    st = lmmc_mat_norm_fro(&A, &norm_A);
-    if (st != LMMC_STATUS_OK) { printf("  [FAIL] trial %d: norm_fro(A) failed\n", trial); rc = 1; goto cleanup; }
-    st = lmmc_mat_norm_fro(&B, &norm_B);
-    if (st != LMMC_STATUS_OK) { printf("  [FAIL] trial %d: norm_fro(B) failed\n", trial); rc = 1; goto cleanup; }
-    st = lmmc_mat_norm_fro(&C0, &norm_C0);
-    if (st != LMMC_STATUS_OK) { printf("  [FAIL] trial %d: norm_fro(C0) failed\n", trial); rc = 1; goto cleanup; }
-
-    /* Tolerance: 1e-10 * (1 + |alpha| * ||A||_F * ||B||_F + |beta| * ||C0||_F) */
-    double tolerance = 1e-10 * (1.0 + fabs(alpha) * norm_A * norm_B + fabs(beta) * norm_C0);
-
-    /* Check element-wise accuracy */
-    double max_err = 0.0;
-    for (size_t i = 0; i < M; i++) {
-        for (size_t j = 0; j < N; j++) {
-            double diff = fabs(C.data[i * C.stride + j] - C_ref.data[i * C_ref.stride + j]);
-            if (diff > max_err) max_err = diff;
-        }
-    }
-
-    if (max_err > tolerance) {
-        printf("  [FAIL] trial %d (M=%zu, K=%zu, N=%zu, transA=%d, transB=%d, alpha=%.3f, beta=%.3f):\n"
-               "    max_err = %.6e > tolerance = %.6e\n",
-               trial, M, K, N, transA, transB, alpha, beta, max_err, tolerance);
-        rc = 1; goto cleanup;
-    }
-
-cleanup:
-    lmmc_mat_destroy(&C_ref);
-    lmmc_mat_destroy(&C0);
-    lmmc_mat_destroy(&C);
-    lmmc_mat_destroy(&B);
-    lmmc_mat_destroy(&A);
-    return rc;
+static void create_gemm_matrices(gemm_trial_t *f) {
+    size_t A_rows = f->transA ? f->K : f->M;
+    size_t A_cols = f->transA ? f->M : f->K;
+    size_t B_rows = f->transB ? f->N : f->K;
+    size_t B_cols = f->transB ? f->K : f->N;
+    assert_int_equal(lmmc_mat_create(A_rows, A_cols, &f->A), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_mat_create(B_rows, B_cols, &f->B), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_mat_create(f->M, f->N, &f->C), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_mat_create(f->M, f->N, &f->C0), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_mat_create(f->M, f->N, &f->C_ref), LMMC_STATUS_OK);
 }
 
-int main(void) {
-    lmmc_rng_t* rng = NULL;
-    lmmc_status_t st;
-    int failures = 0;
-    int total_trials = 0;
-
-    printf("=== Property Test: GEMM Accuracy ===\n");
-    printf("GEMM result matches naive triple-loop within tolerance\n");
-    printf("Tolerance: 1e-10 * (1 + |alpha| * ||A||_F * ||B||_F + |beta| * ||C0||_F)\n");
-
-    /* 固定种子保证属性测试可复现。 */
-    const uint64_t seed = UINT64_C(0x47454D4D);
-    st = lmmc_rng_create(&rng);
-    if (st != LMMC_STATUS_OK) {
-        printf("FATAL: Failed to create RNG\n");
-        return 1;
+static void compare_gemm_entries(gemm_trial_t *f, double tolerance) {
+    for (size_t i = 0; i < f->M; i++) {
+        for (size_t j = 0; j < f->N; j++) {
+            const double actual = f->C.data[i * f->C.stride + j];
+            const double expected = f->C_ref.data[i * f->C_ref.stride + j];
+            if (!lmmc_test_nearly_equal(actual, expected, tolerance)) {
+                fail_msg("trial %d (M=%" PRIuMAX ", K=%" PRIuMAX ", N=%" PRIuMAX ", transA=%d, transB=%d, alpha=%.3f, beta=%.3f): "
+                         "C[%" PRIuMAX ",%" PRIuMAX "] = %.17g, reference = %.17g, tolerance = %.6e",
+                         f->trial, (uintmax_t)(f->M), (uintmax_t)(f->K), (uintmax_t)(f->N), f->transA, f->transB, f->alpha, f->beta, (uintmax_t)(i), (uintmax_t)(j), actual, expected, tolerance);
+            }
+        }
     }
-    lmmc_rng_seed(rng, seed);
+}
 
-    /* Test various matrix sizes */
-    typedef struct { size_t M; size_t K; size_t N; } dim_triple_t;
-    dim_triple_t sizes[] = {
-        {1, 1, 1},    /* Minimal */
-        {2, 2, 2},    /* Small square */
+static int invalid_reference_norm(double norm) {
+    return !isfinite(norm) || norm < 0.0;
+}
+
+static int invalid_gemm_reference_inputs(const gemm_trial_t *f,
+                                         double norm_A, double norm_B, double norm_C0) {
+    return !isfinite(f->alpha) || !isfinite(f->beta) ||
+           invalid_reference_norm(norm_A) || invalid_reference_norm(norm_B) ||
+           invalid_reference_norm(norm_C0);
+}
+
+static void check_gemm_reference(gemm_trial_t *f) {
+    const double norm_A = lmmc_test_frobenius_norm(&f->A);
+    const double norm_B = lmmc_test_frobenius_norm(&f->B);
+    const double norm_C0 = lmmc_test_frobenius_norm(&f->C0);
+    if (invalid_gemm_reference_inputs(f, norm_A, norm_B, norm_C0)) {
+        fail_msg("trial %d: invalid scalar or reference norm", f->trial);
+    }
+
+    const double tolerance = 1e-10 *
+                             (1.0 + fabs(f->alpha) * norm_A * norm_B + fabs(f->beta) * norm_C0);
+    if (!isfinite(tolerance) || tolerance < 0.0) {
+        fail_msg("trial %d: invalid tolerance %.6e", f->trial, tolerance);
+    }
+
+    compare_gemm_entries(f, tolerance);
+}
+
+static int setup_gemm(void **state) {
+    gemm_trial_t *f = calloc(1, sizeof(*f));
+    assert_non_null(f);
+    *state = f;
+    return 0;
+}
+
+static void release_gemm_matrices(gemm_trial_t *f) {
+    lmmc_mat_destroy(&f->C_ref);
+    lmmc_mat_destroy(&f->C0);
+    lmmc_mat_destroy(&f->C);
+    lmmc_mat_destroy(&f->B);
+    lmmc_mat_destroy(&f->A);
+}
+
+static int teardown_gemm(void **state) {
+    gemm_trial_t *f = *state;
+    release_gemm_matrices(f);
+    lmmc_rng_destroy(f->rng);
+    free(f);
+    return 0;
+}
+
+static void test_gemm_accuracy(void **state) {
+    gemm_trial_t *f = *state;
+    const size_t sizes[][3] = {
+        {1, 1, 1},
+        {2, 2, 2},
         {3, 3, 3},
         {4, 4, 4},
         {5, 5, 5},
@@ -221,40 +189,50 @@ int main(void) {
         {10, 10, 10},
         {16, 16, 16},
         {20, 20, 20},
-        {2, 5, 3},    /* Non-square */
+        {2, 5, 3},
         {5, 2, 7},
-        {1, 10, 1},   /* Thin */
-        {10, 1, 10},  /* Wide inner */
+        {1, 10, 1},
+        {10, 1, 10},
         {7, 4, 9},
         {15, 8, 12},
     };
-    size_t num_sizes = sizeof(sizes) / sizeof(sizes[0]);
-    int trials_per_size = 8;
+    assert_int_equal(lmmc_rng_create(&f->rng), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(f->rng, UINT64_C(0x47454D4D)),
+                     LMMC_STATUS_OK);
 
-    for (size_t si = 0; si < num_sizes; si++) {
-        size_t M = sizes[si].M;
-        size_t K = sizes[si].K;
-        size_t N = sizes[si].N;
-        printf("Testing M=%zu, K=%zu, N=%zu (%d trials)...\n", M, K, N, trials_per_size);
-        for (int t = 0; t < trials_per_size; t++) {
-            total_trials++;
-            if (test_gemm_accuracy(rng, M, K, N, t + 1) != 0) {
-                failures++;
-            }
+    for (size_t si = 0; si < sizeof(sizes) / sizeof(sizes[0]); si++) {
+        f->M = sizes[si][0];
+        f->K = sizes[si][1];
+        f->N = sizes[si][2];
+        for (f->trial = 1; f->trial <= 8; f->trial++) {
+            lmmc_real_t u;
+            assert_int_equal(lmmc_rng_uniform(f->rng, 0.0, 1.0, &u),
+                             LMMC_STATUS_OK);
+            f->transA = (u > 0.5) ? 1 : 0;
+            assert_int_equal(lmmc_rng_uniform(f->rng, 0.0, 1.0, &u),
+                             LMMC_STATUS_OK);
+            f->transB = (u > 0.5) ? 1 : 0;
+            f->alpha = random_scalar(f->rng);
+            f->beta = random_scalar(f->rng);
+            create_gemm_matrices(f);
+            fill_random_matrix(f->rng, &f->A);
+            fill_random_matrix(f->rng, &f->B);
+            fill_random_matrix(f->rng, &f->C0);
+            assert_int_equal(lmmc_mat_copy(&f->C0, &f->C), LMMC_STATUS_OK);
+            naive_gemm(f->alpha, &f->A, f->transA, &f->B, f->transB,
+                       f->beta, &f->C0, &f->C_ref);
+            assert_int_equal(lmmc_mat_gemm(f->alpha, &f->A, f->transA, &f->B,
+                                           f->transB, f->beta, &f->C),
+                             LMMC_STATUS_OK);
+            check_gemm_reference(f);
+            release_gemm_matrices(f);
         }
     }
+}
 
-    printf("\n=== Results ===\n");
-    printf("Total trials: %d\n", total_trials);
-    printf("Passed: %d\n", total_trials - failures);
-    printf("Failed: %d\n", failures);
-
-    if (failures == 0) {
-        printf("\nProperty test PASSED: GEMM accuracy matches naive reference.\n");
-    } else {
-        printf("\nProperty test FAILED: %d/%d trials violated the property.\n", failures, total_trials);
-    }
-
-    lmmc_rng_destroy(rng);
-    return (failures == 0) ? 0 : 1;
+int main(void) {
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_gemm_accuracy, setup_gemm, teardown_gemm),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

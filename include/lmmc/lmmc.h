@@ -31,11 +31,5 @@
 #include "lmmc/random.h"
 #include "lmmc/stdlib.h"
 
-/** @brief LMMC 主版本号。 */
-#define LMMC_VERSION_MAJOR 0
-/** @brief LMMC 次版本号。 */
-#define LMMC_VERSION_MINOR 1
-/** @brief LMMC 补丁版本号。 */
-#define LMMC_VERSION_PATCH 0
 
 #endif

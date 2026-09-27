@@ -7,23 +7,42 @@
 
 const char* lmmc_ode_failure_string(lmmc_ode_failure_t reason) {
     switch (reason) {
-        case LMMC_ODE_FAILURE_NONE:
+        case LMMC_ODE_FAILURE_NONE: {
             return "none";
-        case LMMC_ODE_FAILURE_INVALID_DIMENSION:
+        }
+        case LMMC_ODE_FAILURE_INVALID_DIMENSION: {
             return "invalid dimension";
-        case LMMC_ODE_FAILURE_INVALID_STEP:
+        }
+        case LMMC_ODE_FAILURE_INVALID_STEP: {
             return "invalid step";
-        case LMMC_ODE_FAILURE_MAX_STEPS:
+        }
+        case LMMC_ODE_FAILURE_MAX_STEPS: {
             return "max steps reached";
-        case LMMC_ODE_FAILURE_NUMERICAL_ISSUE:
+        }
+        case LMMC_ODE_FAILURE_NUMERICAL_ISSUE: {
             return "numerical issue";
-        case LMMC_ODE_FAILURE_RHS_EVAL_FAILED:
+        }
+        case LMMC_ODE_FAILURE_RHS_EVAL_FAILED: {
             return "rhs evaluation failed";
-        case LMMC_ODE_FAILURE_TOLERANCE_INCONSISTENT:
+        }
+        case LMMC_ODE_FAILURE_TOLERANCE_INCONSISTENT: {
             return "tolerance inconsistent";
-        default:
+        }
+        default: {
             return "unknown";
+        }
     }
+}
+
+static size_t ode_default_max_steps(size_t problem_dim) {
+    if (problem_dim > ((size_t)-1) / 10000) {
+        return 100000;
+    }
+    size_t max_steps = problem_dim * 10000;
+    if (max_steps < 1000) {
+        max_steps = 1000;
+    }
+    return max_steps;
 }
 
 lmmc_status_t lmmc_ode_default_config(
@@ -70,14 +89,7 @@ lmmc_status_t lmmc_ode_default_config(
         LMMC_REAL_SET(&max_step, &initial_step);
     }
 
-    if (problem_dim > ((size_t)-1) / 10000) {
-        max_steps = 100000;
-    } else {
-        max_steps = problem_dim * 10000;
-        if (max_steps < 1000) {
-            max_steps = 1000;
-        }
-    }
+    max_steps = ode_default_max_steps(problem_dim);
 
     out_cfg->initial_step = initial_step;
     out_cfg->min_step = min_step;

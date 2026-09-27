@@ -199,8 +199,13 @@ lmmc_status_t lmmc_rng_gamma(
  * @param[in]  rng    已初始化的 RNG。
  * @param[in]  alpha  参数 alpha（> 0）。
  * @param[in]  beta_param   参数 beta（> 0）。
- * @param[out] out    输出样本值。
- * @return LMMC_STATUS_OK 成功。
+ * @param[out] out [0,1] 内的有限样本，仅成功时写入。
+ * 对数 Gamma 比例支持极小形状参数；舍入或下溢可产生端点 0/1。
+ * @return LMMC_STATUS_OK 表示成功；LMMC_STATUS_INVALID_ARGUMENT 表示空指针
+ *         或非有限、非正形状参数，此时 RNG 保持原状态；
+ *         LMMC_STATUS_NUMERICAL_FAILURE 表示中间数值无效；
+ *         LMMC_STATUS_CONVERGENCE_FAILED 表示排除均匀随机数零端点的尝试次数耗尽。
+ * @note 采样失败时 RNG 状态可能已推进。
  */
 lmmc_status_t lmmc_rng_beta(
     lmmc_rng_t* rng,
@@ -264,11 +269,11 @@ lmmc_status_t lmmc_rng_f(
  * @param[out] out     输出样本值（非负整数）。
  *
  * @return ::LMMC_STATUS_OK 成功；
- *         ::LMMC_STATUS_INVALID_ARGUMENT 若 lambda <= 0 或指针为 NULL。
+ *         ::LMMC_STATUS_INVALID_ARGUMENT 若 lambda 非有限、<= 0 或指针为 NULL；
+ *         ::LMMC_STATUS_NUMERICAL_FAILURE 若样本超出 size_t 范围或中间量非有限。
  *
- * @par 副作用
- * - 就地修改 @p rng 的内部状态（消耗随机数次数不确定，取决于接受-拒绝过程）。
- * - 不分配堆内存。
+ * @note 不分配堆内存；接受-拒绝过程消耗的随机数次数不固定。
+ *       @p out 仅成功时写入，失败时 RNG 状态可能已推进。
  */
 lmmc_status_t lmmc_rng_poisson(
     lmmc_rng_t* rng,

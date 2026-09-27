@@ -26,7 +26,7 @@ void lmmc_stats_factorial(lmmc_real_t* out_val, uint32_t n) {
     LMMC_REAL_SET(out_val, &result);
 }
 
-void lmmc_stats_nPr(lmmc_real_t* out_val, uint32_t n, uint32_t r) {
+void lmmc_stats_npr(lmmc_real_t* out_val, uint32_t n, uint32_t r) {
     if (out_val == NULL) {
         return;
     }
@@ -46,7 +46,7 @@ void lmmc_stats_nPr(lmmc_real_t* out_val, uint32_t n, uint32_t r) {
     LMMC_REAL_SET(out_val, &result);
 }
 
-void lmmc_stats_nCr(lmmc_real_t* out_val, uint32_t n, uint32_t r) {
+void lmmc_stats_ncr(lmmc_real_t* out_val, uint32_t n, uint32_t r) {
     if (out_val == NULL) {
         return;
     }
@@ -57,16 +57,21 @@ void lmmc_stats_nCr(lmmc_real_t* out_val, uint32_t n, uint32_t r) {
     if (r > n - r) {
         r = n - r;
     }
-    lmmc_real_t result = 1.0;
+    lmmc_real_t mantissa = 0.5;
+    int exponent = 1;
     for (uint32_t k = 1; k <= r; ++k) {
-        lmmc_real_t numerator = (lmmc_real_t)(n - r + k);
-        lmmc_real_t denominator = (lmmc_real_t)k;
-        if (lmmc_real_mul_overflows(result, numerator)) {
+        const lmmc_real_t numerator = (lmmc_real_t)(n - r + k);
+        const lmmc_real_t denominator = (lmmc_real_t)k;
+        int increment;
+        /** @brief 尾数乘积小于 2^32；完成除法归一化后再检查结果可表示性。 */
+        mantissa = frexp((mantissa * numerator) / denominator, &increment);
+        exponent += increment;
+        if (exponent > DBL_MAX_EXP ||
+            (exponent == DBL_MAX_EXP && !isfinite(scalbn(mantissa, exponent)))) {
             LMMC_REAL_SET_D(out_val, INFINITY);
             return;
         }
-        result = (result * numerator) / denominator;
     }
-    LMMC_REAL_SET(out_val, &result);
+    LMMC_REAL_SET_D(out_val, scalbn(mantissa, exponent));
 }
 

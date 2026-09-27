@@ -3,497 +3,353 @@
  * MINRES / LSQR 迭代求解器单元测试.
  */
 #include <math.h>
-#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"
 
-/* ---------- Helper: build symmetric indefinite tridiagonal matrix ----------
- * Diagonal: alternating +5, -5 to ensure both positive and negative eigenvalues.
- * Off-diagonal: 0.5 (symmetric). This gives a diagonally dominant matrix
- * with eigenvalues bounded away from zero, ensuring MINRES converges well.
- * Note: builder accumulates duplicate entries, so we only add each off-diagonal once.
- */
-static lmmc_status_t build_symmetric_indefinite(size_t n, lmmc_sparse_mat_t* out) {
-    lmmc_sparse_builder_t* builder = NULL;
-    lmmc_status_t st = lmmc_sparse_builder_create(n, n, 3 * n, &builder);
-    if (st != LMMC_STATUS_OK) return st;
-
-    for (size_t i = 0; i < n; i++) {
-        /* Alternating positive/negative diagonal with strong dominance */
-        double diag = (i % 2 == 0) ? 5.0 : -5.0;
-        lmmc_sparse_builder_add(builder, i, i, diag);
-        if (i < n - 1) {
-            lmmc_sparse_builder_add(builder, i, i + 1, 0.5);
-            lmmc_sparse_builder_add(builder, i + 1, i, 0.5);
-        }
-    }
-    st = lmmc_sparse_builder_build(builder, LMMC_SPARSE_CSR, out);
-    lmmc_sparse_builder_destroy(builder);
-    return st;
-}
-
-/* ---------- Helper: build over-determined system (m x n, m > n) ----------
- * Creates a tall matrix with m rows and n columns.
- */
-static lmmc_status_t build_overdetermined(size_t m, size_t n, lmmc_sparse_mat_t* out) {
-    lmmc_sparse_builder_t* builder = NULL;
-    lmmc_status_t st = lmmc_sparse_builder_create(m, n, 3 * m, &builder);
-    if (st != LMMC_STATUS_OK) return st;
-
-    for (size_t i = 0; i < m; i++) {
-        /* Each row has entries in columns min(i, n-1) and neighbors */
-        size_t col = i < n ? i : (i % n);
-        lmmc_sparse_builder_add(builder, i, col, 3.0 + (double)(i % 5) * 0.5);
-        if (col > 0)
-            lmmc_sparse_builder_add(builder, i, col - 1, -1.0);
-        if (col < n - 1)
-            lmmc_sparse_builder_add(builder, i, col + 1, -0.5);
-    }
-    st = lmmc_sparse_builder_build(builder, LMMC_SPARSE_CSR, out);
-    lmmc_sparse_builder_destroy(builder);
-    return st;
-}
-
-/* ---------- Helper: compute ||Ax - b||_2 ---------- */
-static double compute_residual_norm(const lmmc_sparse_mat_t* A,
-                                    const lmmc_vec_t* x,
-                                    const lmmc_vec_t* b) {
-    lmmc_vec_t Ax = {0};
-    lmmc_vec_create(b->size, &Ax);
-    lmmc_sparse_mat_vec_mul(A, x, &Ax);
-    double norm_sq = 0.0;
-    for (size_t i = 0; i < b->size; i++) {
-        double diff = Ax.data[i] - b->data[i];
-        norm_sq += diff * diff;
-    }
-    lmmc_vec_destroy(&Ax);
-    return sqrt(norm_sq);
-}
-
-/* ---------- Helper: compute ||A^T * r||_2 where r = Ax - b (normal eq residual) ---------- */
-static double compute_normal_eq_residual(const lmmc_sparse_mat_t* A,
-                                         const lmmc_vec_t* x,
-                                         const lmmc_vec_t* b) {
-    size_t m = A->rows;
-    size_t n = A->cols;
-
-    /* r = Ax - b */
-    lmmc_vec_t Ax = {0}, r = {0}, ATr = {0};
-    lmmc_vec_create(m, &Ax);
-    lmmc_vec_create(m, &r);
-    lmmc_vec_create(n, &ATr);
-
-    lmmc_sparse_mat_vec_mul(A, x, &Ax);
-    for (size_t i = 0; i < m; i++)
-        r.data[i] = Ax.data[i] - b->data[i];
-
-    /* A^T * r (manual CSR transpose multiply) */
-    for (size_t i = 0; i < n; i++)
-        ATr.data[i] = 0.0;
-    for (size_t i = 0; i < m; i++) {
-        size_t start = A->row_ptr[i];
-        size_t end = A->row_ptr[i + 1];
-        for (size_t j = start; j < end; j++) {
-            size_t col = A->col_idx[j];
-            ATr.data[col] += A->values[j] * r.data[i];
-        }
-    }
-
-    double norm_sq = 0.0;
-    for (size_t i = 0; i < n; i++)
-        norm_sq += ATr.data[i] * ATr.data[i];
-
-    lmmc_vec_destroy(&ATr);
-    lmmc_vec_destroy(&r);
-    lmmc_vec_destroy(&Ax);
-    return sqrt(norm_sq);
-}
-
-/* ---------- Matrix-free callback: wraps a sparse matrix ---------- */
 typedef struct {
-    const lmmc_sparse_mat_t* mat;
-} matvec_ctx_t;
+    lmmc_sparse_builder_t *builder;
+    lmmc_sparse_mat_t A;
+    lmmc_vec_t b, x, x_true, x_mfree, Ax, r, ATr;
+} solver_fixture_t;
 
-static lmmc_status_t matvec_callback(const lmmc_vec_t* x, lmmc_vec_t* y, void* user_data) {
-    matvec_ctx_t* ctx = (matvec_ctx_t*)user_data;
-    return lmmc_sparse_mat_vec_mul(ctx->mat, x, y);
-}
-
-/** @brief 验证 MINRES 对称正定与对称不定系统求解路径.
- *
- * 正定三对角用例验证收敛性,不定用例验证跨正负特征值的有限数值输出.
- *
- * @see C. C. Paige and M. A. Saunders, "Solution of Sparse Indefinite Systems
- *      of Linear Equations," SIAM J. Numer. Anal. 12(4), 1975.
- */
-static int test_minres_symmetric_indefinite(void) {
-    int rc = 0;
-
-    /** A 部分覆盖对称正定路径. */
-    {
-        const size_t n = 20;
-        lmmc_sparse_mat_t A = {0};
-        lmmc_vec_t b = {0}, x = {0};
-        lmmc_itersolve_config_t cfg = {0};
-        lmmc_itersolve_result_t result = {0};
-        lmmc_status_t st;
-
-        lmmc_sparse_builder_t* builder = NULL;
-        st = lmmc_sparse_builder_create(n, n, 3 * n, &builder);
-        if (st != LMMC_STATUS_OK) { printf("FAIL 1A: builder\n"); return 1; }
-        for (size_t i = 0; i < n; i++) {
-            lmmc_sparse_builder_add(builder, i, i, 4.0);
-            if (i < n - 1) {
-                lmmc_sparse_builder_add(builder, i, i + 1, -1.0);
-                lmmc_sparse_builder_add(builder, i + 1, i, -1.0);
-            }
-        }
-        st = lmmc_sparse_builder_build(builder, LMMC_SPARSE_CSR, &A);
-        lmmc_sparse_builder_destroy(builder);
-        if (st != LMMC_STATUS_OK) { printf("FAIL 1A: build\n"); return 1; }
-
-        lmmc_vec_create(n, &b);
-        lmmc_vec_create(n, &x);
-
-        /** 由全一已知解构造右端向量 b. */
-        lmmc_vec_t ones = {0};
-        lmmc_vec_create(n, &ones);
-        lmmc_vec_fill(&ones, 1.0);
-        lmmc_sparse_mat_vec_mul(&A, &ones, &b);
-        lmmc_vec_destroy(&ones);
-
-        lmmc_vec_fill(&x, 0.0);
-        lmmc_itersolve_default_config(n, &cfg);
-        cfg.max_iter = 500;
-        cfg.abs_tol = 1e-12;
-        cfg.rel_tol = 1e-12;
-
-        st = lmmc_minres_solve(&A, &b, NULL, &cfg, &x, &result);
-        if (st != LMMC_STATUS_OK || !result.converged) {
-            printf("FAIL test_minres_spd: st=%d converged=%d iters=%zu\n", st, result.converged, result.num_iter);
-            rc = 1;
-        } else {
-            double res = compute_residual_norm(&A, &x, &b);
-            double norm_b;
-            lmmc_vec_norm2(&b, &norm_b);
-
-            /** 收敛后验证解向量各分量均为有限值. */
-            int all_finite = 1;
-            for (size_t i = 0; i < n; i++) {
-                if (!isfinite(x.data[i])) { all_finite = 0; break; }
-            }
-            if (!all_finite) {
-                printf("FAIL test_minres_spd: non-finite solution\n");
-                rc = 1;
-            } else {
-                printf("PASS test_minres_spd: solver converged in %zu iters, residual=%e\n",
-                       result.num_iter, res);
-            }
-        }
-
-        lmmc_vec_destroy(&x);
-        lmmc_vec_destroy(&b);
-        lmmc_sparse_destroy(&A);
-        if (rc) return rc;
-    }
-
-    /** B 部分覆盖同时具有正负特征值的对称不定矩阵,并验证有限输出. */
-    {
-        const size_t n = 10;
-        lmmc_sparse_mat_t A = {0};
-        lmmc_vec_t b = {0}, x = {0};
-        lmmc_itersolve_config_t cfg = {0};
-        lmmc_itersolve_result_t result = {0};
-        lmmc_status_t st;
-
-        lmmc_sparse_builder_t* builder = NULL;
-        st = lmmc_sparse_builder_create(n, n, 3 * n, &builder);
-        if (st != LMMC_STATUS_OK) { printf("FAIL 1B: builder\n"); return 1; }
-        for (size_t i = 0; i < n; i++) {
-            double diag = (i % 2 == 0) ? 4.0 : -3.0;
-            lmmc_sparse_builder_add(builder, i, i, diag);
-            if (i < n - 1) {
-                lmmc_sparse_builder_add(builder, i, i + 1, 0.1);
-                lmmc_sparse_builder_add(builder, i + 1, i, 0.1);
-            }
-        }
-        st = lmmc_sparse_builder_build(builder, LMMC_SPARSE_CSR, &A);
-        lmmc_sparse_builder_destroy(builder);
-        if (st != LMMC_STATUS_OK) { printf("FAIL 1B: build\n"); return 1; }
-
-        lmmc_vec_create(n, &b);
-        lmmc_vec_create(n, &x);
-
-        lmmc_vec_t ones = {0};
-        lmmc_vec_create(n, &ones);
-        lmmc_vec_fill(&ones, 1.0);
-        lmmc_sparse_mat_vec_mul(&A, &ones, &b);
-        lmmc_vec_destroy(&ones);
-
-        lmmc_vec_fill(&x, 0.0);
-        lmmc_itersolve_default_config(n, &cfg);
-        cfg.max_iter = 200;
-        cfg.abs_tol = 1e-10;
-        cfg.rel_tol = 1e-10;
-
-        st = lmmc_minres_solve(&A, &b, NULL, &cfg, &x, &result);
-
-        /* Solver should return OK (not crash or return unexpected error) */
-        if (st != LMMC_STATUS_OK) {
-            printf("FAIL test_minres_indefinite: unexpected status %d\n", st);
-            rc = 1;
-        } else {
-            /* Verify output is finite */
-            int all_finite = 1;
-            for (size_t i = 0; i < n; i++) {
-                if (!isfinite(x.data[i])) { all_finite = 0; break; }
-            }
-            if (!all_finite) {
-                printf("FAIL test_minres_indefinite: non-finite solution\n");
-                rc = 1;
-            } else {
-                printf("PASS test_minres_indefinite: solver returned OK, solution is finite\n");
-            }
-        }
-
-        lmmc_vec_destroy(&x);
-        lmmc_vec_destroy(&b);
-        lmmc_sparse_destroy(&A);
-    }
-
-    return rc;
-}
-
-/* ===================== Test 2: LSQR on over-determined system ===================== */
-static int test_lsqr_overdetermined(void) {
-    const size_t m = 30;  /* rows (equations) */
-    const size_t n = 10;  /* cols (unknowns) */
-    lmmc_sparse_mat_t A = {0};
-    lmmc_vec_t b = {0}, x = {0};
-    lmmc_itersolve_config_t cfg = {0};
-    lmmc_itersolve_result_t result = {0};
-    lmmc_status_t st;
-
-    st = build_overdetermined(m, n, &A);
-    if (st != LMMC_STATUS_OK) {
-        printf("FAIL test_lsqr_overdetermined: build matrix failed (%d)\n", st);
-        return 1;
-    }
-
-    lmmc_vec_create(m, &b);
-    lmmc_vec_create(n, &x);
-
-    /* Set b = A * x_true for a consistent system (x_true = [1,2,...,n]) */
-    lmmc_vec_t x_true = {0};
-    lmmc_vec_create(n, &x_true);
-    for (size_t i = 0; i < n; i++)
-        x_true.data[i] = (double)(i + 1);
-    lmmc_sparse_mat_vec_mul(&A, &x_true, &b);
-    lmmc_vec_destroy(&x_true);
-
-    lmmc_vec_fill(&x, 0.0);
-    lmmc_itersolve_default_config(n, &cfg);
-    cfg.max_iter = 500;
-    cfg.abs_tol = 1e-12;
-    cfg.rel_tol = 1e-12;
-
-    st = lmmc_lsqr_solve(&A, &b, &cfg, &x, &result);
-    if (st != LMMC_STATUS_OK) {
-        printf("FAIL test_lsqr_overdetermined: solver returned %d\n", st);
-        lmmc_vec_destroy(&x); lmmc_vec_destroy(&b); lmmc_sparse_destroy(&A);
-        return 1;
-    }
-
-    if (!result.converged) {
-        printf("FAIL test_lsqr_overdetermined: did not converge after %zu iters\n",
-               result.num_iter);
-        lmmc_vec_destroy(&x); lmmc_vec_destroy(&b); lmmc_sparse_destroy(&A);
-        return 1;
-    }
-
-    /* Check normal equation residual: ||A^T(Ax - b)||_2 should be small */
-    double normal_res = compute_normal_eq_residual(&A, &x, &b);
-    double norm_b;
-    lmmc_vec_norm2(&b, &norm_b);
-    double tol = 1e-8;
-
-    if (normal_res > tol * norm_b) {
-        printf("FAIL test_lsqr_overdetermined: normal eq residual %e > tol*||b|| = %e\n",
-               normal_res, tol * norm_b);
-        lmmc_vec_destroy(&x); lmmc_vec_destroy(&b); lmmc_sparse_destroy(&A);
-        return 1;
-    }
-
-    printf("PASS test_lsqr_overdetermined: normal_eq_residual=%e, tol*||b||=%e\n",
-           normal_res, tol * norm_b);
-    lmmc_vec_destroy(&x);
-    lmmc_vec_destroy(&b);
-    lmmc_sparse_destroy(&A);
+static int setup(void **state) {
+    solver_fixture_t *f = calloc(1, sizeof(*f));
+    assert_non_null(f);
+    *state = f;
     return 0;
 }
 
-/* ===================== Test 3: Matrix-free path agrees with sparse path ===================== */
-static int test_matrix_free_agrees_with_sparse(void) {
+static int teardown(void **state) {
+    solver_fixture_t *f = *state;
+    lmmc_vec_destroy(&f->ATr);
+    lmmc_vec_destroy(&f->r);
+    lmmc_vec_destroy(&f->Ax);
+    lmmc_vec_destroy(&f->x_mfree);
+    lmmc_vec_destroy(&f->x_true);
+    lmmc_vec_destroy(&f->x);
+    lmmc_vec_destroy(&f->b);
+    lmmc_sparse_destroy(&f->A);
+    lmmc_sparse_builder_destroy(f->builder);
+    free(f);
+    return 0;
+}
+
+static void build_symmetric_tridiag(solver_fixture_t *f, size_t n,
+                                    double even_diag, double odd_diag, double off_diag) {
+    assert_int_equal(lmmc_sparse_builder_create(n, n, 3 * n, &f->builder), LMMC_STATUS_OK);
+    for (size_t i = 0; i < n; ++i) {
+        double diag = (i % 2 == 0) ? even_diag : odd_diag;
+        assert_int_equal(lmmc_sparse_builder_add(f->builder, i, i, diag), LMMC_STATUS_OK);
+        if (i + 1 < n) {
+            assert_int_equal(lmmc_sparse_builder_add(f->builder, i, i + 1, off_diag), LMMC_STATUS_OK);
+            assert_int_equal(lmmc_sparse_builder_add(f->builder, i + 1, i, off_diag), LMMC_STATUS_OK);
+        }
+    }
+    assert_int_equal(lmmc_sparse_builder_build(f->builder, LMMC_SPARSE_CSR, &f->A), LMMC_STATUS_OK);
+    lmmc_sparse_builder_destroy(f->builder);
+    f->builder = NULL;
+}
+
+/* Each row has entries in column i % n and its neighbors. */
+static void build_overdetermined(solver_fixture_t *f, size_t m, size_t n) {
+    assert_int_equal(lmmc_sparse_builder_create(m, n, 3 * m, &f->builder), LMMC_STATUS_OK);
+    for (size_t i = 0; i < m; ++i) {
+        size_t col = i < n ? i : (i % n);
+        assert_int_equal(lmmc_sparse_builder_add(f->builder, i, col, 3.0 + (double)(i % 5) * 0.5), LMMC_STATUS_OK);
+        if (col > 0) {
+            assert_int_equal(lmmc_sparse_builder_add(f->builder, i, col - 1, -1.0), LMMC_STATUS_OK);
+        }
+        if (col + 1 < n) {
+            assert_int_equal(lmmc_sparse_builder_add(f->builder, i, col + 1, -0.5), LMMC_STATUS_OK);
+        }
+    }
+    assert_int_equal(lmmc_sparse_builder_build(f->builder, LMMC_SPARSE_CSR, &f->A), LMMC_STATUS_OK);
+    lmmc_sparse_builder_destroy(f->builder);
+    f->builder = NULL;
+}
+
+static void compute_rhs_ones(solver_fixture_t *f) {
+    assert_int_equal(lmmc_vec_create(f->A.cols, &f->x_true), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_fill(&f->x_true, 1.0), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_sparse_mat_vec_mul(&f->A, &f->x_true, &f->b), LMMC_STATUS_OK);
+    lmmc_vec_destroy(&f->x_true);
+}
+
+/* Compute ||A^T(Ax - b)||_2 using a manual CSR transpose multiply. */
+static double compute_normal_eq_residual(solver_fixture_t *f) {
+    const lmmc_sparse_mat_t *A = &f->A;
+    const size_t m = A->rows;
+    const size_t n = A->cols;
+    double norm_sq = 0.0;
+    assert_int_equal(lmmc_vec_create(m, &f->Ax), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(m, &f->r), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(n, &f->ATr), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_sparse_mat_vec_mul(A, &f->x, &f->Ax), LMMC_STATUS_OK);
+    for (size_t i = 0; i < m; ++i) {
+        f->r.data[i] = f->Ax.data[i] - f->b.data[i];
+    }
+    for (size_t i = 0; i < n; ++i) {
+        f->ATr.data[i] = 0.0;
+    }
+    for (size_t i = 0; i < m; ++i) {
+        for (size_t j = A->row_ptr[i]; j < A->row_ptr[i + 1]; ++j) {
+            size_t col = A->col_idx[j];
+            f->ATr.data[col] += A->values[j] * f->r.data[i];
+        }
+    }
+    for (size_t i = 0; i < n; ++i) {
+        norm_sq += f->ATr.data[i] * f->ATr.data[i];
+    }
+    return sqrt(norm_sq);
+}
+
+static lmmc_status_t matvec_callback(const lmmc_vec_t *x, lmmc_vec_t *y, void *user_data) {
+    const lmmc_sparse_mat_t *A = user_data;
+    return lmmc_sparse_mat_vec_mul(A, x, y);
+}
+
+typedef struct {
+    size_t forward_calls;
+    size_t transpose_calls;
+} lsqr_operator_t;
+
+static lmmc_status_t lsqr_forward_callback(const lmmc_vec_t *x, lmmc_vec_t *y,
+                                           void *user_data) {
+    lsqr_operator_t *op = user_data;
+    op->forward_calls++;
+    if (x->size != 2 || y->size != 3) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+    y->data[0] = x->data[0];
+    y->data[1] = x->data[1];
+    y->data[2] = x->data[0] + x->data[1];
+    return LMMC_STATUS_OK;
+}
+
+static lmmc_status_t lsqr_transpose_callback(const lmmc_vec_t *x, lmmc_vec_t *y,
+                                             void *user_data) {
+    lsqr_operator_t *op = user_data;
+    op->transpose_calls++;
+    if (x->size != 3 || y->size != 2) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+    y->data[0] = x->data[0] + x->data[2];
+    y->data[1] = x->data[1] + x->data[2];
+    return LMMC_STATUS_OK;
+}
+
+/**
+ * 正定三对角用例验证收敛性及有限数值输出。
+ * @see C. C. Paige and M. A. Saunders, "Solution of Sparse Indefinite Systems
+ *      of Linear Equations," SIAM J. Numer. Anal. 12(4), 1975.
+ */
+static void test_minres_positive_definite(void **state) {
+    solver_fixture_t *f = *state;
+    const size_t n = 20;
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    build_symmetric_tridiag(f, n, 4.0, 4.0, -1.0);
+    assert_int_equal(lmmc_vec_create(n, &f->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(n, &f->x), LMMC_STATUS_OK);
+    compute_rhs_ones(f);
+    assert_int_equal(lmmc_vec_fill(&f->x, 0.0), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_itersolve_default_config(n, &cfg), LMMC_STATUS_OK);
+    cfg.max_iter = 500;
+    cfg.abs_tol = 1e-12;
+    cfg.rel_tol = 1e-12;
+    assert_int_equal(lmmc_minres_solve(&f->A, &f->b, NULL, &cfg, &f->x, &result), LMMC_STATUS_OK);
+    assert_true(result.converged);
+    for (size_t i = 0; i < n; ++i) {
+        assert_true(isfinite(f->x.data[i]));
+    }
+}
+
+/* The indefinite case requires an OK status and a finite solution. */
+static void test_minres_indefinite(void **state) {
+    solver_fixture_t *f = *state;
+    const size_t n = 10;
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    build_symmetric_tridiag(f, n, 4.0, -3.0, 0.1);
+    assert_int_equal(lmmc_vec_create(n, &f->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(n, &f->x), LMMC_STATUS_OK);
+    compute_rhs_ones(f);
+    assert_int_equal(lmmc_vec_fill(&f->x, 0.0), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_itersolve_default_config(n, &cfg), LMMC_STATUS_OK);
+    cfg.max_iter = 200;
+    cfg.abs_tol = 1e-10;
+    cfg.rel_tol = 1e-10;
+    assert_int_equal(lmmc_minres_solve(&f->A, &f->b, NULL, &cfg, &f->x, &result), LMMC_STATUS_OK);
+    for (size_t i = 0; i < n; ++i) {
+        assert_true(isfinite(f->x.data[i]));
+    }
+}
+
+static void test_lsqr_overdetermined(void **state) {
+    solver_fixture_t *f = *state;
+    const size_t m = 30, n = 10;
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    double norm_b;
+    build_overdetermined(f, m, n);
+    assert_int_equal(lmmc_vec_create(m, &f->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(n, &f->x), LMMC_STATUS_OK);
+    /* Consistent system with x_true = [1, 2, ..., n]. */
+    assert_int_equal(lmmc_vec_create(n, &f->x_true), LMMC_STATUS_OK);
+    for (size_t i = 0; i < n; ++i) {
+        f->x_true.data[i] = (double)(i + 1);
+    }
+    assert_int_equal(lmmc_sparse_mat_vec_mul(&f->A, &f->x_true, &f->b), LMMC_STATUS_OK);
+    lmmc_vec_destroy(&f->x_true);
+    assert_int_equal(lmmc_vec_fill(&f->x, 0.0), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_itersolve_default_config(n, &cfg), LMMC_STATUS_OK);
+    cfg.max_iter = 500;
+    cfg.abs_tol = 1e-12;
+    cfg.rel_tol = 1e-12;
+    assert_int_equal(lmmc_lsqr_solve(&f->A, &f->b, &cfg, &f->x, &result), LMMC_STATUS_OK);
+    assert_true(result.converged);
+    double normal_res = compute_normal_eq_residual(f);
+    assert_int_equal(lmmc_vec_norm2(&f->b, &norm_b), LMMC_STATUS_OK);
+    assert_true(normal_res <= 1e-8 * norm_b);
+}
+
+static void test_lsqr_matrix_free_forward_and_transpose(void **state) {
+    solver_fixture_t *f = *state;
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    lsqr_operator_t op = {0};
+
+    assert_int_equal(lmmc_vec_create(3, &f->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(2, &f->x), LMMC_STATUS_OK);
+    f->b.data[0] = 1.0;
+    f->b.data[1] = 2.0;
+    f->b.data[2] = 3.0;
+    assert_int_equal(lmmc_vec_fill(&f->x, 0.0), LMMC_STATUS_OK);
+
+    assert_int_equal(lmmc_itersolve_default_config(2, &cfg), LMMC_STATUS_OK);
+    cfg.max_iter = 100;
+    cfg.abs_tol = 1e-12;
+    cfg.rel_tol = 1e-12;
+    cfg.apply_op = lsqr_forward_callback;
+    cfg.op_user_data = &op;
+    cfg.apply_transpose_op = lsqr_transpose_callback;
+
+    assert_int_equal(
+        lmmc_lsqr_solve(NULL, &f->b, &cfg, &f->x, &result),
+        LMMC_STATUS_OK);
+    assert_true(result.converged);
+    assert_true(lmmc_test_nearly_equal(f->x.data[0], 1.0, 1e-10));
+    assert_true(lmmc_test_nearly_equal(f->x.data[1], 2.0, 1e-10));
+    const double r0 = f->x.data[0] - f->b.data[0];
+    const double r1 = f->x.data[1] - f->b.data[1];
+    const double r2 = f->x.data[0] + f->x.data[1] - f->b.data[2];
+    assert_true(sqrt(r0 * r0 + r1 * r1 + r2 * r2) <= 1e-10);
+    assert_true(op.forward_calls > 0);
+    assert_true(op.transpose_calls > 0);
+}
+
+static void test_lsqr_matrix_free_requires_transpose_before_execution(void **state) {
+    solver_fixture_t *f = *state;
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    lsqr_operator_t op = {0};
+
+    assert_int_equal(lmmc_vec_create(3, &f->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(2, &f->x), LMMC_STATUS_OK);
+    f->b.data[0] = 1.0;
+    f->b.data[1] = 2.0;
+    f->b.data[2] = 3.0;
+    f->x.data[0] = 7.0;
+    f->x.data[1] = -4.0;
+
+    assert_int_equal(lmmc_itersolve_default_config(2, &cfg), LMMC_STATUS_OK);
+    cfg.apply_op = lsqr_forward_callback;
+    cfg.op_user_data = &op;
+    cfg.apply_transpose_op = NULL;
+
+    assert_int_equal(
+        lmmc_lsqr_solve(NULL, &f->b, &cfg, &f->x, &result),
+        LMMC_STATUS_INVALID_ARGUMENT);
+    assert_int_equal(op.forward_calls, 0);
+    assert_int_equal(op.transpose_calls, 0);
+    assert_true(f->x.data[0] == 7.0);
+    assert_true(f->x.data[1] == -4.0);
+}
+
+static void test_matrix_free_agrees_with_sparse(void **state) {
+    solver_fixture_t *f = *state;
     const size_t n = 15;
-    lmmc_sparse_mat_t A = {0};
-    lmmc_vec_t b = {0}, x_sparse = {0}, x_mfree = {0};
     lmmc_itersolve_config_t cfg_sparse = {0}, cfg_mfree = {0};
     lmmc_itersolve_result_t result_sparse = {0}, result_mfree = {0};
-    lmmc_status_t st;
-
-    /* Use SPD tridiagonal for reliable convergence */
-    {
-        lmmc_sparse_builder_t* builder = NULL;
-        st = lmmc_sparse_builder_create(n, n, 3 * n, &builder);
-        if (st != LMMC_STATUS_OK) { printf("FAIL test_matrix_free: builder\n"); return 1; }
-        for (size_t i = 0; i < n; i++) {
-            lmmc_sparse_builder_add(builder, i, i, 4.0);
-            if (i < n - 1) {
-                lmmc_sparse_builder_add(builder, i, i + 1, -1.0);
-                lmmc_sparse_builder_add(builder, i + 1, i, -1.0);
-            }
-        }
-        st = lmmc_sparse_builder_build(builder, LMMC_SPARSE_CSR, &A);
-        lmmc_sparse_builder_destroy(builder);
-        if (st != LMMC_STATUS_OK) { printf("FAIL test_matrix_free: build\n"); return 1; }
-    }
-
-    lmmc_vec_create(n, &b);
-    lmmc_vec_create(n, &x_sparse);
-    lmmc_vec_create(n, &x_mfree);
-
-    /* Set b = A * ones */
-    lmmc_vec_t ones = {0};
-    lmmc_vec_create(n, &ones);
-    lmmc_vec_fill(&ones, 1.0);
-    lmmc_sparse_mat_vec_mul(&A, &ones, &b);
-    lmmc_vec_destroy(&ones);
-
-    /* Solve with sparse path */
-    lmmc_vec_fill(&x_sparse, 0.0);
-    lmmc_itersolve_default_config(n, &cfg_sparse);
+    double norm_b;
+    double diff_norm = 0.0;
+    build_symmetric_tridiag(f, n, 4.0, 4.0, -1.0);
+    assert_int_equal(lmmc_vec_create(n, &f->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(n, &f->x), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(n, &f->x_mfree), LMMC_STATUS_OK);
+    compute_rhs_ones(f);
+    assert_int_equal(lmmc_vec_fill(&f->x, 0.0), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_itersolve_default_config(n, &cfg_sparse), LMMC_STATUS_OK);
     cfg_sparse.max_iter = 500;
     cfg_sparse.abs_tol = 1e-14;
     cfg_sparse.rel_tol = 1e-14;
-
-    st = lmmc_minres_solve(&A, &b, NULL, &cfg_sparse, &x_sparse, &result_sparse);
-    if (st != LMMC_STATUS_OK || !result_sparse.converged) {
-        printf("FAIL test_matrix_free_agrees: sparse path failed (st=%d, converged=%d)\n",
-               st, result_sparse.converged);
-        lmmc_vec_destroy(&x_sparse); lmmc_vec_destroy(&x_mfree);
-        lmmc_vec_destroy(&b); lmmc_sparse_destroy(&A);
-        return 1;
-    }
-
-    /* Solve with matrix-free path */
-    matvec_ctx_t ctx = { .mat = &A };
-    lmmc_vec_fill(&x_mfree, 0.0);
-    lmmc_itersolve_default_config(n, &cfg_mfree);
+    assert_int_equal(lmmc_minres_solve(&f->A, &f->b, NULL, &cfg_sparse, &f->x, &result_sparse), LMMC_STATUS_OK);
+    assert_true(result_sparse.converged);
+    assert_int_equal(lmmc_vec_fill(&f->x_mfree, 0.0), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_itersolve_default_config(n, &cfg_mfree), LMMC_STATUS_OK);
     cfg_mfree.max_iter = 500;
     cfg_mfree.abs_tol = 1e-14;
     cfg_mfree.rel_tol = 1e-14;
     cfg_mfree.apply_op = matvec_callback;
-    cfg_mfree.op_user_data = &ctx;
-
-    st = lmmc_minres_solve(NULL, &b, NULL, &cfg_mfree, &x_mfree, &result_mfree);
-    if (st != LMMC_STATUS_OK || !result_mfree.converged) {
-        printf("FAIL test_matrix_free_agrees: matrix-free path failed (st=%d, converged=%d)\n",
-               st, result_mfree.converged);
-        lmmc_vec_destroy(&x_sparse); lmmc_vec_destroy(&x_mfree);
-        lmmc_vec_destroy(&b); lmmc_sparse_destroy(&A);
-        return 1;
-    }
-
-    /* Compare solutions: ||x_sparse - x_mfree||_2 <= 1e-10 * ||b||_2 */
-    double norm_b;
-    lmmc_vec_norm2(&b, &norm_b);
-    double diff_norm = 0.0;
-    for (size_t i = 0; i < n; i++) {
-        double d = x_sparse.data[i] - x_mfree.data[i];
+    cfg_mfree.op_user_data = &f->A;
+    assert_int_equal(lmmc_minres_solve(NULL, &f->b, NULL, &cfg_mfree, &f->x_mfree, &result_mfree), LMMC_STATUS_OK);
+    assert_true(result_mfree.converged);
+    assert_int_equal(lmmc_vec_norm2(&f->b, &norm_b), LMMC_STATUS_OK);
+    for (size_t i = 0; i < n; ++i) {
+        double d = f->x.data[i] - f->x_mfree.data[i];
         diff_norm += d * d;
     }
-    diff_norm = sqrt(diff_norm);
-
-    double tol = 1e-10 * norm_b;
-    if (diff_norm > tol) {
-        printf("FAIL test_matrix_free_agrees: ||x_sparse - x_mfree|| = %e > 1e-10*||b|| = %e\n",
-               diff_norm, tol);
-        lmmc_vec_destroy(&x_sparse); lmmc_vec_destroy(&x_mfree);
-        lmmc_vec_destroy(&b); lmmc_sparse_destroy(&A);
-        return 1;
-    }
-
-    printf("PASS test_matrix_free_agrees: diff=%e, tol=%e\n", diff_norm, tol);
-    lmmc_vec_destroy(&x_sparse);
-    lmmc_vec_destroy(&x_mfree);
-    lmmc_vec_destroy(&b);
-    lmmc_sparse_destroy(&A);
-    return 0;
+    assert_true(sqrt(diff_norm) <= 1e-10 * norm_b);
 }
 
-/* ===================== Test 4: Error when both a and apply_op provided ===================== */
-static int test_error_both_a_and_apply_op(void) {
+static void test_error_both_a_and_apply_op(void **state) {
+    solver_fixture_t *f = *state;
     const size_t n = 5;
-    lmmc_sparse_mat_t A = {0};
-    lmmc_vec_t b = {0}, x = {0};
     lmmc_itersolve_config_t cfg = {0};
     lmmc_itersolve_result_t result = {0};
-    lmmc_status_t st;
-
-    st = build_symmetric_indefinite(n, &A);
-    if (st != LMMC_STATUS_OK) {
-        printf("FAIL test_error_both_a_and_apply_op: build matrix failed (%d)\n", st);
-        return 1;
-    }
-
-    lmmc_vec_create(n, &b);
-    lmmc_vec_create(n, &x);
-    lmmc_vec_fill(&b, 1.0);
-    lmmc_vec_fill(&x, 0.0);
-
-    matvec_ctx_t ctx = { .mat = &A };
-    lmmc_itersolve_default_config(n, &cfg);
+    lsqr_operator_t transpose_op = {0};
+    build_symmetric_tridiag(f, n, 5.0, -5.0, 0.5);
+    assert_int_equal(lmmc_vec_create(n, &f->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(n, &f->x), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_fill(&f->b, 1.0), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_fill(&f->x, 0.0), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_itersolve_default_config(n, &cfg), LMMC_STATUS_OK);
     cfg.apply_op = matvec_callback;
-    cfg.op_user_data = &ctx;
-
-    /* MINRES: both a and apply_op -> LMMC_STATUS_INVALID_ARGUMENT */
-    st = lmmc_minres_solve(&A, &b, NULL, &cfg, &x, &result);
-    if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("FAIL test_error_both_a_and_apply_op: MINRES expected INVALID_ARGUMENT, got %d\n", st);
-        lmmc_vec_destroy(&x); lmmc_vec_destroy(&b); lmmc_sparse_destroy(&A);
-        return 1;
-    }
-
-    /* LSQR: both a and apply_op -> LMMC_STATUS_INVALID_ARGUMENT */
-    lmmc_vec_fill(&x, 0.0);
+    cfg.op_user_data = &f->A;
+    assert_int_equal(lmmc_minres_solve(&f->A, &f->b, NULL, &cfg, &f->x, &result), LMMC_STATUS_INVALID_ARGUMENT);
+    assert_int_equal(lmmc_vec_fill(&f->x, 0.0), LMMC_STATUS_OK);
     memset(&result, 0, sizeof(result));
-    st = lmmc_lsqr_solve(&A, &b, &cfg, &x, &result);
-    if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("FAIL test_error_both_a_and_apply_op: LSQR expected INVALID_ARGUMENT, got %d\n", st);
-        lmmc_vec_destroy(&x); lmmc_vec_destroy(&b); lmmc_sparse_destroy(&A);
-        return 1;
-    }
-
-    printf("PASS test_error_both_a_and_apply_op\n");
-    lmmc_vec_destroy(&x);
-    lmmc_vec_destroy(&b);
-    lmmc_sparse_destroy(&A);
-    return 0;
+    assert_int_equal(lmmc_lsqr_solve(&f->A, &f->b, &cfg, &f->x, &result), LMMC_STATUS_INVALID_ARGUMENT);
+    cfg.apply_op = NULL;
+    cfg.apply_transpose_op = lsqr_transpose_callback;
+    cfg.op_user_data = &transpose_op;
+    assert_int_equal(
+        lmmc_lsqr_solve(&f->A, &f->b, &cfg, &f->x, &result),
+        LMMC_STATUS_INVALID_ARGUMENT);
+    assert_int_equal(transpose_op.transpose_calls, 0);
 }
 
 int main(void) {
-    int rc = 0;
-
-    rc |= test_minres_symmetric_indefinite();
-    rc |= test_lsqr_overdetermined();
-    rc |= test_matrix_free_agrees_with_sparse();
-    rc |= test_error_both_a_and_apply_op();
-
-    if (rc != 0) {
-        printf("\ntest_minres_lsqr: SOME TESTS FAILED\n");
-    } else {
-        printf("\ntest_minres_lsqr: ALL TESTS PASSED\n");
-    }
-    return rc;
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_minres_positive_definite, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_minres_indefinite, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_lsqr_overdetermined, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_lsqr_matrix_free_forward_and_transpose, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_lsqr_matrix_free_requires_transpose_before_execution, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_matrix_free_agrees_with_sparse, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_error_both_a_and_apply_op, setup, teardown),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

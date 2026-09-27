@@ -100,6 +100,12 @@ static double lmmc_scaled_sum_products(double a, double b, int ep,
     return sum + residual;
 }
 
+static int lmmc_products_are_normal(double p, double q)
+{
+    return isfinite(p) && isfinite(q) &&
+           fabs(p) >= DBL_MIN && fabs(q) >= DBL_MIN;
+}
+
 /**
  * @brief Evaluate a two-product sum with a shared binary exponent.
  *
@@ -125,8 +131,7 @@ static double lmmc_sum_products(double a, double b, double c, double d)
     if (a == 0.0 || b == 0.0 || c == 0.0 || d == 0.0) {
         return p + q;
     }
-    if (isfinite(p) && isfinite(q) &&
-        fabs(p) >= DBL_MIN && fabs(q) >= DBL_MIN) {
+    if (lmmc_products_are_normal(p, q)) {
         const double sum = fma(a, b, q) + fma(c, d, -q);
         if (isfinite(sum) && fabs(sum) >= DBL_MIN) {
             return sum;
@@ -271,18 +276,6 @@ lmmc_status_t lmmc_complex_exp(const lmmc_complex_t* z, lmmc_complex_t* out)
     return LMMC_STATUS_OK;
 }
 
-/**
- * @brief Return a rounded sum and its floating-point residual.
- * @see Ogita, Rump, Oishi, "Accurate Sum and Dot Product" (2005),
- * Algorithm 3.1 (TwoSum). https://doi.org/10.1137/030601818
- */
-static double lmmc_two_sum(double a, double b, double* residual)
-{
-    const double sum = a + b;
-    const double virtual_b = sum - a;
-    *residual = (a - (sum - virtual_b)) + (b - virtual_b);
-    return sum;
-}
 
 lmmc_status_t lmmc_complex_log(const lmmc_complex_t* z, lmmc_complex_t* out)
 {
@@ -478,7 +471,9 @@ static lmmc_status_t lmmc_complex_integer_power(const lmmc_complex_t* base,
 
     if (exponent < 0.0) {
         st = lmmc_complex_div(&one, base, &factor);
-        if (st != LMMC_STATUS_OK) return st;
+        if (st != LMMC_STATUS_OK) {
+            return st;
+        }
     }
     while (remaining != 0.0) {
         if (fmod(remaining, 2.0) != 0.0) {
@@ -487,15 +482,35 @@ static lmmc_status_t lmmc_complex_integer_power(const lmmc_complex_t* base,
                 has_product = 1;
             } else {
                 st = lmmc_complex_mul(&result, &factor, &result);
-                if (st != LMMC_STATUS_OK) return st;
+                if (st != LMMC_STATUS_OK) {
+                    return st;
+                }
             }
         }
         remaining = floor(remaining * 0.5);
         if (remaining != 0.0) {
             st = lmmc_complex_mul(&factor, &factor, &factor);
-            if (st != LMMC_STATUS_OK) return st;
+            if (st != LMMC_STATUS_OK) {
+                return st;
+            }
         }
     }
+    *out = result;
+    return LMMC_STATUS_OK;
+}
+
+static lmmc_status_t lmmc_complex_zero_power(
+    const lmmc_complex_t* exp, lmmc_complex_t* out)
+{
+    lmmc_complex_t result;
+    if (exp->real == 0.0 && exp->imag == 0.0) {
+        result.real = 1.0;
+    } else if (exp->real > 0.0) {
+        result.real = 0.0;
+    } else {
+        return LMMC_STATUS_OUT_OF_RANGE;
+    }
+    result.imag = 0.0;
     *out = result;
     return LMMC_STATUS_OK;
 }
@@ -514,16 +529,7 @@ lmmc_status_t lmmc_complex_pow(const lmmc_complex_t* base, const lmmc_complex_t*
     }
 
     if (base->real == 0.0 && base->imag == 0.0) {
-        if (exp->real == 0.0 && exp->imag == 0.0) {
-            result.real = 1.0;
-        } else if (exp->real > 0.0) {
-            result.real = 0.0;
-        } else {
-            return LMMC_STATUS_OUT_OF_RANGE;
-        }
-        result.imag = 0.0;
-        *out = result;
-        return LMMC_STATUS_OK;
+        return lmmc_complex_zero_power(exp, out);
     }
 
     if (exp->imag == 0.0 && trunc(exp->real) == exp->real) {
@@ -562,7 +568,7 @@ lmmc_status_t lmmc_cvec_create(size_t size, lmmc_cvec_t* out)
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
 
-    data = (lmmc_complex_t*)lmmc_alloc(n_bytes);
+    data = (lmmc_complex_t*)lmmc_memory_alloc(n_bytes);
     if (data == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
@@ -590,7 +596,7 @@ lmmc_status_t lmmc_cmat_create(size_t rows, size_t cols, lmmc_cmat_t* out)
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
 
-    data = (lmmc_complex_t*)lmmc_alloc(n_bytes);
+    data = (lmmc_complex_t*)lmmc_memory_alloc(n_bytes);
     if (data == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
@@ -610,7 +616,7 @@ void lmmc_cvec_destroy(lmmc_cvec_t* vec)
         return;
     }
     if (vec->owns_data && vec->data != NULL) {
-        lmmc_free(vec->data);
+        lmmc_memory_free(vec->data);
     }
     vec->data = NULL;
     vec->size = 0;
@@ -623,7 +629,7 @@ void lmmc_cmat_destroy(lmmc_cmat_t* mat)
         return;
     }
     if (mat->owns_data && mat->data != NULL) {
-        lmmc_free(mat->data);
+        lmmc_memory_free(mat->data);
     }
     mat->data = NULL;
     mat->rows = 0;

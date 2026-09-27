@@ -24,7 +24,7 @@ lmmc_status_t lmmc_mat_create(size_t rows, size_t cols, lmmc_mat_t* out_mat) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    data = (lmmc_real_t*)lmmc_alloc(n_bytes);
+    data = (lmmc_real_t*)lmmc_memory_alloc(n_bytes);
     if (data == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
@@ -67,7 +67,7 @@ void lmmc_mat_destroy(lmmc_mat_t* mat) {
         for (size_t i = 0; i < mat->rows * mat->cols; ++i) {
             LMMC_REAL_CLEAR(&mat->data[i]);
         }
-        lmmc_free(mat->data);
+        lmmc_memory_free(mat->data);
     }
     mat->rows = 0;
     mat->cols = 0;
@@ -150,7 +150,7 @@ lmmc_status_t lmmc_vec_create(size_t size, lmmc_vec_t* out_vec) {
     if (!lmmc_safe_mul_size(size, sizeof(lmmc_real_t), &n_bytes)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    data = (lmmc_real_t*)lmmc_alloc(n_bytes);
+    data = (lmmc_real_t*)lmmc_memory_alloc(n_bytes);
     if (data == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
@@ -189,7 +189,7 @@ void lmmc_vec_destroy(lmmc_vec_t* vec) {
         for (size_t i = 0; i < vec->size; ++i) {
             LMMC_REAL_CLEAR(&vec->data[i]);
         }
-        lmmc_free(vec->data);
+        lmmc_memory_free(vec->data);
     }
     vec->size = 0;
     vec->data = NULL;

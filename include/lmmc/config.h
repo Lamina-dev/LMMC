@@ -81,7 +81,7 @@ typedef double lmmc_real_t;
 /** @brief 判断 @c *x 是否为有限数。 */
 #define LMMC_REAL_IS_FINITE(x)      LMMC_LIBM(isfinite)(*(x))
 
-/** @brief 默认的机器精度阈值，用于近似相等比较。 */
+/** @brief 既有算法的经验近似阈值，非机器 epsilon。 */
 #define LMMC_REAL_EPSILON  ((lmmc_real_t)1e-15)
 /** @brief 圆周率常数 @f$\pi@f$ 。 */
 #define LMMC_CONST_PI      ((lmmc_real_t)3.14159265358979323846)

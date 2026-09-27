@@ -7,12 +7,90 @@
 #include "sparse_internal.h"
 #include "lmmc/sparse.h"
 
+static size_t lmmc_sparse_sym_count(
+    const lmmc_sparse_mat_t* full, lmmc_sparse_sym_half_t half)
+{
+    size_t i, p, n = full->rows, nnz_half = 0;
+    for (i = 0; i < n; ++i) {
+        for (p = full->row_ptr[i]; p < full->row_ptr[i + 1]; ++p) {
+            size_t j = full->col_idx[p];
+            if (half == LMMC_SPARSE_SYM_UPPER) {
+                if (j >= i) ++nnz_half;
+            } else {
+                if (j <= i) ++nnz_half;
+            }
+        }
+    }
+    return nnz_half;
+}
+
+static void lmmc_sparse_sym_copy(
+    const lmmc_sparse_mat_t* full, lmmc_sparse_sym_half_t half,
+    lmmc_sparse_sym_csr_t* out)
+{
+    size_t i, p, n = full->rows, nz_idx;
+    nz_idx = 0;
+    out->row_ptr[0] = 0;
+    for (i = 0; i < n; ++i) {
+        for (p = full->row_ptr[i]; p < full->row_ptr[i + 1]; ++p) {
+            size_t j = full->col_idx[p];
+            int keep = 0;
+            if (half == LMMC_SPARSE_SYM_UPPER) {
+                keep = (j >= i);
+            } else {
+                keep = (j <= i);
+            }
+            if (keep) {
+                out->col_idx[nz_idx] = j;
+                LMMC_REAL_SET(&out->values[nz_idx], &full->values[p]);
+                ++nz_idx;
+            }
+        }
+        out->row_ptr[i + 1] = nz_idx;
+    }
+}
+
+static void lmmc_sparse_sym_accumulate(
+    const lmmc_sparse_sym_csr_t* A, const lmmc_vec_t* x,
+    lmmc_vec_t* y, lmmc_real_t* prod)
+{
+    size_t i, p;
+    for (i = 0; i < A->n; ++i) {
+        for (p = A->row_ptr[i]; p < A->row_ptr[i + 1]; ++p) {
+            size_t j = A->col_idx[p];
+            LMMC_REAL_MUL(prod, &A->values[p], &x->data[j]);
+
+            /** @brief 累计本行贡献：y[i] += A[i,j] * x[j]。 */
+            {
+                lmmc_real_t tmp;
+                LMMC_REAL_INIT(&tmp);
+                LMMC_REAL_ADD(&tmp, &y->data[i], prod);
+                LMMC_REAL_SET(&y->data[i], &tmp);
+                LMMC_REAL_CLEAR(&tmp);
+            }
+
+            /** @brief 非对角元另计对称贡献：y[j] += A[i,j] * x[i]。 */
+            if (i != j) {
+                lmmc_real_t prod2;
+                lmmc_real_t tmp2;
+                LMMC_REAL_INIT(&prod2);
+                LMMC_REAL_INIT(&tmp2);
+                LMMC_REAL_MUL(&prod2, &A->values[p], &x->data[i]);
+                LMMC_REAL_ADD(&tmp2, &y->data[j], &prod2);
+                LMMC_REAL_SET(&y->data[j], &tmp2);
+                LMMC_REAL_CLEAR(&prod2);
+                LMMC_REAL_CLEAR(&tmp2);
+            }
+        }
+    }
+}
+
+
 lmmc_status_t lmmc_sparse_sym_csr_from_csr(const lmmc_sparse_mat_t* full,
     lmmc_sparse_sym_half_t half, lmmc_sparse_sym_csr_t* out) {
-    size_t i, p;
+    size_t i;
     size_t n;
     size_t nnz_half = 0;
-    size_t nz_idx = 0;
     size_t row_ptr_bytes, col_idx_bytes, val_bytes;
     lmmc_status_t st;
 
@@ -35,16 +113,7 @@ lmmc_status_t lmmc_sparse_sym_csr_from_csr(const lmmc_sparse_mat_t* full,
     n = full->rows;
 
     /* 第一遍：计算半三角中的非零元数量 */
-    for (i = 0; i < n; ++i) {
-        for (p = full->row_ptr[i]; p < full->row_ptr[i + 1]; ++p) {
-            size_t j = full->col_idx[p];
-            if (half == LMMC_SPARSE_SYM_UPPER) {
-                if (j >= i) ++nnz_half;
-            } else {
-                if (j <= i) ++nnz_half;
-            }
-        }
-    }
+    nnz_half = lmmc_sparse_sym_count(full, half);
 
     /* 分配内存 */
     if (!lmmc_safe_mul_size(n + 1, sizeof(size_t), &row_ptr_bytes) ||
@@ -53,7 +122,7 @@ lmmc_status_t lmmc_sparse_sym_csr_from_csr(const lmmc_sparse_mat_t* full,
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    out->row_ptr = (size_t*)lmmc_alloc(row_ptr_bytes);
+    out->row_ptr = (size_t*)lmmc_memory_alloc(row_ptr_bytes);
     if (out->row_ptr == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
@@ -62,17 +131,17 @@ lmmc_status_t lmmc_sparse_sym_csr_from_csr(const lmmc_sparse_mat_t* full,
     out->values = NULL;
 
     if (nnz_half > 0) {
-        out->col_idx = (size_t*)lmmc_alloc(col_idx_bytes);
+        out->col_idx = (size_t*)lmmc_memory_alloc(col_idx_bytes);
         if (out->col_idx == NULL) {
-            lmmc_free(out->row_ptr);
+            lmmc_memory_free(out->row_ptr);
             out->row_ptr = NULL;
             return LMMC_STATUS_ALLOCATION_FAILED;
         }
 
-        out->values = (lmmc_real_t*)lmmc_alloc(val_bytes);
+        out->values = (lmmc_real_t*)lmmc_memory_alloc(val_bytes);
         if (out->values == NULL) {
-            lmmc_free(out->col_idx);
-            lmmc_free(out->row_ptr);
+            lmmc_memory_free(out->col_idx);
+            lmmc_memory_free(out->row_ptr);
             out->col_idx = NULL;
             out->row_ptr = NULL;
             return LMMC_STATUS_ALLOCATION_FAILED;
@@ -91,25 +160,7 @@ lmmc_status_t lmmc_sparse_sym_csr_from_csr(const lmmc_sparse_mat_t* full,
     }
 
     /* 第二遍：填充数据 */
-    nz_idx = 0;
-    out->row_ptr[0] = 0;
-    for (i = 0; i < n; ++i) {
-        for (p = full->row_ptr[i]; p < full->row_ptr[i + 1]; ++p) {
-            size_t j = full->col_idx[p];
-            int keep = 0;
-            if (half == LMMC_SPARSE_SYM_UPPER) {
-                keep = (j >= i);
-            } else {
-                keep = (j <= i);
-            }
-            if (keep) {
-                out->col_idx[nz_idx] = j;
-                LMMC_REAL_SET(&out->values[nz_idx], &full->values[p]);
-                ++nz_idx;
-            }
-        }
-        out->row_ptr[i + 1] = nz_idx;
-    }
+    lmmc_sparse_sym_copy(full, half, out);
 
     out->n = n;
     out->nnz = nnz_half;
@@ -120,7 +171,7 @@ lmmc_status_t lmmc_sparse_sym_csr_from_csr(const lmmc_sparse_mat_t* full,
 
 lmmc_status_t lmmc_sparse_sym_spmv(const lmmc_sparse_sym_csr_t* A,
     const lmmc_vec_t* x, lmmc_vec_t* y) {
-    size_t i, p;
+    size_t i;
     lmmc_real_t zero;
     lmmc_real_t prod;
 
@@ -150,34 +201,7 @@ lmmc_status_t lmmc_sparse_sym_spmv(const lmmc_sparse_sym_csr_t* A,
     }
 
     /* 对称 SpMV：利用对称性，每个非对角元贡献两次 */
-    for (i = 0; i < A->n; ++i) {
-        for (p = A->row_ptr[i]; p < A->row_ptr[i + 1]; ++p) {
-            size_t j = A->col_idx[p];
-            LMMC_REAL_MUL(&prod, &A->values[p], &x->data[j]);
-
-            /* y[i] += A[i,j] * x[j] */
-            {
-                lmmc_real_t tmp;
-                LMMC_REAL_INIT(&tmp);
-                LMMC_REAL_ADD(&tmp, &y->data[i], &prod);
-                LMMC_REAL_SET(&y->data[i], &tmp);
-                LMMC_REAL_CLEAR(&tmp);
-            }
-
-            /* 对称贡献：y[j] += A[i,j] * x[i]（仅非对角元） */
-            if (i != j) {
-                lmmc_real_t prod2;
-                lmmc_real_t tmp2;
-                LMMC_REAL_INIT(&prod2);
-                LMMC_REAL_INIT(&tmp2);
-                LMMC_REAL_MUL(&prod2, &A->values[p], &x->data[i]);
-                LMMC_REAL_ADD(&tmp2, &y->data[j], &prod2);
-                LMMC_REAL_SET(&y->data[j], &tmp2);
-                LMMC_REAL_CLEAR(&prod2);
-                LMMC_REAL_CLEAR(&tmp2);
-            }
-        }
-    }
+    lmmc_sparse_sym_accumulate(A, x, y, &prod);
 
     LMMC_REAL_CLEAR(&zero);
     LMMC_REAL_CLEAR(&prod);
@@ -185,11 +209,19 @@ lmmc_status_t lmmc_sparse_sym_spmv(const lmmc_sparse_sym_csr_t* A,
 }
 
 void lmmc_sparse_sym_csr_destroy(lmmc_sparse_sym_csr_t* s) {
-    if (s == NULL) return;
+    if (s == NULL) {
+        return;
+    }
     if (s->owns_data) {
-        if (s->row_ptr != NULL) lmmc_free(s->row_ptr);
-        if (s->col_idx != NULL) lmmc_free(s->col_idx);
-        if (s->values != NULL) lmmc_free(s->values);
+        if (s->row_ptr != NULL) {
+            lmmc_memory_free(s->row_ptr);
+        }
+        if (s->col_idx != NULL) {
+            lmmc_memory_free(s->col_idx);
+        }
+        if (s->values != NULL) {
+            lmmc_memory_free(s->values);
+        }
     }
     s->row_ptr = NULL;
     s->col_idx = NULL;

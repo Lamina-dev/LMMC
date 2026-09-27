@@ -3,7 +3,14 @@ Checks: >-
   clang-analyzer-core.*,
   clang-analyzer-deadcode.*,
   bugprone-sizeof-expression,
-  bugprone-suspicious-memory-comparison
+  bugprone-suspicious-memory-comparison,
+  readability-identifier-naming
 WarningsAsErrors: '*'
 HeaderFilterRegex: '.*[\\/]LMMC[\\/](include|src)[\\/].*'
 FormatStyle: none
+CheckOptions:
+  readability-identifier-naming.FunctionCase: lower_case
+  readability-identifier-naming.TypedefCase: lower_case
+  readability-identifier-naming.StructCase: lower_case
+  readability-identifier-naming.EnumCase: lower_case
+  readability-identifier-naming.MacroDefinitionCase: UPPER_CASE

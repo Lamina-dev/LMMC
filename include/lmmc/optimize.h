@@ -63,7 +63,7 @@ typedef lmmc_real_t (*lmmc_opt_obj_t)(const lmmc_vec_t* x, void* user_data);
 typedef struct {
     lmmc_real_t abs_tol;       /**< 残差或梯度范数的绝对收敛容差。 */
     lmmc_real_t rel_tol;       /**< 相对于初始范数的收敛容差，范围 [0,1)。 */
-    size_t max_iter;           /**< 最大迭代次数，必须大于 0。 */
+    size_t max_iter;           /**< 最大迭代更新次数，必须大于 0；最后一次更新后仍检查收敛。 */
     size_t lbfgs_memory;       /**< L-BFGS 存储的 (s,y) 对数，必须大于 0。 */
     lmmc_real_t lm_damping;    /**< LM 初始阻尼参数 λ，必须为有限正数。 */
     lmmc_diagnostic_sink_t diagnostics; /**< 统一诊断出口。 */
@@ -85,8 +85,8 @@ typedef enum {
  */
 typedef struct {
     int converged;                     /**< 非零表示已收敛。 */
-    size_t num_iter;                   /**< 实际迭代次数。 */
-    lmmc_real_t final_residual;        /**< 最终残差范数。 */
+    size_t num_iter;                   /**< 已完成的迭代更新次数；初始点收敛时为 0。 */
+    lmmc_real_t final_residual;        /**< 输出 x 的残差范数（L-BFGS/梯度下降为梯度范数）；回调失败无法求值时为 NaN。 */
     lmmc_optimize_failure_t failure_reason; /**< 失败原因（converged=0 时有效）。 */
 } lmmc_optimize_result_t;
 
@@ -189,6 +189,9 @@ lmmc_status_t lmmc_minimize_lbfgs(
  * @brief Levenberg-Marquardt 非线性最小二乘。
  *
  * 求解 (JᵀJ + λI)δ = -Jᵀr，自适应调整 λ（接受步减小 λ，拒绝步增大 λ）。
+ * 当 ||r||₂ 或 ||Jᵀr||₂ 满足绝对容差或相对于各自初始范数的相对容差时
+ * 收敛，因此允许非零残差的驻点。残差和梯度范数必须均为有限数。
+ * final_residual 为输出 x 处的 ||r||₂。
  *
  * @param[in]     residual  残差函数回调 r(x)。
  * @param[in]     J         Jacobian 回调（可为 NULL，使用有限差分）。
@@ -199,7 +202,7 @@ lmmc_status_t lmmc_minimize_lbfgs(
  *
  * @return ::LMMC_STATUS_OK（通过 out->converged 判断是否收敛）。
  *
- * @par 副作用
+ * @note
  * - 就地修改 x->data。
  * - 分配并释放多个临时向量和 n×n 矩阵。
  * - 多次调用 residual 和 J 回调。

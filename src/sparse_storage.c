@@ -92,13 +92,13 @@ void lmmc_sparse_destroy(lmmc_sparse_mat_t* sparse) {
         return;
     }
     if (sparse->owns_data) {
-        if (sparse->row_ptr != NULL) lmmc_free(sparse->row_ptr);
-        if (sparse->col_idx != NULL) lmmc_free(sparse->col_idx);
+        if (sparse->row_ptr != NULL) lmmc_memory_free(sparse->row_ptr);
+        if (sparse->col_idx != NULL) lmmc_memory_free(sparse->col_idx);
         if (sparse->values != NULL) {
             for (size_t i = 0; i < sparse->nnz; ++i) {
                 LMMC_REAL_CLEAR(&sparse->values[i]);
             }
-            lmmc_free(sparse->values);
+            lmmc_memory_free(sparse->values);
         }
     }
     sparse->rows = 0;

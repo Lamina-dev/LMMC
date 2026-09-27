@@ -3,6 +3,7 @@
  * @brief 稀疏矩阵乘法：矩阵-向量、矩阵-稠密矩阵与稀疏×稀疏。
  */
 #include <string.h>
+#include <stdlib.h>
 
 #include "memory_bridge.h"
 #include "internal.h"
@@ -88,8 +89,136 @@ lmmc_status_t lmmc_sparse_mat_vec_mul(const lmmc_sparse_mat_t* sparse, const lmm
     LMMC_REAL_CLEAR(&zero);
     return LMMC_STATUS_OK;
 }
+static void lmmc_sparse_dense_row_add(
+    const lmmc_real_t* value, const lmmc_real_t* b_row,
+    lmmc_real_t* c_row, size_t count,
+    lmmc_real_t* tmp_mul, lmmc_real_t* tmp_sum)
+{
+    size_t j;
+                size_t j_limit = count & ~((size_t)3);
+                for (j = 0; j < j_limit; j += 4) {
+                    LMMC_REAL_MUL(tmp_mul, value, &b_row[j]);
+                    LMMC_REAL_ADD(tmp_sum, &c_row[j], tmp_mul);
+                    LMMC_REAL_SET(&c_row[j], tmp_sum);
+
+                    LMMC_REAL_MUL(tmp_mul, value, &b_row[j + 1]);
+                    LMMC_REAL_ADD(tmp_sum, &c_row[j + 1], tmp_mul);
+                    LMMC_REAL_SET(&c_row[j + 1], tmp_sum);
+
+                    LMMC_REAL_MUL(tmp_mul, value, &b_row[j + 2]);
+                    LMMC_REAL_ADD(tmp_sum, &c_row[j + 2], tmp_mul);
+                    LMMC_REAL_SET(&c_row[j + 2], tmp_sum);
+
+                    LMMC_REAL_MUL(tmp_mul, value, &b_row[j + 3]);
+                    LMMC_REAL_ADD(tmp_sum, &c_row[j + 3], tmp_mul);
+                    LMMC_REAL_SET(&c_row[j + 3], tmp_sum);
+                }
+                for (; j < count; ++j) {
+                    LMMC_REAL_MUL(tmp_mul, value, &b_row[j]);
+                    LMMC_REAL_ADD(tmp_sum, &c_row[j], tmp_mul);
+                    LMMC_REAL_SET(&c_row[j], tmp_sum);
+                }
+}
+
+static size_t lmmc_sparse_product_pattern(
+    const lmmc_sparse_mat_t* pa, const lmmc_sparse_mat_t* pb,
+    size_t* marker, size_t* c_row_ptr)
+{
+    size_t i, j, k, p1, p2;
+    size_t nnz_est;
+    nnz_est = 0;
+    for (i = 0; i < pa->rows; ++i) {
+        for (p1 = pa->row_ptr[i]; p1 < pa->row_ptr[i + 1]; ++p1) {
+            k = pa->col_idx[p1];
+            for (p2 = pb->row_ptr[k]; p2 < pb->row_ptr[k + 1]; ++p2) {
+                j = pb->col_idx[p2];
+                if (marker[j] != i) {
+                    marker[j] = i;
+                    nnz_est++;
+                }
+            }
+        }
+        c_row_ptr[i + 1] = nnz_est;
+    }
+    return nnz_est;
+}
+
+static int lmmc_sparse_index_compare(const void* lhs, const void* rhs) {
+    const size_t a = *(const size_t*)lhs;
+    const size_t b = *(const size_t*)rhs;
+    return (a > b) - (a < b);
+}
+
+static void lmmc_sparse_product_values(
+    const lmmc_sparse_mat_t* pa, const lmmc_sparse_mat_t* pb,
+    size_t* marker, lmmc_real_t* accumulator,
+    size_t* c_col_idx, lmmc_real_t* c_values)
+{
+    size_t i, j, k, p1, p2;
+    lmmc_real_t tmp_mul; LMMC_REAL_INIT(&tmp_mul);
+    lmmc_real_t tmp_sum; LMMC_REAL_INIT(&tmp_sum);
+
+    size_t current_nnz = 0;
+    for (i = 0; i < pa->rows; ++i) {
+        size_t row_start = current_nnz;
+        for (p1 = pa->row_ptr[i]; p1 < pa->row_ptr[i + 1]; ++p1) {
+            k = pa->col_idx[p1];
+            for (p2 = pb->row_ptr[k]; p2 < pb->row_ptr[k + 1]; ++p2) {
+                j = pb->col_idx[p2];
+                if (marker[j] != i) {
+                    marker[j] = i;
+                    c_col_idx[current_nnz++] = j;
+                }
+                LMMC_REAL_MUL(&tmp_mul, &pa->values[p1], &pb->values[p2]);
+                LMMC_REAL_ADD(&tmp_sum, &accumulator[j], &tmp_mul);
+                LMMC_REAL_SET(&accumulator[j], &tmp_sum);
+            }
+        }
+        if (current_nnz - row_start > 1) {
+            qsort(c_col_idx + row_start, current_nnz - row_start,
+                sizeof(size_t), lmmc_sparse_index_compare);
+        }
+        for (p1 = row_start; p1 < current_nnz; ++p1) {
+            j = c_col_idx[p1];
+            LMMC_REAL_SET(&c_values[p1], &accumulator[j]);
+            LMMC_REAL_SET_D(&accumulator[j], 0.0);
+        }
+    }
+
+    LMMC_REAL_CLEAR(&tmp_mul);
+    LMMC_REAL_CLEAR(&tmp_sum);
+}
+
+static void lmmc_sparse_product_workspace_clear(
+    size_t* marker, lmmc_real_t* accumulator, size_t cols,
+    size_t* c_row_ptr, size_t* c_col_idx, lmmc_real_t* c_values, size_t nnz_est)
+{
+    if (marker) {
+        lmmc_memory_free(marker);
+    }
+    if (accumulator) {
+        for (size_t act_i = 0; act_i < cols; act_i++) {
+            LMMC_REAL_CLEAR(&accumulator[act_i]);
+        }
+        lmmc_memory_free(accumulator);
+    }
+    if (c_row_ptr) {
+        lmmc_memory_free(c_row_ptr);
+    }
+    if (c_col_idx) {
+        lmmc_memory_free(c_col_idx);
+    }
+    if (c_values) {
+        for (size_t act_i = 0; act_i < nnz_est; act_i++) {
+            LMMC_REAL_CLEAR(&c_values[act_i]);
+        }
+        lmmc_memory_free(c_values);
+    }
+}
+
+
 lmmc_status_t lmmc_sparse_mat_mat_mul_dense(const lmmc_sparse_mat_t* sparse, const lmmc_mat_t* b, lmmc_mat_t* c) {
-    size_t i = 0, p = 0, j = 0;
+    size_t i = 0, p = 0;
     lmmc_status_t st = lmmc_sparse_validate(sparse);
     if (st != LMMC_STATUS_OK || b == NULL || c == NULL || b->data == NULL || c->data == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
@@ -130,29 +259,8 @@ lmmc_status_t lmmc_sparse_mat_mat_mul_dense(const lmmc_sparse_mat_t* sparse, con
                 lmmc_real_t val_p; LMMC_REAL_INIT(&val_p);
                 LMMC_REAL_SET(&val_p, &vals[p]);
 
-                size_t j_limit = b_cols & ~((size_t)3);
-                for (j = 0; j < j_limit; j += 4) {
-                    LMMC_REAL_MUL(&tmp_mul, &val_p, &b_data[k * b_stride + j]);
-                    LMMC_REAL_ADD(&tmp_sum, &c_data[i * c_stride + j], &tmp_mul);
-                    LMMC_REAL_SET(&c_data[i * c_stride + j], &tmp_sum);
-
-                    LMMC_REAL_MUL(&tmp_mul, &val_p, &b_data[k * b_stride + j + 1]);
-                    LMMC_REAL_ADD(&tmp_sum, &c_data[i * c_stride + j + 1], &tmp_mul);
-                    LMMC_REAL_SET(&c_data[i * c_stride + j + 1], &tmp_sum);
-
-                    LMMC_REAL_MUL(&tmp_mul, &val_p, &b_data[k * b_stride + j + 2]);
-                    LMMC_REAL_ADD(&tmp_sum, &c_data[i * c_stride + j + 2], &tmp_mul);
-                    LMMC_REAL_SET(&c_data[i * c_stride + j + 2], &tmp_sum);
-
-                    LMMC_REAL_MUL(&tmp_mul, &val_p, &b_data[k * b_stride + j + 3]);
-                    LMMC_REAL_ADD(&tmp_sum, &c_data[i * c_stride + j + 3], &tmp_mul);
-                    LMMC_REAL_SET(&c_data[i * c_stride + j + 3], &tmp_sum);
-                }
-                for (; j < b_cols; ++j) {
-                    LMMC_REAL_MUL(&tmp_mul, &val_p, &b_data[k * b_stride + j]);
-                    LMMC_REAL_ADD(&tmp_sum, &c_data[i * c_stride + j], &tmp_mul);
-                    LMMC_REAL_SET(&c_data[i * c_stride + j], &tmp_sum);
-                }
+                lmmc_sparse_dense_row_add(&val_p, &b_data[k * b_stride],
+                    &c_data[i * c_stride], b_cols, &tmp_mul, &tmp_sum);
                 LMMC_REAL_CLEAR(&val_p);
             }
         }
@@ -165,29 +273,8 @@ lmmc_status_t lmmc_sparse_mat_mat_mul_dense(const lmmc_sparse_mat_t* sparse, con
                 lmmc_real_t val_p; LMMC_REAL_INIT(&val_p);
                 LMMC_REAL_SET(&val_p, &vals[p]);
 
-                size_t j_limit = b_cols & ~((size_t)3);
-                for (j = 0; j < j_limit; j += 4) {
-                    LMMC_REAL_MUL(&tmp_mul, &val_p, &b_data[i * b_stride + j]);
-                    LMMC_REAL_ADD(&tmp_sum, &c_data[row * c_stride + j], &tmp_mul);
-                    LMMC_REAL_SET(&c_data[row * c_stride + j], &tmp_sum);
-
-                    LMMC_REAL_MUL(&tmp_mul, &val_p, &b_data[i * b_stride + j + 1]);
-                    LMMC_REAL_ADD(&tmp_sum, &c_data[row * c_stride + j + 1], &tmp_mul);
-                    LMMC_REAL_SET(&c_data[row * c_stride + j + 1], &tmp_sum);
-
-                    LMMC_REAL_MUL(&tmp_mul, &val_p, &b_data[i * b_stride + j + 2]);
-                    LMMC_REAL_ADD(&tmp_sum, &c_data[row * c_stride + j + 2], &tmp_mul);
-                    LMMC_REAL_SET(&c_data[row * c_stride + j + 2], &tmp_sum);
-
-                    LMMC_REAL_MUL(&tmp_mul, &val_p, &b_data[i * b_stride + j + 3]);
-                    LMMC_REAL_ADD(&tmp_sum, &c_data[row * c_stride + j + 3], &tmp_mul);
-                    LMMC_REAL_SET(&c_data[row * c_stride + j + 3], &tmp_sum);
-                }
-                for (; j < b_cols; ++j) {
-                    LMMC_REAL_MUL(&tmp_mul, &val_p, &b_data[i * b_stride + j]);
-                    LMMC_REAL_ADD(&tmp_sum, &c_data[row * c_stride + j], &tmp_mul);
-                    LMMC_REAL_SET(&c_data[row * c_stride + j], &tmp_sum);
-                }
+                lmmc_sparse_dense_row_add(&val_p, &b_data[i * b_stride],
+                    &c_data[row * c_stride], b_cols, &tmp_mul, &tmp_sum);
                 LMMC_REAL_CLEAR(&val_p);
             }
         }
@@ -196,6 +283,27 @@ lmmc_status_t lmmc_sparse_mat_mat_mul_dense(const lmmc_sparse_mat_t* sparse, con
     LMMC_REAL_CLEAR(&zero);
     LMMC_REAL_CLEAR(&tmp_mul);
     LMMC_REAL_CLEAR(&tmp_sum);
+    return LMMC_STATUS_OK;
+}
+
+static lmmc_status_t lmmc_sparse_product_numeric_workspace(
+    size_t nnz, size_t cols, size_t* marker, size_t** indices,
+    lmmc_real_t** values, lmmc_real_t** accumulator)
+{
+    *indices = (size_t*)lmmc_memory_alloc_array(nnz, sizeof(size_t));
+    *values = (lmmc_real_t*)lmmc_memory_alloc_array(nnz, sizeof(lmmc_real_t));
+    *accumulator = (lmmc_real_t*)lmmc_memory_alloc_array(cols, sizeof(lmmc_real_t));
+    if ((nnz > 0 && (*indices == NULL || *values == NULL)) || *accumulator == NULL) {
+        return LMMC_STATUS_ALLOCATION_FAILED;
+    }
+    memset(marker, 0xFF, cols * sizeof(size_t));
+    for (size_t i = 0; i < cols; ++i) {
+        LMMC_REAL_INIT(&(*accumulator)[i]);
+        LMMC_REAL_SET_D(&(*accumulator)[i], 0.0);
+    }
+    for (size_t i = 0; i < nnz; ++i) {
+        LMMC_REAL_INIT(&(*values)[i]);
+    }
     return LMMC_STATUS_OK;
 }
 
@@ -211,14 +319,20 @@ lmmc_status_t lmmc_sparse_mat_mat_mul_sparse(const lmmc_sparse_mat_t* a, const l
     size_t *c_col_idx = NULL;
     lmmc_real_t *c_values = NULL;
     size_t nnz_est = 0;
-    size_t i, j, k, p1, p2;
 
-    if (a == NULL || b == NULL || c == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
-    if (a->cols != b->rows) return LMMC_STATUS_DIMENSION_MISMATCH;
+    if (c == NULL || lmmc_sparse_validate(a) != LMMC_STATUS_OK ||
+        lmmc_sparse_validate(b) != LMMC_STATUS_OK) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    if (a->cols != b->rows) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
 
     if (a->format == LMMC_SPARSE_CSC) {
         st = lmmc_sparse_to_csr(a, &a_csr);
-        if (st != LMMC_STATUS_OK) return st;
+        if (st != LMMC_STATUS_OK) {
+            return st;
+        }
         pa = &a_csr;
     }
     if (b->format == LMMC_SPARSE_CSC) {
@@ -230,9 +344,8 @@ lmmc_status_t lmmc_sparse_mat_mat_mul_sparse(const lmmc_sparse_mat_t* a, const l
         pb = &b_csr;
     }
 
-    marker = (size_t*)lmmc_alloc_array(pb->cols, sizeof(size_t));
-    c_row_ptr = (size_t*)lmmc_alloc_array_plus(
-        pa->rows, 1, sizeof(size_t));
+    marker = (size_t*)lmmc_memory_alloc_array(pb->cols, sizeof(size_t));
+    c_row_ptr = (size_t*)lmmc_memory_alloc_array_plus(pa->rows, 1, sizeof(size_t));
     if (marker == NULL || c_row_ptr == NULL) {
         st = LMMC_STATUS_ALLOCATION_FAILED;
         goto cleanup;
@@ -240,67 +353,15 @@ lmmc_status_t lmmc_sparse_mat_mat_mul_sparse(const lmmc_sparse_mat_t* a, const l
     memset(marker, 0xFF, pb->cols * sizeof(size_t));
     memset(c_row_ptr, 0, (pa->rows + 1) * sizeof(size_t));
 
-    nnz_est = 0;
-    for (i = 0; i < pa->rows; ++i) {
-        for (p1 = pa->row_ptr[i]; p1 < pa->row_ptr[i + 1]; ++p1) {
-            k = pa->col_idx[p1];
-            for (p2 = pb->row_ptr[k]; p2 < pb->row_ptr[k + 1]; ++p2) {
-                j = pb->col_idx[p2];
-                if (marker[j] != i) {
-                    marker[j] = i;
-                    nnz_est++;
-                }
-            }
-        }
-        c_row_ptr[i + 1] = nnz_est;
-    }
+    nnz_est = lmmc_sparse_product_pattern(pa, pb, marker, c_row_ptr);
 
-    c_col_idx = (size_t*)lmmc_alloc_array(nnz_est, sizeof(size_t));
-    c_values = (lmmc_real_t*)lmmc_alloc_array(
-        nnz_est, sizeof(lmmc_real_t));
-    accumulator = (lmmc_real_t*)lmmc_alloc_array(
-        pb->cols, sizeof(lmmc_real_t));
-    if ((nnz_est > 0 && (c_col_idx == NULL || c_values == NULL)) || accumulator == NULL) {
-        st = LMMC_STATUS_ALLOCATION_FAILED;
+    st = lmmc_sparse_product_numeric_workspace(
+        nnz_est, pb->cols, marker, &c_col_idx, &c_values, &accumulator);
+    if (st != LMMC_STATUS_OK) {
         goto cleanup;
     }
-    memset(marker, 0xFF, pb->cols * sizeof(size_t));
-    for (size_t act_i = 0; act_i < pb->cols; act_i++) {
-        LMMC_REAL_INIT(&accumulator[act_i]);
-        LMMC_REAL_SET_D(&accumulator[act_i], 0.0);
-    }
-    for (size_t act_i = 0; act_i < nnz_est; act_i++) {
-        LMMC_REAL_INIT(&c_values[act_i]);
-    }
 
-    lmmc_real_t tmp_mul; LMMC_REAL_INIT(&tmp_mul);
-    lmmc_real_t tmp_sum; LMMC_REAL_INIT(&tmp_sum);
-
-    size_t current_nnz = 0;
-    for (i = 0; i < pa->rows; ++i) {
-        size_t row_start = current_nnz;
-        for (p1 = pa->row_ptr[i]; p1 < pa->row_ptr[i + 1]; ++p1) {
-            k = pa->col_idx[p1];
-            for (p2 = pb->row_ptr[k]; p2 < pb->row_ptr[k + 1]; ++p2) {
-                j = pb->col_idx[p2];
-                if (marker[j] != i) {
-                    marker[j] = i;
-                    c_col_idx[current_nnz++] = j;
-                }
-                LMMC_REAL_MUL(&tmp_mul, &pa->values[p1], &pb->values[p2]);
-                LMMC_REAL_ADD(&tmp_sum, &accumulator[j], &tmp_mul);
-                LMMC_REAL_SET(&accumulator[j], &tmp_sum);
-            }
-        }
-        for (p1 = row_start; p1 < current_nnz; ++p1) {
-            j = c_col_idx[p1];
-            LMMC_REAL_SET(&c_values[p1], &accumulator[j]);
-            LMMC_REAL_SET_D(&accumulator[j], 0.0);
-        }
-    }
-
-    LMMC_REAL_CLEAR(&tmp_mul);
-    LMMC_REAL_CLEAR(&tmp_sum);
+    lmmc_sparse_product_values(pa, pb, marker, accumulator, c_col_idx, c_values);
 
     c->rows = pa->rows;
     c->cols = pb->cols;
@@ -316,21 +377,8 @@ lmmc_status_t lmmc_sparse_mat_mat_mul_sparse(const lmmc_sparse_mat_t* a, const l
     c_values = NULL;
 
 cleanup:
-    if (marker) lmmc_free(marker);
-    if (accumulator) {
-        for (size_t act_i = 0; act_i < pb->cols; act_i++) {
-            LMMC_REAL_CLEAR(&accumulator[act_i]);
-        }
-        lmmc_free(accumulator);
-    }
-    if (c_row_ptr) lmmc_free(c_row_ptr);
-    if (c_col_idx) lmmc_free(c_col_idx);
-    if (c_values) {
-        for (size_t act_i = 0; act_i < nnz_est; act_i++) {
-            LMMC_REAL_CLEAR(&c_values[act_i]);
-        }
-        lmmc_free(c_values);
-    }
+    lmmc_sparse_product_workspace_clear(
+        marker, accumulator, pb->cols, c_row_ptr, c_col_idx, c_values, nnz_est);
     lmmc_sparse_destroy(&a_csr);
     lmmc_sparse_destroy(&b_csr);
     return st;

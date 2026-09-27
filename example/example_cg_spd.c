@@ -5,6 +5,41 @@
 #include <stdio.h>
 #include "lmmc/lmmc.h"
 
+static int create_spd_system(lmmc_mat_t* a_dense, lmmc_sparse_mat_t* a_sparse, lmmc_vec_t* b, lmmc_vec_t* x) {
+    lmmc_status_t st = LMMC_STATUS_OK;
+    st = lmmc_mat_create(3, 3, a_dense);
+    if (st != LMMC_STATUS_OK) {
+        printf("mat_create failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+
+    a_dense->data[0] = 4.0; a_dense->data[1] = 1.0; a_dense->data[2] = 0.0;
+    a_dense->data[3] = 1.0; a_dense->data[4] = 3.0; a_dense->data[5] = 1.0;
+    a_dense->data[6] = 0.0; a_dense->data[7] = 1.0; a_dense->data[8] = 2.0;
+
+    st = lmmc_sparse_from_dense(a_dense, 1e-14, a_sparse);
+    if (st != LMMC_STATUS_OK) {
+        printf("sparse_from_dense failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+
+    st = lmmc_vec_create(3, b);
+    if (st != LMMC_STATUS_OK) {
+        printf("vec_create b failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+    st = lmmc_vec_create(3, x);
+    if (st != LMMC_STATUS_OK) {
+        printf("vec_create x failed: %s\n", lmmc_status_string(st));
+        return 1;
+    }
+
+    b->data[0] = 6.0;
+    b->data[1] = 10.0;
+    b->data[2] = 8.0;
+    return 0;
+}
+
 int main(void) {
     lmmc_mat_t a_dense = {0};
     lmmc_sparse_mat_t a_sparse = {0};
@@ -16,40 +51,10 @@ int main(void) {
     lmmc_status_t st = LMMC_STATUS_OK;
     int rc = 0;
 
-    st = lmmc_mat_create(3, 3, &a_dense);
-    if (st != LMMC_STATUS_OK) {
-        printf("mat_create failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-
-    a_dense.data[0] = 4.0; a_dense.data[1] = 1.0; a_dense.data[2] = 0.0;
-    a_dense.data[3] = 1.0; a_dense.data[4] = 3.0; a_dense.data[5] = 1.0;
-    a_dense.data[6] = 0.0; a_dense.data[7] = 1.0; a_dense.data[8] = 2.0;
-
-    st = lmmc_sparse_from_dense(&a_dense, 1e-14, &a_sparse);
-    if (st != LMMC_STATUS_OK) {
-        printf("sparse_from_dense failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-
-    st = lmmc_vec_create(3, &b);
-    if (st != LMMC_STATUS_OK) {
-        printf("vec_create b failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-    st = lmmc_vec_create(3, &x);
-    if (st != LMMC_STATUS_OK) {
-        printf("vec_create x failed: %s\n", lmmc_status_string(st));
-        rc = 1;
-        goto cleanup;
-    }
-
-    b.data[0] = 6.0;
-    b.data[1] = 10.0;
-    b.data[2] = 8.0;
+    rc = create_spd_system(&a_dense, &a_sparse, &b, &x);
+    if (rc != 0) {
+            goto cleanup;
+        }
 
     st = lmmc_precond_create_jacobi(&a_sparse, &jacobi);
     if (st != LMMC_STATUS_OK) {

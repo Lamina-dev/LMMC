@@ -37,7 +37,7 @@ lmmc_status_t lmmc_sparse_bsr_create(size_t rows, size_t cols, size_t block_size
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    out->row_ptr = (size_t*)lmmc_alloc(row_ptr_bytes);
+    out->row_ptr = (size_t*)lmmc_memory_alloc(row_ptr_bytes);
     if (out->row_ptr == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
@@ -47,18 +47,18 @@ lmmc_status_t lmmc_sparse_bsr_create(size_t rows, size_t cols, size_t block_size
     out->values = NULL;
 
     if (nnz_blocks > 0) {
-        out->col_idx = (size_t*)lmmc_alloc(col_idx_bytes);
+        out->col_idx = (size_t*)lmmc_memory_alloc(col_idx_bytes);
         if (out->col_idx == NULL) {
-            lmmc_free(out->row_ptr);
+            lmmc_memory_free(out->row_ptr);
             out->row_ptr = NULL;
             return LMMC_STATUS_ALLOCATION_FAILED;
         }
         memset(out->col_idx, 0, col_idx_bytes);
 
-        out->values = (lmmc_real_t*)lmmc_alloc(val_bytes);
+        out->values = (lmmc_real_t*)lmmc_memory_alloc(val_bytes);
         if (out->values == NULL) {
-            lmmc_free(out->col_idx);
-            lmmc_free(out->row_ptr);
+            lmmc_memory_free(out->col_idx);
+            lmmc_memory_free(out->row_ptr);
             out->col_idx = NULL;
             out->row_ptr = NULL;
             return LMMC_STATUS_ALLOCATION_FAILED;
@@ -74,8 +74,83 @@ lmmc_status_t lmmc_sparse_bsr_create(size_t rows, size_t cols, size_t block_size
     return LMMC_STATUS_OK;
 }
 
-lmmc_status_t lmmc_sparse_bsr_to_dense(const lmmc_sparse_bsr_t* bsr, lmmc_mat_t* out) {
+static void lmmc_sparse_bsr_scatter(
+    const lmmc_sparse_bsr_t* bsr, lmmc_mat_t* out)
+{
     size_t bi, p, li, lj;
+    for (bi = 0; bi < bsr->rows; ++bi) {
+        for (p = bsr->row_ptr[bi]; p < bsr->row_ptr[bi + 1]; ++p) {
+            size_t bj = bsr->col_idx[p];
+            size_t block_offset = p * bsr->block_size * bsr->block_size;
+            size_t row_base = bi * bsr->block_size;
+            size_t col_base = bj * bsr->block_size;
+
+            for (li = 0; li < bsr->block_size; ++li) {
+                for (lj = 0; lj < bsr->block_size; ++lj) {
+                    size_t dense_idx = (row_base + li) * out->stride + (col_base + lj);
+                    size_t block_idx = block_offset + li * bsr->block_size + lj;
+                    LMMC_REAL_SET(&out->data[dense_idx], &bsr->values[block_idx]);
+                }
+            }
+        }
+    }
+}
+
+static int lmmc_sparse_dense_block_nonzero(
+    const lmmc_mat_t* dense, size_t block_size, size_t bi, size_t bj,
+    const lmmc_real_t* eps, lmmc_real_t* abs_v)
+{
+    for (size_t li = 0; li < block_size; ++li) {
+        for (size_t lj = 0; lj < block_size; ++lj) {
+            size_t row = bi * block_size + li;
+            size_t col = bj * block_size + lj;
+            LMMC_REAL_ABS(abs_v, &dense->data[row * dense->stride + col]);
+            if (LMMC_REAL_CMP(abs_v, eps) > 0) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+static void lmmc_sparse_dense_block_copy(
+    const lmmc_mat_t* dense, lmmc_sparse_bsr_t* out,
+    size_t bi, size_t bj, size_t nz_idx)
+{
+    size_t block_size = out->block_size;
+    size_t block_offset = nz_idx * block_size * block_size;
+    out->col_idx[nz_idx] = bj;
+    for (size_t li = 0; li < block_size; ++li) {
+        for (size_t lj = 0; lj < block_size; ++lj) {
+            size_t row = bi * block_size + li;
+            size_t col = bj * block_size + lj;
+            size_t blk_idx = block_offset + li * block_size + lj;
+            LMMC_REAL_SET(&out->values[blk_idx],
+                          &dense->data[row * dense->stride + col]);
+        }
+    }
+}
+
+static void lmmc_sparse_bsr_gather(
+    const lmmc_mat_t* dense, const lmmc_real_t* eps,
+    lmmc_real_t* abs_v, lmmc_sparse_bsr_t* out)
+{
+    size_t nz_idx = 0;
+    out->row_ptr[0] = 0;
+    for (size_t bi = 0; bi < out->rows; ++bi) {
+        for (size_t bj = 0; bj < out->cols; ++bj) {
+            if (lmmc_sparse_dense_block_nonzero(
+                    dense, out->block_size, bi, bj, eps, abs_v)) {
+                lmmc_sparse_dense_block_copy(dense, out, bi, bj, nz_idx);
+                ++nz_idx;
+            }
+        }
+        out->row_ptr[bi + 1] = nz_idx;
+    }
+}
+
+
+lmmc_status_t lmmc_sparse_bsr_to_dense(const lmmc_sparse_bsr_t* bsr, lmmc_mat_t* out) {
     size_t dense_rows, dense_cols;
     lmmc_real_t zero;
     lmmc_status_t st;
@@ -109,24 +184,7 @@ lmmc_status_t lmmc_sparse_bsr_to_dense(const lmmc_sparse_bsr_t* bsr, lmmc_mat_t*
         return st;
     }
 
-    /* 遍历每个块行 */
-    for (bi = 0; bi < bsr->rows; ++bi) {
-        for (p = bsr->row_ptr[bi]; p < bsr->row_ptr[bi + 1]; ++p) {
-            size_t bj = bsr->col_idx[p];
-            size_t block_offset = p * bsr->block_size * bsr->block_size;
-            size_t row_base = bi * bsr->block_size;
-            size_t col_base = bj * bsr->block_size;
-
-            /* 将块内元素写入稠密矩阵 */
-            for (li = 0; li < bsr->block_size; ++li) {
-                for (lj = 0; lj < bsr->block_size; ++lj) {
-                    size_t dense_idx = (row_base + li) * out->stride + (col_base + lj);
-                    size_t block_idx = block_offset + li * bsr->block_size + lj;
-                    LMMC_REAL_SET(&out->data[dense_idx], &bsr->values[block_idx]);
-                }
-            }
-        }
-    }
+    lmmc_sparse_bsr_scatter(bsr, out);
 
     return LMMC_STATUS_OK;
 }
@@ -134,9 +192,8 @@ lmmc_status_t lmmc_sparse_bsr_to_dense(const lmmc_sparse_bsr_t* bsr, lmmc_mat_t*
 lmmc_status_t lmmc_sparse_dense_to_bsr(const lmmc_mat_t* dense, size_t block_size,
     lmmc_real_t eps, lmmc_sparse_bsr_t* out) {
     size_t block_rows, block_cols;
-    size_t bi, bj, li, lj;
+    size_t bi, bj;
     size_t nnz_blocks = 0;
-    size_t nz_idx = 0;
     lmmc_status_t st;
     lmmc_real_t abs_v;
     lmmc_real_t zero;
@@ -167,18 +224,8 @@ lmmc_status_t lmmc_sparse_dense_to_bsr(const lmmc_mat_t* dense, size_t block_siz
     /* 第一遍：计算非零块数量 */
     for (bi = 0; bi < block_rows; ++bi) {
         for (bj = 0; bj < block_cols; ++bj) {
-            int block_nonzero = 0;
-            for (li = 0; li < block_size && !block_nonzero; ++li) {
-                for (lj = 0; lj < block_size && !block_nonzero; ++lj) {
-                    size_t row = bi * block_size + li;
-                    size_t col = bj * block_size + lj;
-                    LMMC_REAL_ABS(&abs_v, &dense->data[row * dense->stride + col]);
-                    if (LMMC_REAL_CMP(&abs_v, &eps) > 0) {
-                        block_nonzero = 1;
-                    }
-                }
-            }
-            if (block_nonzero) {
+            if (lmmc_sparse_dense_block_nonzero(
+                    dense, block_size, bi, bj, &eps, &abs_v)) {
                 ++nnz_blocks;
             }
         }
@@ -198,40 +245,7 @@ lmmc_status_t lmmc_sparse_dense_to_bsr(const lmmc_mat_t* dense, size_t block_siz
     }
 
     /* 第二遍：填充数据 */
-    nz_idx = 0;
-    out->row_ptr[0] = 0;
-    for (bi = 0; bi < block_rows; ++bi) {
-        for (bj = 0; bj < block_cols; ++bj) {
-            int block_nonzero = 0;
-            for (li = 0; li < block_size && !block_nonzero; ++li) {
-                for (lj = 0; lj < block_size && !block_nonzero; ++lj) {
-                    size_t row = bi * block_size + li;
-                    size_t col = bj * block_size + lj;
-                    LMMC_REAL_ABS(&abs_v, &dense->data[row * dense->stride + col]);
-                    if (LMMC_REAL_CMP(&abs_v, &eps) > 0) {
-                        block_nonzero = 1;
-                    }
-                }
-            }
-            if (block_nonzero) {
-                size_t block_offset = nz_idx * block_size * block_size;
-                out->col_idx[nz_idx] = bj;
-
-                /* 复制块内所有元素 */
-                for (li = 0; li < block_size; ++li) {
-                    for (lj = 0; lj < block_size; ++lj) {
-                        size_t row = bi * block_size + li;
-                        size_t col = bj * block_size + lj;
-                        size_t blk_idx = block_offset + li * block_size + lj;
-                        LMMC_REAL_SET(&out->values[blk_idx],
-                                      &dense->data[row * dense->stride + col]);
-                    }
-                }
-                ++nz_idx;
-            }
-        }
-        out->row_ptr[bi + 1] = nz_idx;
-    }
+    lmmc_sparse_bsr_gather(dense, &eps, &abs_v, out);
 
     LMMC_REAL_CLEAR(&abs_v);
     LMMC_REAL_CLEAR(&zero);
@@ -239,11 +253,19 @@ lmmc_status_t lmmc_sparse_dense_to_bsr(const lmmc_mat_t* dense, size_t block_siz
 }
 
 void lmmc_sparse_bsr_destroy(lmmc_sparse_bsr_t* bsr) {
-    if (bsr == NULL) return;
+    if (bsr == NULL) {
+        return;
+    }
     if (bsr->owns_data) {
-        if (bsr->row_ptr != NULL) lmmc_free(bsr->row_ptr);
-        if (bsr->col_idx != NULL) lmmc_free(bsr->col_idx);
-        if (bsr->values != NULL) lmmc_free(bsr->values);
+        if (bsr->row_ptr != NULL) {
+            lmmc_memory_free(bsr->row_ptr);
+        }
+        if (bsr->col_idx != NULL) {
+            lmmc_memory_free(bsr->col_idx);
+        }
+        if (bsr->values != NULL) {
+            lmmc_memory_free(bsr->values);
+        }
     }
     bsr->row_ptr = NULL;
     bsr->col_idx = NULL;

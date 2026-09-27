@@ -263,7 +263,12 @@ lmmc_status_t lmmc_ode_trapezoidal_solve(
     lmmc_ode_result_t* out_result
 );
 
-/** @brief 4 阶 SDIRK 求解器（含嵌入误差估计，自适应步长）。 */
+/**
+ * @brief 4 阶 SDIRK 求解器，采用嵌入误差估计和自适应步长。
+ * 非线性阶段按 abs_tol/rel_tol、当前及阶段状态计算 h*残差与 h*修正的加权 RMS。
+ * 迭代耗尽时保留最后接受的 y、final_t 和 num_steps，当前步不提交。
+ * 容差控制局部误差，不保证全局严格误差界；纯相对容差保持零绝对误差下限。
+ */
 lmmc_status_t lmmc_ode_sdirk4_solve(
     lmmc_ode_rhs_t rhs,
     void* user_data,

@@ -98,6 +98,185 @@ static lmmc_status_t ros_solve_stage(
     return lmmc_ode_values_are_finite(stage, dim);
 }
 
+typedef struct {
+    lmmc_ode_rhs_t rhs;
+    void* user_data;
+    size_t dim, work_bytes;
+    lmmc_real_t* y;
+    lmmc_ode_config_t local_cfg;
+    lmmc_ode_result_t* out_result;
+    lmmc_real_t t, h;
+    lmmc_real_t* work;
+    lmmc_real_t* matrix_data;
+    size_t* pivots;
+    lmmc_real_t* k[ROS_STAGES];
+    lmmc_real_t *f0, *f_stage, *y_stage, *y_pert, *f_pert;
+    lmmc_real_t *rhs_vec, *dfdt, *y_new, *error;
+    lmmc_mat_t W;
+} ode_rosenbrock_state_t;
+
+static lmmc_status_t ros_prepare_system(ode_rosenbrock_state_t* s) {
+    size_t i, j, swap_count = 0;
+    int callback_failed = 0;
+    lmmc_status_t st;
+        st = lmmc_ode_rhs_eval(s->rhs, s->t, s->y, s->f0, s->dim, s->user_data,
+                               &s->out_result->num_rhs_evals, &callback_failed);
+        if (st != LMMC_STATUS_OK) {
+            s->out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
+                                                         : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            return st;
+        }
+        st = lmmc_ode_jacobian_eval(&(lmmc_ode_jacobian_request_t){
+            s->rhs, s->local_cfg.jacobian, s->user_data, s->t, s->y, s->f0, s->dim, s->matrix_data,
+            s->f_stage, s->y_pert, s->f_pert, &s->out_result->num_rhs_evals,
+            &callback_failed});
+        if (st != LMMC_STATUS_OK) {
+            s->out_result->failure_reason =
+                callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
+                                : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            return st;
+        }
+        st = ros_time_derivative(s->rhs, s->local_cfg.time_derivative, s->user_data, s->t, s->y,
+                                 s->f0, s->dim, s->dfdt, s->f_pert, s->out_result);
+        if (st != LMMC_STATUS_OK) {
+            s->out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            return st;
+        }
+
+        for (i = 0; i < s->dim; ++i) {
+            for (j = 0; j < s->dim; ++j) {
+                s->W.data[i * s->dim + j] = -s->matrix_data[i * s->dim + j];
+            }
+            s->W.data[i * s->dim + i] += 1.0 / (s->h * ros_gamma);
+        }
+        st = lmmc_lu_decompose_inplace(&s->W, s->pivots, &swap_count);
+        if (st != LMMC_STATUS_OK) {
+            return st;
+        }
+    return LMMC_STATUS_OK;
+}
+
+static lmmc_status_t ros_evaluate_stages(ode_rosenbrock_state_t* s) {
+    size_t i;
+    int callback_failed = 0;
+    lmmc_status_t st;
+        for (i = 0; i < s->dim; ++i) {
+            s->rhs_vec[i] = s->f0[i] + s->h * ros_d[0] * s->dfdt[i];
+        }
+        st = ros_solve_stage(&s->W, s->pivots, s->rhs_vec, s->k[0], s->dim);
+        if (st != LMMC_STATUS_OK) { return st; }
+
+        for (i = 0; i < s->dim; ++i) {
+            s->y_stage[i] = s->y[i] + ros_a21 * s->k[0][i];
+        }
+        st = lmmc_ode_rhs_eval(s->rhs, s->t + ros_c2 * s->h, s->y_stage, s->f_stage, s->dim, s->user_data,
+                               &s->out_result->num_rhs_evals, &callback_failed);
+        if (st != LMMC_STATUS_OK) {
+            s->out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
+                                                         : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            return st;
+        }
+        for (i = 0; i < s->dim; ++i) {
+            s->rhs_vec[i] = s->f_stage[i] + s->h * ros_d[1] * s->dfdt[i] + (ros_c21 / s->h) * s->k[0][i];
+        }
+        st = ros_solve_stage(&s->W, s->pivots, s->rhs_vec, s->k[1], s->dim);
+        if (st != LMMC_STATUS_OK) { return st; }
+
+        for (i = 0; i < s->dim; ++i) {
+            s->y_stage[i] = s->y[i] + ros_a31 * s->k[0][i] + ros_a32 * s->k[1][i];
+        }
+        st = lmmc_ode_rhs_eval(s->rhs, s->t + ros_c3 * s->h, s->y_stage, s->f_stage, s->dim, s->user_data,
+                               &s->out_result->num_rhs_evals, &callback_failed);
+        if (st != LMMC_STATUS_OK) {
+            s->out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
+                                                         : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            return st;
+        }
+        for (i = 0; i < s->dim; ++i) {
+            s->rhs_vec[i] = s->f_stage[i] + s->h * ros_d[2] * s->dfdt[i]
+                       + (ros_c31 / s->h) * s->k[0][i] + (ros_c32 / s->h) * s->k[1][i];
+        }
+        st = ros_solve_stage(&s->W, s->pivots, s->rhs_vec, s->k[2], s->dim);
+        if (st != LMMC_STATUS_OK) { return st; }
+
+        for (i = 0; i < s->dim; ++i) {
+            s->rhs_vec[i] = s->f_stage[i] + s->h * ros_d[3] * s->dfdt[i]
+                       + (ros_c41 / s->h) * s->k[0][i] + (ros_c42 / s->h) * s->k[1][i]
+                       + (ros_c43 / s->h) * s->k[2][i];
+        }
+        st = ros_solve_stage(&s->W, s->pivots, s->rhs_vec, s->k[3], s->dim);
+        if (st != LMMC_STATUS_OK) { return st; }
+    return LMMC_STATUS_OK;
+}
+
+static lmmc_status_t ros_estimate_error(ode_rosenbrock_state_t* s, lmmc_real_t* error_norm) {
+    size_t i;
+    lmmc_status_t st;
+        for (i = 0; i < s->dim; ++i) {
+            s->y_new[i] = s->y[i] + ros_b[0] * s->k[0][i] + ros_b[1] * s->k[1][i]
+                     + ros_b[2] * s->k[2][i] + ros_b[3] * s->k[3][i];
+            s->error[i] = ros_e[0] * s->k[0][i] + ros_e[1] * s->k[1][i]
+                     + ros_e[2] * s->k[2][i] + ros_e[3] * s->k[3][i];
+        }
+        st = lmmc_ode_values_are_finite(s->y_new, s->dim);
+        if (st != LMMC_STATUS_OK) { return st; }
+        st = lmmc_ode_weighted_rms(s->error, s->y, s->y_new, s->dim, s->local_cfg.abs_tol,
+                                    s->local_cfg.rel_tol, error_norm);
+        if (st != LMMC_STATUS_OK) { return st; }
+    return LMMC_STATUS_OK;
+}
+
+static lmmc_status_t ros_integrate(ode_rosenbrock_state_t* s, lmmc_real_t t_end) {
+    size_t attempts = 0;
+    lmmc_status_t st;
+    while (s->t < t_end && attempts < s->local_cfg.max_steps) {
+        lmmc_real_t error_norm = 0.0;
+        ++attempts;
+        if (s->h > t_end - s->t) {
+            s->h = t_end - s->t;
+        }
+        st = ros_prepare_system(s);
+        if (st != LMMC_STATUS_OK) { return st; }
+        st = ros_evaluate_stages(s);
+        if (st != LMMC_STATUS_OK) { return st; }
+        st = ros_estimate_error(s, &error_norm);
+        if (st != LMMC_STATUS_OK) { return st; }
+        if (error_norm <= 1.0) {
+            memcpy(s->y, s->y_new, s->work_bytes);
+            s->t += s->h;
+            s->out_result->num_steps += 1;
+            s->out_result->final_t = s->t;
+            lmmc_ode_do_log(&s->local_cfg, s->out_result->num_steps, s->t, s->y, s->dim);
+        } else if (s->h <= s->local_cfg.min_step) {
+            st = LMMC_STATUS_CONVERGENCE_FAILED;
+            s->out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_STEP;
+            return st;
+        }
+        s->h = lmmc_ode_next_step(s->h, error_norm, &s->local_cfg);
+    }
+
+    if (s->t >= t_end) {
+        s->out_result->converged = 1;
+        s->out_result->failure_reason = LMMC_ODE_FAILURE_NONE;
+        st = LMMC_STATUS_OK;
+    } else {
+        s->out_result->failure_reason = LMMC_ODE_FAILURE_MAX_STEPS;
+        st = LMMC_STATUS_CONVERGENCE_FAILED;
+    }
+    return st;
+}
+
+static lmmc_status_t ros_cleanup(ode_rosenbrock_state_t* s, lmmc_status_t st) {
+    if (st != LMMC_STATUS_OK && s->out_result != NULL &&
+        s->out_result->failure_reason == LMMC_ODE_FAILURE_NONE) {
+        s->out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+    }
+    lmmc_memory_free(s->pivots);
+    lmmc_memory_free(s->matrix_data);
+    lmmc_memory_free(s->work);
+    return st;
+}
+
 lmmc_status_t lmmc_ode_rosenbrock_grk4t_solve(
     lmmc_ode_rhs_t rhs,
     void* user_data,
@@ -108,193 +287,57 @@ lmmc_status_t lmmc_ode_rosenbrock_grk4t_solve(
     const lmmc_ode_config_t* cfg,
     lmmc_ode_result_t* out_result
 ) {
-    lmmc_ode_config_t local_cfg = {0};
-    size_t work_bytes = 0, vectors_bytes = 0, matrix_count = 0, matrix_bytes = 0;
-    lmmc_real_t* work = NULL;
-    lmmc_real_t* matrix_data = NULL;
-    size_t* pivots = NULL;
-    lmmc_real_t* k[ROS_STAGES];
-    lmmc_real_t *f0, *f_stage, *y_stage, *y_pert, *f_pert;
-    lmmc_real_t *rhs_vec, *dfdt, *y_new, *error;
-    lmmc_mat_t W = {0};
-    lmmc_real_t t = t_start, h;
-    size_t attempts = 0, i, j;
+    ode_rosenbrock_state_t state = {0};
+    ode_rosenbrock_state_t* s = &state;
+    size_t vectors_bytes = 0, matrix_count = 0, matrix_bytes = 0;
+    size_t i;
     lmmc_status_t st;
-
-    st = validate_and_init_ode_config(rhs, dim, t_start, t_end, y, cfg,
-                                      &local_cfg, out_result, &work_bytes);
+    s->rhs = rhs;
+    s->user_data = user_data;
+    s->dim = dim;
+    s->y = y;
+    s->out_result = out_result;
+    s->t = t_start;
+    st = validate_and_init_ode_config(s->rhs, s->dim, t_start, t_end, s->y, cfg,
+                                      &s->local_cfg, s->out_result, &s->work_bytes);
     if (st != LMMC_STATUS_OK) {
         return st;
     }
-    if (!lmmc_safe_mul_size(work_bytes, ROS_VECTORS, &vectors_bytes) ||
-        !lmmc_safe_mul_size(dim, dim, &matrix_count) ||
+    if (!lmmc_safe_mul_size(s->work_bytes, ROS_VECTORS, &vectors_bytes) ||
+        !lmmc_safe_mul_size(s->dim, s->dim, &matrix_count) ||
         !lmmc_safe_mul_size(matrix_count, sizeof(lmmc_real_t), &matrix_bytes) ||
-        !lmmc_safe_mul_size(dim, sizeof(size_t), &matrix_count)) {
-        out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_DIMENSION;
+        !lmmc_safe_mul_size(s->dim, sizeof(size_t), &matrix_count)) {
+        s->out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_DIMENSION;
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    work = (lmmc_real_t*)lmmc_alloc(vectors_bytes);
-    matrix_data = (lmmc_real_t*)lmmc_alloc(matrix_bytes);
-    pivots = (size_t*)lmmc_alloc(matrix_count);
-    if (work == NULL || matrix_data == NULL || pivots == NULL) {
+    s->work = (lmmc_real_t*)lmmc_memory_alloc(vectors_bytes);
+    s->matrix_data = (lmmc_real_t*)lmmc_memory_alloc(matrix_bytes);
+    s->pivots = (size_t*)lmmc_memory_alloc(matrix_count);
+    if (s->work == NULL || s->matrix_data == NULL || s->pivots == NULL) {
         st = LMMC_STATUS_ALLOCATION_FAILED;
-        goto cleanup;
+        return ros_cleanup(s, st);
     }
 
     for (i = 0; i < ROS_STAGES; ++i) {
-        k[i] = work + i * dim;
+        s->k[i] = s->work + i * s->dim;
     }
-    f0 = work + 4 * dim;
-    f_stage = work + 5 * dim;
-    y_stage = work + 6 * dim;
-    y_pert = work + 7 * dim;
-    f_pert = work + 8 * dim;
-    rhs_vec = work + 9 * dim;
-    dfdt = work + 10 * dim;
-    y_new = work + 11 * dim;
-    error = work + 12 * dim;
-    W = (lmmc_mat_t){dim, dim, dim, matrix_data, 0};
+    s->f0 = s->work + 4 * s->dim;
+    s->f_stage = s->work + 5 * s->dim;
+    s->y_stage = s->work + 6 * s->dim;
+    s->y_pert = s->work + 7 * s->dim;
+    s->f_pert = s->work + 8 * s->dim;
+    s->rhs_vec = s->work + 9 * s->dim;
+    s->dfdt = s->work + 10 * s->dim;
+    s->y_new = s->work + 11 * s->dim;
+    s->error = s->work + 12 * s->dim;
+    s->W = (lmmc_mat_t){s->dim, s->dim, s->dim, s->matrix_data, 0};
 
-    h = lmmc_clamp(local_cfg.initial_step, local_cfg.min_step, local_cfg.max_step);
-    if (h > t_end - t_start) {
-        h = t_end - t_start;
+    s->h = lmmc_clamp(s->local_cfg.initial_step, s->local_cfg.min_step, s->local_cfg.max_step);
+    if (s->h > t_end - t_start) {
+        s->h = t_end - t_start;
     }
-    lmmc_ode_do_log(&local_cfg, 0, t, y, dim);
-
-    while (t < t_end && attempts < local_cfg.max_steps) {
-        lmmc_real_t error_norm = 0.0;
-        size_t swap_count = 0;
-        int callback_failed = 0;
-        ++attempts;
-        if (h > t_end - t) {
-            h = t_end - t;
-        }
-
-        st = lmmc_ode_rhs_eval(rhs, t, y, f0, dim, user_data,
-                               &out_result->num_rhs_evals, &callback_failed);
-        if (st != LMMC_STATUS_OK) {
-            out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
-                                                         : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-            goto cleanup;
-        }
-        st = lmmc_ode_jacobian_eval(
-            rhs, local_cfg.jacobian, user_data, t, y, f0, dim, matrix_data,
-            f_stage, y_pert, f_pert, &out_result->num_rhs_evals,
-            &callback_failed);
-        if (st != LMMC_STATUS_OK) {
-            out_result->failure_reason =
-                callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
-                                : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-            goto cleanup;
-        }
-        st = ros_time_derivative(rhs, local_cfg.time_derivative, user_data, t, y,
-                                 f0, dim, dfdt, f_pert, out_result);
-        if (st != LMMC_STATUS_OK) {
-            out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-            goto cleanup;
-        }
-
-        for (i = 0; i < dim; ++i) {
-            for (j = 0; j < dim; ++j) {
-                W.data[i * dim + j] = -matrix_data[i * dim + j];
-            }
-            W.data[i * dim + i] += 1.0 / (h * ros_gamma);
-        }
-        st = lmmc_lu_decompose_inplace(&W, pivots, &swap_count);
-        if (st != LMMC_STATUS_OK) {
-            goto cleanup;
-        }
-
-        for (i = 0; i < dim; ++i) {
-            rhs_vec[i] = f0[i] + h * ros_d[0] * dfdt[i];
-        }
-        st = ros_solve_stage(&W, pivots, rhs_vec, k[0], dim);
-        if (st != LMMC_STATUS_OK) goto cleanup;
-
-        for (i = 0; i < dim; ++i) {
-            y_stage[i] = y[i] + ros_a21 * k[0][i];
-        }
-        st = lmmc_ode_rhs_eval(rhs, t + ros_c2 * h, y_stage, f_stage, dim, user_data,
-                               &out_result->num_rhs_evals, &callback_failed);
-        if (st != LMMC_STATUS_OK) {
-            out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
-                                                         : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-            goto cleanup;
-        }
-        for (i = 0; i < dim; ++i) {
-            rhs_vec[i] = f_stage[i] + h * ros_d[1] * dfdt[i] + (ros_c21 / h) * k[0][i];
-        }
-        st = ros_solve_stage(&W, pivots, rhs_vec, k[1], dim);
-        if (st != LMMC_STATUS_OK) goto cleanup;
-
-        for (i = 0; i < dim; ++i) {
-            y_stage[i] = y[i] + ros_a31 * k[0][i] + ros_a32 * k[1][i];
-        }
-        st = lmmc_ode_rhs_eval(rhs, t + ros_c3 * h, y_stage, f_stage, dim, user_data,
-                               &out_result->num_rhs_evals, &callback_failed);
-        if (st != LMMC_STATUS_OK) {
-            out_result->failure_reason = callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
-                                                         : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-            goto cleanup;
-        }
-        for (i = 0; i < dim; ++i) {
-            rhs_vec[i] = f_stage[i] + h * ros_d[2] * dfdt[i]
-                       + (ros_c31 / h) * k[0][i] + (ros_c32 / h) * k[1][i];
-        }
-        st = ros_solve_stage(&W, pivots, rhs_vec, k[2], dim);
-        if (st != LMMC_STATUS_OK) goto cleanup;
-
-        for (i = 0; i < dim; ++i) {
-            rhs_vec[i] = f_stage[i] + h * ros_d[3] * dfdt[i]
-                       + (ros_c41 / h) * k[0][i] + (ros_c42 / h) * k[1][i]
-                       + (ros_c43 / h) * k[2][i];
-        }
-        st = ros_solve_stage(&W, pivots, rhs_vec, k[3], dim);
-        if (st != LMMC_STATUS_OK) goto cleanup;
-
-        for (i = 0; i < dim; ++i) {
-            y_new[i] = y[i] + ros_b[0] * k[0][i] + ros_b[1] * k[1][i]
-                     + ros_b[2] * k[2][i] + ros_b[3] * k[3][i];
-            error[i] = ros_e[0] * k[0][i] + ros_e[1] * k[1][i]
-                     + ros_e[2] * k[2][i] + ros_e[3] * k[3][i];
-        }
-        st = lmmc_ode_values_are_finite(y_new, dim);
-        if (st != LMMC_STATUS_OK) goto cleanup;
-        st = lmmc_ode_weighted_rms(error, y, y_new, dim, local_cfg.abs_tol,
-                                    local_cfg.rel_tol, &error_norm);
-        if (st != LMMC_STATUS_OK) goto cleanup;
-
-        if (error_norm <= 1.0) {
-            memcpy(y, y_new, work_bytes);
-            t += h;
-            out_result->num_steps += 1;
-            out_result->final_t = t;
-            lmmc_ode_do_log(&local_cfg, out_result->num_steps, t, y, dim);
-        } else if (h <= local_cfg.min_step) {
-            st = LMMC_STATUS_CONVERGENCE_FAILED;
-            out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_STEP;
-            goto cleanup;
-        }
-        h = lmmc_ode_next_step(h, error_norm, &local_cfg);
-    }
-
-    if (t >= t_end) {
-        out_result->converged = 1;
-        out_result->failure_reason = LMMC_ODE_FAILURE_NONE;
-        st = LMMC_STATUS_OK;
-    } else {
-        out_result->failure_reason = LMMC_ODE_FAILURE_MAX_STEPS;
-        st = LMMC_STATUS_CONVERGENCE_FAILED;
-    }
-
-cleanup:
-    if (st != LMMC_STATUS_OK && out_result != NULL &&
-        out_result->failure_reason == LMMC_ODE_FAILURE_NONE) {
-        out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-    }
-    lmmc_free(pivots);
-    lmmc_free(matrix_data);
-    lmmc_free(work);
-    return st;
+    lmmc_ode_do_log(&s->local_cfg, 0, s->t, s->y, s->dim);
+    st = ros_integrate(s, t_end);
+    return ros_cleanup(s, st);
 }

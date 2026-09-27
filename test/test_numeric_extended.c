@@ -9,451 +9,396 @@
 #include "lmmc/lmmc.h"
 #include "test_common.h"
 
-int main(void) {
-    int rc = 0;
+static void test_atan2_quadrants(void **state) {
+    (void)state;
     lmmc_status_t st = LMMC_STATUS_OK;
-    int test_section = 0;
+    lmmc_real_t res = 0.0;
 
+    st = lmmc_atan2(0.0, 1.0, &res);
+    assert_false(st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, 0.0, 1e-12));
 
-    test_section = 1;
-    {
-        lmmc_real_t res = 0.0;
+    st = lmmc_atan2(1.0, 0.0, &res);
+    assert_false(st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, LMMC_PI / 2.0, 1e-12));
 
+    st = lmmc_atan2(0.0, -1.0, &res);
+    assert_false(st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, LMMC_PI, 1e-12));
 
-        st = lmmc_atan2(0.0, 1.0, &res);
-        if (st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, 0.0, 1e-12)) {
-            rc = 1; goto done;
-        }
+    st = lmmc_atan2(-1.0, 0.0, &res);
+    assert_false(st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, -LMMC_PI / 2.0, 1e-12));
+}
 
+static void test_sincos_zero(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    lmmc_real_t s = 0.0, c = 0.0;
 
-        st = lmmc_atan2(1.0, 0.0, &res);
-        if (st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, LMMC_PI / 2.0, 1e-12)) {
-            rc = 1; goto done;
-        }
+    st = lmmc_sincos(0.0, &s, &c);
+    assert_false(st != LMMC_STATUS_OK);
+    assert_true(lmmc_test_nearly_equal(s, 0.0, 1e-15));
+    assert_true(lmmc_test_nearly_equal(c, 1.0, 1e-15));
+}
 
+static void test_sincos_signed_zero(void **state) {
+    (void)state;
+    lmmc_real_t s = 7.0, c = 9.0;
+    lmmc_status_t st = lmmc_sincos(-0.0, &s, &c);
+    assert_false(st != LMMC_STATUS_OK || s != 0.0 || !signbit(s) || c != 1.0);
+}
 
-        st = lmmc_atan2(0.0, -1.0, &res);
-        if (st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, LMMC_PI, 1e-12)) {
-            rc = 1; goto done;
-        }
+static void test_sincos_transactional_errors(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    lmmc_real_t s = 7.0, c = 9.0;
+    st = lmmc_sincos(INFINITY, &s, &c);
+    if (st != LMMC_STATUS_INVALID_ARGUMENT || s != 7.0 || c != 9.0) {
+        fail_msg("sincos validates its finite input before writing outputs\n");
+    }
+    st = lmmc_sincos(NAN, &s, &c);
+    assert_false(st != LMMC_STATUS_INVALID_ARGUMENT || s != 7.0 || c != 9.0);
+    st = lmmc_sincos(0.5, &s, NULL);
+    assert_false(st != LMMC_STATUS_INVALID_ARGUMENT || s != 7.0);
+}
 
+static void test_split_alias_rejection(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    lmmc_real_t shared = 7.0;
+    st = lmmc_split_int_frac(3.25, &shared, &shared);
+    assert_false(st != LMMC_STATUS_INVALID_ARGUMENT || shared != 7.0);
+}
 
-        st = lmmc_atan2(-1.0, 0.0, &res);
-        if (st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, -LMMC_PI / 2.0, 1e-12)) {
-            rc = 1; goto done;
-        }
+static void test_sincos_alias_rejection(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    lmmc_real_t shared = 7.0;
+    st = lmmc_sincos(0.5, &shared, &shared);
+    assert_false(st != LMMC_STATUS_INVALID_ARGUMENT || shared != 7.0);
+}
+
+static void test_hypot_scaling(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    lmmc_real_t res = 0.0;
+
+    st = lmmc_hypot(3.0, 4.0, &res);
+    assert_false(st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, 5.0, 1e-12));
+
+    st = lmmc_hypot(1e300, 1e300, &res);
+    assert_false(st != LMMC_STATUS_OK);
+
+    assert_true(isfinite(res));
+    assert_true(lmmc_test_nearly_equal(res, LMMC_SQRT2 * 1e300, 1e290));
+}
+
+static void test_small_log_exp(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    lmmc_real_t res = 0.0;
+
+    st = lmmc_expm1(0.0, &res);
+    assert_false(st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, 0.0, 1e-15));
+
+    st = lmmc_log1p(0.0, &res);
+    assert_false(st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, 0.0, 1e-15));
+
+    st = lmmc_expm1(1e-15, &res);
+    assert_false(st != LMMC_STATUS_OK);
+
+    assert_true(lmmc_test_nearly_equal(res, 1e-15, 1e-28));
+
+    st = lmmc_log1p(1e-15, &res);
+    assert_false(st != LMMC_STATUS_OK);
+
+    assert_true(lmmc_test_nearly_equal(res, 1e-15, 1e-28));
+}
+
+static void test_lambertw_values(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    lmmc_real_t res = 0.0;
+
+    st = lmmc_lambertw(0.0, &res);
+    assert_false(st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, 0.0, 1e-12));
+
+    st = lmmc_lambertw(1.0, &res);
+    assert_false(st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, 0.5671432904097838, 1e-10));
+
+    st = lmmc_lambertw(exp(1.0), &res);
+    assert_false(st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, 1.0, 1e-10));
+}
+
+static void test_lambertw_identity(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    lmmc_real_t test_values[] = {0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 50.0, 100.0};
+    size_t n_tests = sizeof(test_values) / sizeof(test_values[0]);
+
+    for (size_t i = 0; i < n_tests; i++) {
+        lmmc_real_t x = test_values[i];
+        lmmc_real_t w = 0.0;
+        st = lmmc_lambertw(x, &w);
+        assert_false(st != LMMC_STATUS_OK);
+
+        lmmc_real_t reconstructed = w * exp(w);
+        assert_true(lmmc_test_nearly_equal(reconstructed, x, 1e-10));
+    }
+}
+
+static void test_fft_complex_roundtrip(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    const size_t n = 16;
+    double real[16], imag[16];
+    double real_orig[16], imag_orig[16];
+
+    for (size_t i = 0; i < n; i++) {
+        real[i] = sin(0.5 * (double)i) + 0.3 * cos(1.2 * (double)i);
+        imag[i] = cos(0.7 * (double)i) - 0.2 * sin(0.9 * (double)i);
+    }
+    memcpy(real_orig, real, sizeof(real));
+    memcpy(imag_orig, imag, sizeof(imag));
+
+    st = lmmc_fft_radix4_forward(real, imag, n);
+    assert_false(st != LMMC_STATUS_OK);
+
+    st = lmmc_fft_radix4_inverse(real, imag, n);
+    assert_false(st != LMMC_STATUS_OK);
+
+    for (size_t i = 0; i < n; i++) {
+        assert_false(!lmmc_test_nearly_equal(real[i], real_orig[i], 1e-10) ||
+                     !lmmc_test_nearly_equal(imag[i], imag_orig[i], 1e-10));
+    }
+}
+
+static void test_fft_real_roundtrip(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    const size_t n2 = 64;
+    double real2[64], imag2[64];
+    double real2_orig[64], imag2_orig[64];
+
+    for (size_t i = 0; i < n2; i++) {
+        real2[i] = sin(0.3 * (double)i) + cos(0.7 * (double)i);
+        imag2[i] = 0.0;
+    }
+    memcpy(real2_orig, real2, sizeof(real2));
+    memcpy(imag2_orig, imag2, sizeof(imag2));
+
+    st = lmmc_fft_radix4_forward(real2, imag2, n2);
+    assert_false(st != LMMC_STATUS_OK);
+
+    st = lmmc_fft_radix4_inverse(real2, imag2, n2);
+    assert_false(st != LMMC_STATUS_OK);
+
+    for (size_t i = 0; i < n2; i++) {
+        assert_false(!lmmc_test_nearly_equal(real2[i], real2_orig[i], 1e-10) ||
+                     !lmmc_test_nearly_equal(imag2[i], imag2_orig[i], 1e-10));
+    }
+}
+
+static void test_fft_overlap_rejection(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    double storage[9] = {
+        1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0};
+    double before[9];
+    memcpy(before, storage, sizeof(storage));
+
+    st = lmmc_fft(storage, storage + 1, 8, 0);
+    assert_false(st != LMMC_STATUS_INVALID_ARGUMENT ||
+                 memcmp(before, storage, sizeof(storage)) != 0);
+}
+
+static void test_radix4_overlap_rejection(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    double storage[5] = {1.0, 2.0, 3.0, 4.0, 5.0};
+    double before[5];
+    memcpy(before, storage, sizeof(storage));
+
+    st = lmmc_fft_radix4(storage, storage + 1, 4, 0);
+    assert_false(st != LMMC_STATUS_INVALID_ARGUMENT ||
+                 memcmp(before, storage, sizeof(storage)) != 0);
+}
+
+static void test_fft_padding_overlap(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    double storage[8] = {
+        1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0};
+    double imag_in[3] = {9.0, 10.0, 11.0};
+    double imag_out[4] = {12.0, 13.0, 14.0, 15.0};
+    double storage_before[8];
+    double imag_in_before[3];
+    double imag_out_before[4];
+    size_t nfft = 99;
+    memcpy(storage_before, storage, sizeof(storage));
+    memcpy(imag_in_before, imag_in, sizeof(imag_in));
+    memcpy(imag_out_before, imag_out, sizeof(imag_out));
+
+    st = lmmc_fft_radix4_pad_into(
+        storage, imag_in, 3, storage + 1, imag_out, &nfft);
+    assert_false(st != LMMC_STATUS_INVALID_ARGUMENT || nfft != 99 ||
+                 memcmp(storage_before, storage, sizeof(storage)) != 0 ||
+                 memcmp(imag_in_before, imag_in, sizeof(imag_in)) != 0 ||
+                 memcmp(imag_out_before, imag_out, sizeof(imag_out)) != 0);
+}
+
+static void test_parseval_four(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    const size_t n = 4;
+    double real[4] = {1.0, 2.0, 3.0, 4.0};
+    double imag[4] = {0.0, 0.0, 0.0, 0.0};
+
+    double time_energy = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        time_energy += real[i] * real[i] + imag[i] * imag[i];
     }
 
+    st = lmmc_fft_radix4_forward(real, imag, n);
+    assert_false(st != LMMC_STATUS_OK);
 
-    test_section = 2;
-    {
-        lmmc_real_t s = 0.0, c = 0.0;
-
-        st = lmmc_sincos(0.0, &s, &c);
-        if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-        if (!lmmc_test_nearly_equal(s, 0.0, 1e-15)) { rc = 1; goto done; }
-        if (!lmmc_test_nearly_equal(c, 1.0, 1e-15)) { rc = 1; goto done; }
+    double freq_energy = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        freq_energy += real[i] * real[i] + imag[i] * imag[i];
     }
 
-    {
-        lmmc_real_t s = 7.0, c = 9.0;
-        st = lmmc_sincos(INFINITY, &s, &c);
-        if (st != LMMC_STATUS_INVALID_ARGUMENT || s != 7.0 || c != 9.0) {
-            fprintf(stderr, "sincos validates its finite input before writing outputs\n");
-            rc = 1; goto done;
-        }
-        st = lmmc_sincos(NAN, &s, &c);
-        if (st != LMMC_STATUS_INVALID_ARGUMENT || s != 7.0 || c != 9.0) {
-            rc = 1; goto done;
-        }
-        st = lmmc_sincos(0.5, &s, NULL);
-        if (st != LMMC_STATUS_INVALID_ARGUMENT || s != 7.0) {
-            rc = 1; goto done;
-        }
-        st = lmmc_sincos(-0.0, &s, &c);
-        if (st != LMMC_STATUS_OK || s != 0.0 || !signbit(s) || c != 1.0) {
-            rc = 1; goto done;
-        }
+    assert_true(lmmc_test_nearly_equal(time_energy, freq_energy / (double)n, 1e-10));
+}
+
+static void test_parseval_sixteen(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    const size_t n = 16;
+    double real[16], imag[16];
+
+    for (size_t i = 0; i < n; i++) {
+        real[i] = sin(0.4 * (double)i) + 0.5 * cos(1.1 * (double)i);
+        imag[i] = 0.2 * sin(0.8 * (double)i);
     }
 
-    {
-        lmmc_real_t shared = 7.0;
-        st = lmmc_split_int_frac(3.25, &shared, &shared);
-        if (st != LMMC_STATUS_INVALID_ARGUMENT || shared != 7.0) {
-            rc = 1; goto done;
-        }
-    }
-    {
-        lmmc_real_t shared = 7.0;
-        st = lmmc_sincos(0.5, &shared, &shared);
-        if (st != LMMC_STATUS_INVALID_ARGUMENT || shared != 7.0) {
-            rc = 1; goto done;
-        }
+    double time_energy = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        time_energy += real[i] * real[i] + imag[i] * imag[i];
     }
 
+    st = lmmc_fft_radix4_forward(real, imag, n);
+    assert_false(st != LMMC_STATUS_OK);
 
-
-    test_section = 3;
-    {
-        lmmc_real_t res = 0.0;
-
-
-        st = lmmc_hypot(3.0, 4.0, &res);
-        if (st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, 5.0, 1e-12)) {
-            rc = 1; goto done;
-        }
-
-
-        st = lmmc_hypot(1e300, 1e300, &res);
-        if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-
-        if (!isfinite(res)) { rc = 1; goto done; }
-        if (!lmmc_test_nearly_equal(res, LMMC_SQRT2 * 1e300, 1e290)) {
-            rc = 1; goto done;
-        }
+    double freq_energy = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        freq_energy += real[i] * real[i] + imag[i] * imag[i];
     }
 
+    assert_true(lmmc_test_nearly_equal(time_energy, freq_energy / (double)n, 1e-10));
+}
 
-    test_section = 5;
-    {
-        lmmc_real_t res = 0.0;
+static void test_parseval_real(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    const size_t n = 64;
+    double real[64], imag[64];
 
-
-        st = lmmc_expm1(0.0, &res);
-        if (st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, 0.0, 1e-15)) {
-            rc = 1; goto done;
-        }
-
-
-        st = lmmc_log1p(0.0, &res);
-        if (st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, 0.0, 1e-15)) {
-            rc = 1; goto done;
-        }
-
-
-        st = lmmc_expm1(1e-15, &res);
-        if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-
-        if (!lmmc_test_nearly_equal(res, 1e-15, 1e-28)) {
-            rc = 1; goto done;
-        }
-
-
-        st = lmmc_log1p(1e-15, &res);
-        if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-
-        if (!lmmc_test_nearly_equal(res, 1e-15, 1e-28)) {
-            rc = 1; goto done;
-        }
+    for (size_t i = 0; i < n; i++) {
+        real[i] = cos(0.2 * (double)i) - 0.3 * sin(0.6 * (double)i);
+        imag[i] = 0.0;
     }
 
-
-    test_section = 7;
-    {
-        lmmc_real_t res = 0.0;
-
-
-        st = lmmc_lambertw(0.0, &res);
-        if (st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, 0.0, 1e-12)) {
-            rc = 1; goto done;
-        }
-
-
-        st = lmmc_lambertw(1.0, &res);
-        if (st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, 0.5671432904097838, 1e-10)) {
-            rc = 1; goto done;
-        }
-
-
-        st = lmmc_lambertw(exp(1.0), &res);
-        if (st != LMMC_STATUS_OK || !lmmc_test_nearly_equal(res, 1.0, 1e-10)) {
-            rc = 1; goto done;
-        }
+    double time_energy = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        time_energy += real[i] * real[i] + imag[i] * imag[i];
     }
 
+    st = lmmc_fft_radix4_forward(real, imag, n);
+    assert_false(st != LMMC_STATUS_OK);
 
-    test_section = 8;
-    {
-        lmmc_real_t test_values[] = {0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 50.0, 100.0};
-        size_t n_tests = sizeof(test_values) / sizeof(test_values[0]);
-
-        for (size_t i = 0; i < n_tests; i++) {
-            lmmc_real_t x = test_values[i];
-            lmmc_real_t w = 0.0;
-            st = lmmc_lambertw(x, &w);
-            if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-
-
-            lmmc_real_t reconstructed = w * exp(w);
-            if (!lmmc_test_nearly_equal(reconstructed, x, 1e-10)) {
-                rc = 1; goto done;
-            }
-        }
+    double freq_energy = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        freq_energy += real[i] * real[i] + imag[i] * imag[i];
     }
 
+    assert_true(lmmc_test_nearly_equal(time_energy, freq_energy / (double)n, 1e-10));
+}
 
-    test_section = 9;
-    {
-        const size_t n = 16;
-        double real[16], imag[16];
-        double real_orig[16], imag_orig[16];
+static void test_parseval_large(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    const size_t n = 256;
+    double real[256], imag[256];
 
-
-        for (size_t i = 0; i < n; i++) {
-            real[i] = sin(0.5 * (double)i) + 0.3 * cos(1.2 * (double)i);
-            imag[i] = cos(0.7 * (double)i) - 0.2 * sin(0.9 * (double)i);
-        }
-        memcpy(real_orig, real, sizeof(real));
-        memcpy(imag_orig, imag, sizeof(imag));
-
-        st = lmmc_fft_radix4_forward(real, imag, n);
-        if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-
-        st = lmmc_fft_radix4_inverse(real, imag, n);
-        if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-
-        for (size_t i = 0; i < n; i++) {
-            if (!lmmc_test_nearly_equal(real[i], real_orig[i], 1e-10) ||
-                !lmmc_test_nearly_equal(imag[i], imag_orig[i], 1e-10)) {
-                rc = 1; goto done;
-            }
-        }
-
-
-        {
-            const size_t n2 = 64;
-            double real2[64], imag2[64];
-            double real2_orig[64], imag2_orig[64];
-
-            for (size_t i = 0; i < n2; i++) {
-                real2[i] = sin(0.3 * (double)i) + cos(0.7 * (double)i);
-                imag2[i] = 0.0;
-            }
-            memcpy(real2_orig, real2, sizeof(real2));
-            memcpy(imag2_orig, imag2, sizeof(imag2));
-
-            st = lmmc_fft_radix4_forward(real2, imag2, n2);
-            if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-
-            st = lmmc_fft_radix4_inverse(real2, imag2, n2);
-            if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-
-            for (size_t i = 0; i < n2; i++) {
-                if (!lmmc_test_nearly_equal(real2[i], real2_orig[i], 1e-10) ||
-                    !lmmc_test_nearly_equal(imag2[i], imag2_orig[i], 1e-10)) {
-                    rc = 1; goto done;
-                }
-            }
-        }
+    for (size_t i = 0; i < n; i++) {
+        real[i] = sin(0.1 * (double)i) + 0.7 * cos(0.3 * (double)i);
+        imag[i] = 0.4 * cos(0.5 * (double)i);
     }
 
-    {
-        double storage[9] = {
-            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0
-        };
-        double before[9];
-        memcpy(before, storage, sizeof(storage));
-
-        st = lmmc_fft(storage, storage + 1, 8, 0);
-        if (st != LMMC_STATUS_INVALID_ARGUMENT ||
-            memcmp(before, storage, sizeof(storage)) != 0) {
-            rc = 1; goto done;
-        }
+    double time_energy = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        time_energy += real[i] * real[i] + imag[i] * imag[i];
     }
 
-    {
-        double storage[5] = {1.0, 2.0, 3.0, 4.0, 5.0};
-        double before[5];
-        memcpy(before, storage, sizeof(storage));
+    st = lmmc_fft_radix4_forward(real, imag, n);
+    assert_false(st != LMMC_STATUS_OK);
 
-        st = lmmc_fft_radix4(storage, storage + 1, 4, 0);
-        if (st != LMMC_STATUS_INVALID_ARGUMENT ||
-            memcmp(before, storage, sizeof(storage)) != 0) {
-            rc = 1; goto done;
-        }
+    double freq_energy = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        freq_energy += real[i] * real[i] + imag[i] * imag[i];
     }
 
-    {
-        double storage[8] = {
-            1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0
-        };
-        double imag_in[3] = {9.0, 10.0, 11.0};
-        double imag_out[4] = {12.0, 13.0, 14.0, 15.0};
-        double storage_before[8];
-        double imag_in_before[3];
-        double imag_out_before[4];
-        size_t nfft = 99;
-        memcpy(storage_before, storage, sizeof(storage));
-        memcpy(imag_in_before, imag_in, sizeof(imag_in));
-        memcpy(imag_out_before, imag_out, sizeof(imag_out));
+    assert_true(lmmc_test_nearly_equal(time_energy, freq_energy / (double)n, 1e-10));
+}
 
-        st = lmmc_fft_radix4_pad_into(
-            storage, imag_in, 3, storage + 1, imag_out, &nfft);
-        if (st != LMMC_STATUS_INVALID_ARGUMENT || nfft != 99 ||
-            memcmp(storage_before, storage, sizeof(storage)) != 0 ||
-            memcmp(imag_in_before, imag_in, sizeof(imag_in)) != 0 ||
-            memcmp(imag_out_before, imag_out, sizeof(imag_out)) != 0) {
-            rc = 1; goto done;
-        }
-    }
+static void test_lambertw_domain(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    lmmc_real_t res = 0.0;
 
+    st = lmmc_lambertw(-0.5, &res);
+    assert_false(st != LMMC_STATUS_INVALID_ARGUMENT);
 
-    test_section = 10;
-    {
+    st = lmmc_lambertw(-1.0, &res);
+    assert_false(st != LMMC_STATUS_INVALID_ARGUMENT);
+}
 
-        {
-            const size_t n = 4;
-            double real[4] = {1.0, 2.0, 3.0, 4.0};
-            double imag[4] = {0.0, 0.0, 0.0, 0.0};
+static void test_nextafter_neighbors(void **state) {
+    (void)state;
+    lmmc_status_t st = LMMC_STATUS_OK;
+    lmmc_real_t res = 0.0;
 
+    st = lmmc_nextafter(1.0, 2.0, &res);
+    assert_false(st != LMMC_STATUS_OK);
 
-            double time_energy = 0.0;
-            for (size_t i = 0; i < n; i++) {
-                time_energy += real[i] * real[i] + imag[i] * imag[i];
-            }
+    lmmc_real_t expected = 1.0 + DBL_EPSILON;
+    assert_true(lmmc_test_nearly_equal(res, expected, 0.0));
 
+    st = lmmc_nextafter(1.0, 0.0, &res);
+    assert_false(st != LMMC_STATUS_OK);
+    assert_false(res >= 1.0);
+}
 
-            st = lmmc_fft_radix4_forward(real, imag, n);
-            if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-
-
-            double freq_energy = 0.0;
-            for (size_t i = 0; i < n; i++) {
-                freq_energy += real[i] * real[i] + imag[i] * imag[i];
-            }
-
-
-            if (!lmmc_test_nearly_equal(time_energy, freq_energy / (double)n, 1e-10)) {
-                rc = 1; goto done;
-            }
-        }
-
-
-        {
-            const size_t n = 16;
-            double real[16], imag[16];
-
-            for (size_t i = 0; i < n; i++) {
-                real[i] = sin(0.4 * (double)i) + 0.5 * cos(1.1 * (double)i);
-                imag[i] = 0.2 * sin(0.8 * (double)i);
-            }
-
-            double time_energy = 0.0;
-            for (size_t i = 0; i < n; i++) {
-                time_energy += real[i] * real[i] + imag[i] * imag[i];
-            }
-
-            st = lmmc_fft_radix4_forward(real, imag, n);
-            if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-
-            double freq_energy = 0.0;
-            for (size_t i = 0; i < n; i++) {
-                freq_energy += real[i] * real[i] + imag[i] * imag[i];
-            }
-
-            if (!lmmc_test_nearly_equal(time_energy, freq_energy / (double)n, 1e-10)) {
-                rc = 1; goto done;
-            }
-        }
-
-
-        {
-            const size_t n = 64;
-            double real[64], imag[64];
-
-            for (size_t i = 0; i < n; i++) {
-                real[i] = cos(0.2 * (double)i) - 0.3 * sin(0.6 * (double)i);
-                imag[i] = 0.0;
-            }
-
-            double time_energy = 0.0;
-            for (size_t i = 0; i < n; i++) {
-                time_energy += real[i] * real[i] + imag[i] * imag[i];
-            }
-
-            st = lmmc_fft_radix4_forward(real, imag, n);
-            if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-
-            double freq_energy = 0.0;
-            for (size_t i = 0; i < n; i++) {
-                freq_energy += real[i] * real[i] + imag[i] * imag[i];
-            }
-
-            if (!lmmc_test_nearly_equal(time_energy, freq_energy / (double)n, 1e-10)) {
-                rc = 1; goto done;
-            }
-        }
-
-
-        {
-            const size_t n = 256;
-            double real[256], imag[256];
-
-            for (size_t i = 0; i < n; i++) {
-                real[i] = sin(0.1 * (double)i) + 0.7 * cos(0.3 * (double)i);
-                imag[i] = 0.4 * cos(0.5 * (double)i);
-            }
-
-            double time_energy = 0.0;
-            for (size_t i = 0; i < n; i++) {
-                time_energy += real[i] * real[i] + imag[i] * imag[i];
-            }
-
-            st = lmmc_fft_radix4_forward(real, imag, n);
-            if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-
-            double freq_energy = 0.0;
-            for (size_t i = 0; i < n; i++) {
-                freq_energy += real[i] * real[i] + imag[i] * imag[i];
-            }
-
-            if (!lmmc_test_nearly_equal(time_energy, freq_energy / (double)n, 1e-10)) {
-                rc = 1; goto done;
-            }
-        }
-    }
-
-
-    test_section = 11;
-    {
-        lmmc_real_t res = 0.0;
-
-
-        st = lmmc_lambertw(-0.5, &res);
-        if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-            rc = 1; goto done;
-        }
-
-
-        st = lmmc_lambertw(-1.0, &res);
-        if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-            rc = 1; goto done;
-        }
-    }
-
-
-    test_section = 12;
-    {
-        lmmc_real_t res = 0.0;
-
-        st = lmmc_nextafter(1.0, 2.0, &res);
-        if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-
-
-        lmmc_real_t expected = 1.0 + DBL_EPSILON;
-        if (!lmmc_test_nearly_equal(res, expected, 0.0)) {
-            rc = 1; goto done;
-        }
-
-
-        st = lmmc_nextafter(1.0, 0.0, &res);
-        if (st != LMMC_STATUS_OK) { rc = 1; goto done; }
-        if (res >= 1.0) { rc = 1; goto done; }
-    }
-
-done:
-    if (rc != 0) {
-        printf("numeric extended test failed at section %d\n", test_section);
-    }
-    return rc;
+int main(void) {
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_atan2_quadrants),
+        cmocka_unit_test(test_sincos_zero),
+        cmocka_unit_test(test_sincos_signed_zero),
+        cmocka_unit_test(test_sincos_transactional_errors),
+        cmocka_unit_test(test_split_alias_rejection),
+        cmocka_unit_test(test_sincos_alias_rejection),
+        cmocka_unit_test(test_hypot_scaling),
+        cmocka_unit_test(test_small_log_exp),
+        cmocka_unit_test(test_lambertw_values),
+        cmocka_unit_test(test_lambertw_identity),
+        cmocka_unit_test(test_fft_complex_roundtrip),
+        cmocka_unit_test(test_fft_real_roundtrip),
+        cmocka_unit_test(test_fft_overlap_rejection),
+        cmocka_unit_test(test_radix4_overlap_rejection),
+        cmocka_unit_test(test_fft_padding_overlap),
+        cmocka_unit_test(test_parseval_four),
+        cmocka_unit_test(test_parseval_sixteen),
+        cmocka_unit_test(test_parseval_real),
+        cmocka_unit_test(test_parseval_large),
+        cmocka_unit_test(test_lambertw_domain),
+        cmocka_unit_test(test_nextafter_neighbors),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

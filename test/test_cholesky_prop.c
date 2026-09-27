@@ -20,16 +20,20 @@
  * @param out_a Output matrix (must be pre-created as n x n).
  * @return LMMC_STATUS_OK on success.
  */
-static lmmc_status_t generate_random_spd(lmmc_rng_t* rng, size_t n, double eps, lmmc_mat_t* out_a) {
+static lmmc_status_t generate_random_spd(lmmc_rng_t *rng, size_t n, double eps, lmmc_mat_t *out_a) {
     lmmc_mat_t b = {0};
     lmmc_mat_t bt = {0};
     lmmc_status_t st;
 
     st = lmmc_mat_create(n, n, &b);
-    if (st != LMMC_STATUS_OK) return st;
+    if (st != LMMC_STATUS_OK)
+        return st;
 
     st = lmmc_mat_create(n, n, &bt);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&b); return st; }
+    if (st != LMMC_STATUS_OK) {
+        lmmc_mat_destroy(&b);
+        return st;
+    }
 
     /* Fill B with random values in [-1, 1] */
     for (size_t i = 0; i < n * n; i++) {
@@ -40,11 +44,19 @@ static lmmc_status_t generate_random_spd(lmmc_rng_t* rng, size_t n, double eps, 
 
     /* Compute B^T */
     st = lmmc_mat_transpose_to(&b, &bt);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&bt); lmmc_mat_destroy(&b); return st; }
+    if (st != LMMC_STATUS_OK) {
+        lmmc_mat_destroy(&bt);
+        lmmc_mat_destroy(&b);
+        return st;
+    }
 
     /* Compute A = B * B^T */
     st = lmmc_mat_mul(&b, &bt, out_a);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&bt); lmmc_mat_destroy(&b); return st; }
+    if (st != LMMC_STATUS_OK) {
+        lmmc_mat_destroy(&bt);
+        lmmc_mat_destroy(&b);
+        return st;
+    }
 
     /* Add eps * I to ensure strict positive definiteness */
     for (size_t i = 0; i < n; i++) {
@@ -63,7 +75,7 @@ static lmmc_status_t generate_random_spd(lmmc_rng_t* rng, size_t n, double eps, 
  * @param b Second matrix (same dimensions as a).
  * @return The Frobenius norm ||a - b||_F.
  */
-static double frobenius_norm_diff(const lmmc_mat_t* a, const lmmc_mat_t* b) {
+static double frobenius_norm_diff(const lmmc_mat_t *a, const lmmc_mat_t *b) {
     double sum = 0.0;
     for (size_t i = 0; i < a->rows; i++) {
         for (size_t j = 0; j < a->cols; j++) {
@@ -84,7 +96,7 @@ static double frobenius_norm_diff(const lmmc_mat_t* a, const lmmc_mat_t* b) {
  * @param n                Dimension.
  * @param out_reconstructed Output matrix (pre-created n x n).
  */
-static void reconstruct_from_cholesky(const lmmc_mat_t* l_mat, size_t n, lmmc_mat_t* out_reconstructed) {
+static void reconstruct_from_cholesky(const lmmc_mat_t *l_mat, size_t n, lmmc_mat_t *out_reconstructed) {
     /* Zero out the result */
     for (size_t i = 0; i < n * n; i++) {
         out_reconstructed->data[i] = 0.0;
@@ -106,127 +118,65 @@ static void reconstruct_from_cholesky(const lmmc_mat_t* l_mat, size_t n, lmmc_ma
     }
 }
 
-/**
- * @brief Test the Cholesky reconstruction property for a single random SPD matrix.
- *
- * @param rng  Random number generator.
- * @param n    Matrix dimension.
- * @param trial Trial number (for reporting).
- * @return 0 on success, 1 on failure.
- */
-static int test_cholesky_reconstruction(lmmc_rng_t* rng, size_t n, int trial) {
-    lmmc_mat_t a = {0};
-    lmmc_mat_t a_copy = {0};
-    lmmc_mat_t reconstructed = {0};
-    lmmc_status_t st;
-    int rc = 0;
+typedef struct {
+    lmmc_rng_t *rng;
+    lmmc_mat_t a, a_copy, reconstructed;
+} cholesky_fixture_t;
 
-    /* Create matrices */
-    st = lmmc_mat_create(n, n, &a);
-    if (st != LMMC_STATUS_OK) { printf("  [FAIL] trial %d (n=%zu): mat_create failed\n", trial, n); return 1; }
+static int setup_cholesky(void **state) {
+    cholesky_fixture_t *f = calloc(1, sizeof(*f));
+    assert_non_null(f);
+    *state = f;
+    return 0;
+}
 
-    st = lmmc_mat_create(n, n, &a_copy);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&a); printf("  [FAIL] trial %d (n=%zu): mat_create failed\n", trial, n); return 1; }
+static void release_cholesky_matrices(cholesky_fixture_t *f) {
+    lmmc_mat_destroy(&f->reconstructed);
+    lmmc_mat_destroy(&f->a_copy);
+    lmmc_mat_destroy(&f->a);
+}
 
-    st = lmmc_mat_create(n, n, &reconstructed);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&a_copy); lmmc_mat_destroy(&a); printf("  [FAIL] trial %d (n=%zu): mat_create failed\n", trial, n); return 1; }
+static int teardown_cholesky(void **state) {
+    cholesky_fixture_t *f = *state;
+    release_cholesky_matrices(f);
+    lmmc_rng_destroy(f->rng);
+    free(f);
+    return 0;
+}
 
-    /* Generate random SPD matrix */
-    st = generate_random_spd(rng, n, 0.01, &a);
-    if (st != LMMC_STATUS_OK) {
-        printf("  [FAIL] trial %d (n=%zu): generate_random_spd failed\n", trial, n);
-        rc = 1; goto cleanup;
+static void test_cholesky_reconstruction(void **state) {
+    cholesky_fixture_t *f = *state;
+    const size_t sizes[] = {2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 18, 20};
+    assert_int_equal(lmmc_rng_create(&f->rng), LMMC_STATUS_OK);
+    lmmc_rng_seed(f->rng, UINT64_C(0x43484F4C));
+
+    for (size_t si = 0; si < sizeof(sizes) / sizeof(sizes[0]); si++) {
+        const size_t n = sizes[si];
+        for (int trial = 1; trial <= 10; trial++) {
+            assert_int_equal(lmmc_mat_create(n, n, &f->a), LMMC_STATUS_OK);
+            assert_int_equal(lmmc_mat_create(n, n, &f->a_copy), LMMC_STATUS_OK);
+            assert_int_equal(lmmc_mat_create(n, n, &f->reconstructed), LMMC_STATUS_OK);
+            assert_int_equal(generate_random_spd(f->rng, n, 0.01, &f->a), LMMC_STATUS_OK);
+            assert_int_equal(lmmc_mat_copy(&f->a, &f->a_copy), LMMC_STATUS_OK);
+            assert_int_equal(lmmc_cholesky_decompose_inplace(&f->a), LMMC_STATUS_OK);
+            reconstruct_from_cholesky(&f->a, n, &f->reconstructed);
+
+            const double diff_norm = frobenius_norm_diff(&f->reconstructed, &f->a_copy);
+            lmmc_real_t a_norm;
+            assert_int_equal(lmmc_mat_norm_fro(&f->a_copy, &a_norm), LMMC_STATUS_OK);
+            const double tolerance = 1e-10 * a_norm;
+            if (!lmmc_test_nearly_equal(diff_norm, 0.0, tolerance)) {
+                fail_msg("trial %d (n=%" PRIuMAX "): ||L*L^T - A||_F = %.6e, bound = %.6e", trial, (uintmax_t)(n), diff_norm, tolerance);
+            }
+            release_cholesky_matrices(f);
+        }
     }
-
-    /* Save a copy of A before decomposition (since it's done in-place) */
-    st = lmmc_mat_copy(&a, &a_copy);
-    if (st != LMMC_STATUS_OK) {
-        printf("  [FAIL] trial %d (n=%zu): mat_copy failed\n", trial, n);
-        rc = 1; goto cleanup;
-    }
-
-    /* Perform Cholesky decomposition */
-    st = lmmc_cholesky_decompose_inplace(&a);
-    if (st != LMMC_STATUS_OK) {
-        printf("  [FAIL] trial %d (n=%zu): cholesky_decompose_inplace failed: %s\n",
-               trial, n, lmmc_status_string(st));
-        rc = 1; goto cleanup;
-    }
-
-    /* Reconstruct L * L^T */
-    reconstruct_from_cholesky(&a, n, &reconstructed);
-
-    /* Compute ||L*L^T - A||_F */
-    double diff_norm = frobenius_norm_diff(&reconstructed, &a_copy);
-
-    /* Compute ||A||_F */
-    lmmc_real_t a_norm;
-    st = lmmc_mat_norm_fro(&a_copy, &a_norm);
-    if (st != LMMC_STATUS_OK) {
-        printf("  [FAIL] trial %d (n=%zu): mat_norm_fro failed\n", trial, n);
-        rc = 1; goto cleanup;
-    }
-
-    /* Check property: ||L*L^T - A||_F <= 1e-10 * ||A||_F */
-    double tolerance = 1e-10 * a_norm;
-    if (diff_norm > tolerance) {
-        printf("  [FAIL] trial %d (n=%zu): ||L*L^T - A||_F = %.6e > 1e-10 * ||A||_F = %.6e\n",
-               trial, n, diff_norm, tolerance);
-        rc = 1; goto cleanup;
-    }
-
-cleanup:
-    lmmc_mat_destroy(&reconstructed);
-    lmmc_mat_destroy(&a_copy);
-    lmmc_mat_destroy(&a);
-    return rc;
 }
 
 int main(void) {
-    lmmc_rng_t* rng = NULL;
-    lmmc_status_t st;
-    int failures = 0;
-    int total_trials = 0;
-
-    printf("=== Property Test: Cholesky Reconstruction ===\n");
-    printf("Property: ||L*L^T - A||_F <= 1e-10 * ||A||_F for random SPD inputs\n");
-
-    /* 固定种子保证属性测试可复现。 */
-    const uint64_t seed = UINT64_C(0x43484F4C);
-    st = lmmc_rng_create(&rng);
-    if (st != LMMC_STATUS_OK) {
-        printf("FATAL: Failed to create RNG\n");
-        return 1;
-    }
-    lmmc_rng_seed(rng, seed);
-
-    /* Test various matrix sizes from 2x2 to 20x20 */
-    size_t sizes[] = {2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 18, 20};
-    size_t num_sizes = sizeof(sizes) / sizeof(sizes[0]);
-    int trials_per_size = 10;
-
-    for (size_t si = 0; si < num_sizes; si++) {
-        size_t n = sizes[si];
-        printf("Testing n=%zu (%d trials)...\n", n, trials_per_size);
-        for (int t = 0; t < trials_per_size; t++) {
-            total_trials++;
-            if (test_cholesky_reconstruction(rng, n, t + 1) != 0) {
-                failures++;
-            }
-        }
-    }
-
-    printf("\n=== Results ===\n");
-    printf("Total trials: %d\n", total_trials);
-    printf("Passed: %d\n", total_trials - failures);
-    printf("Failed: %d\n", failures);
-
-    if (failures == 0) {
-        printf("\nProperty test PASSED: Cholesky reconstruction is accurate.\n");
-    } else {
-        printf("\nProperty test FAILED: %d/%d trials violated the property.\n", failures, total_trials);
-    }
-
-    lmmc_rng_destroy(rng);
-    return (failures == 0) ? 0 : 1;
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_cholesky_reconstruction,
+                                        setup_cholesky, teardown_cholesky),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

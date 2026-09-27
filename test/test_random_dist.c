@@ -2,7 +2,10 @@
  * @file test_random_dist.c
  * 针对 LMMC 中 random dist 相关接口的单元测试。
  */
-#include <stdio.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
+#include <cmocka.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
@@ -10,90 +13,95 @@
 #include "lmmc/config.h"
 #include "lmmc/random.h"
 
-
 #define NUM_SAMPLES 1200
-
 
 #define NUM_CONFIGS 50
 
-static int test_failures = 0;
+struct test_fixture {
+    lmmc_rng_t *rng;
+    lmmc_real_t *array;
+    lmmc_real_t *sorted_before;
+    int *array_int;
+    int *sorted_before_int;
+};
 
-#define CHECK(cond, msg, ...) do { \
-    if (!(cond)) { \
-        printf("FAIL: " msg "\n", ##__VA_ARGS__); \
-        test_failures++; \
-        return 1; \
-    } \
-} while (0)
+static int setup(void **state) {
+    struct test_fixture *fixture = calloc(1, sizeof(*fixture));
+    assert_non_null(fixture);
+    *state = fixture;
+    srand(0x52444953u);
+    return 0;
+}
 
+static int teardown(void **state) {
+    struct test_fixture *fixture = *state;
+    lmmc_rng_destroy(fixture->rng);
+    free(fixture->array);
+    free(fixture->sorted_before);
+    free(fixture->array_int);
+    free(fixture->sorted_before_int);
+    free(fixture);
+    *state = NULL;
+    return 0;
+}
 
-static double rand_in_range(double lo, double hi)
-{
+static double rand_in_range(double lo, double hi) {
     double u = (double)rand() / (double)RAND_MAX;
     return lo + (hi - lo) * u;
 }
 
-
-static int cmp_real(const void* a, const void* b)
-{
-    lmmc_real_t va = *(const lmmc_real_t*)a;
-    lmmc_real_t vb = *(const lmmc_real_t*)b;
-    if (va < vb) return -1;
-    if (va > vb) return 1;
+static int cmp_real(const void *a, const void *b) {
+    lmmc_real_t va = *(const lmmc_real_t *)a;
+    lmmc_real_t vb = *(const lmmc_real_t *)b;
+    if (va < vb) {
+        return -1;
+    }
+    if (va > vb) {
+        return 1;
+    }
     return 0;
 }
 
-
-static int cmp_int(const void* a, const void* b)
-{
-    int va = *(const int*)a;
-    int vb = *(const int*)b;
+static int cmp_int(const void *a, const void *b) {
+    int va = *(const int *)a;
+    int vb = *(const int *)b;
     return va - vb;
 }
 
-
-static int test_uniform_range_single(void)
-{
+static void test_uniform_range_single(void **state) {
+    struct test_fixture *fixture = *state;
     int cfg;
-    lmmc_rng_t* rng = NULL;
+
     lmmc_status_t status;
 
-    status = lmmc_rng_create(&rng);
-    CHECK(status == LMMC_STATUS_OK, "rng_create failed: %d", (int)status);
-    lmmc_rng_seed(rng, (uint64_t)42);
+    status = lmmc_rng_create(&fixture->rng);
+    assert_true(status == LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(fixture->rng, (uint64_t)42), LMMC_STATUS_OK);
 
     for (cfg = 0; cfg < NUM_CONFIGS; cfg++) {
-
         double a = rand_in_range(-1000.0, 1000.0);
         double b = a + rand_in_range(0.001, 2000.0);
         int i;
 
         for (i = 0; i < NUM_SAMPLES; i++) {
             lmmc_real_t value;
-            status = lmmc_rng_uniform(rng, (lmmc_real_t)a, (lmmc_real_t)b, &value);
-            CHECK(status == LMMC_STATUS_OK,
-                  "uniform returned error %d (cfg=%d, i=%d)", (int)status, cfg, i);
-            CHECK(value >= a,
-                  "uniform value %g < a=%g (cfg=%d, i=%d)", value, a, cfg, i);
-            CHECK(value < b,
-                  "uniform value %g >= b=%g (cfg=%d, i=%d)", value, b, cfg, i);
+            status = lmmc_rng_uniform(fixture->rng, (lmmc_real_t)a, (lmmc_real_t)b, &value);
+            assert_true(status == LMMC_STATUS_OK);
+            assert_true(value >= a);
+            assert_true(value < b);
         }
     }
-
-    lmmc_rng_destroy(rng);
-    return 0;
 }
 
-
-static int test_uniform_range_fill(void)
-{
+static void test_uniform_range_fill(void **state) {
+    struct test_fixture *fixture = *state;
     int cfg;
-    lmmc_rng_t* rng = NULL;
+
     lmmc_status_t status;
 
-    status = lmmc_rng_create(&rng);
-    CHECK(status == LMMC_STATUS_OK, "rng_create failed: %d", (int)status);
-    lmmc_rng_seed(rng, (uint64_t)123);
+    status = lmmc_rng_create(&fixture->rng);
+    assert_true(status == LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(fixture->rng, (uint64_t)123), LMMC_STATUS_OK);
 
     for (cfg = 0; cfg < NUM_CONFIGS; cfg++) {
         double a = rand_in_range(-500.0, 500.0);
@@ -101,392 +109,275 @@ static int test_uniform_range_fill(void)
         lmmc_real_t array[NUM_SAMPLES];
         size_t i;
 
-        status = lmmc_rng_fill_uniform(rng, (lmmc_real_t)a, (lmmc_real_t)b,
+        status = lmmc_rng_fill_uniform(fixture->rng, (lmmc_real_t)a, (lmmc_real_t)b,
                                        array, NUM_SAMPLES);
-        CHECK(status == LMMC_STATUS_OK,
-              "fill_uniform returned error %d (cfg=%d)", (int)status, cfg);
+        assert_true(status == LMMC_STATUS_OK);
 
         for (i = 0; i < NUM_SAMPLES; i++) {
-            CHECK(array[i] >= a,
-                  "fill_uniform value %g < a=%g (cfg=%d, i=%zu)",
-                  array[i], a, cfg, i);
-            CHECK(array[i] < b,
-                  "fill_uniform value %g >= b=%g (cfg=%d, i=%zu)",
-                  array[i], b, cfg, i);
+            assert_true(array[i] >= a);
+            assert_true(array[i] < b);
         }
     }
-
-    lmmc_rng_destroy(rng);
-    return 0;
 }
 
+static void test_uniform_range_tiny_interval(void **state) {
+    struct test_fixture *fixture = *state;
 
-static int test_uniform_range_tiny_interval(void)
-{
-    lmmc_rng_t* rng = NULL;
     lmmc_status_t status;
     int i;
 
-    status = lmmc_rng_create(&rng);
-    CHECK(status == LMMC_STATUS_OK, "rng_create failed");
-    lmmc_rng_seed(rng, (uint64_t)999);
+    status = lmmc_rng_create(&fixture->rng);
+    assert_true(status == LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(fixture->rng, (uint64_t)999), LMMC_STATUS_OK);
 
     double a = 1.0;
     double b = 1.0 + 1e-10;
 
     for (i = 0; i < NUM_SAMPLES; i++) {
         lmmc_real_t value;
-        status = lmmc_rng_uniform(rng, (lmmc_real_t)a, (lmmc_real_t)b, &value);
-        CHECK(status == LMMC_STATUS_OK,
-              "uniform tiny interval returned error %d (i=%d)", (int)status, i);
-        CHECK(value >= a,
-              "uniform tiny: value %g < a=%g (i=%d)", value, a, i);
-        CHECK(value < b,
-              "uniform tiny: value %g >= b=%g (i=%d)", value, b, i);
+        status = lmmc_rng_uniform(fixture->rng, (lmmc_real_t)a, (lmmc_real_t)b, &value);
+        assert_true(status == LMMC_STATUS_OK);
+        assert_true(value >= a);
+        assert_true(value < b);
     }
-
-    lmmc_rng_destroy(rng);
-    return 0;
 }
 
+static void test_uniform_range_large_interval(void **state) {
+    struct test_fixture *fixture = *state;
 
-static int test_uniform_range_large_interval(void)
-{
-    lmmc_rng_t* rng = NULL;
     lmmc_status_t status;
     int i;
 
-    status = lmmc_rng_create(&rng);
-    CHECK(status == LMMC_STATUS_OK, "rng_create failed");
-    lmmc_rng_seed(rng, (uint64_t)7777);
+    status = lmmc_rng_create(&fixture->rng);
+    assert_true(status == LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(fixture->rng, (uint64_t)7777), LMMC_STATUS_OK);
 
     double a = -1e15;
     double b = 1e15;
 
     for (i = 0; i < NUM_SAMPLES; i++) {
         lmmc_real_t value;
-        status = lmmc_rng_uniform(rng, (lmmc_real_t)a, (lmmc_real_t)b, &value);
-        CHECK(status == LMMC_STATUS_OK,
-              "uniform large interval returned error %d (i=%d)", (int)status, i);
-        CHECK(value >= a,
-              "uniform large: value %g < a=%g (i=%d)", value, a, i);
-        CHECK(value < b,
-              "uniform large: value %g >= b=%g (i=%d)", value, b, i);
+        status = lmmc_rng_uniform(fixture->rng, (lmmc_real_t)a, (lmmc_real_t)b, &value);
+        assert_true(status == LMMC_STATUS_OK);
+        assert_true(value >= a);
+        assert_true(value < b);
     }
-
-    lmmc_rng_destroy(rng);
-    return 0;
 }
 
-
-static int test_exponential_nonneg(void)
-{
+static void test_exponential_nonneg(void **state) {
+    struct test_fixture *fixture = *state;
     int cfg;
-    lmmc_rng_t* rng = NULL;
+
     lmmc_status_t status;
 
-    status = lmmc_rng_create(&rng);
-    CHECK(status == LMMC_STATUS_OK, "rng_create failed: %d", (int)status);
-    lmmc_rng_seed(rng, (uint64_t)314159);
+    status = lmmc_rng_create(&fixture->rng);
+    assert_true(status == LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(fixture->rng, (uint64_t)314159), LMMC_STATUS_OK);
 
     for (cfg = 0; cfg < NUM_CONFIGS; cfg++) {
-
         double rate = rand_in_range(0.001, 1000.0);
         int i;
 
         for (i = 0; i < NUM_SAMPLES; i++) {
             lmmc_real_t value;
-            status = lmmc_rng_exponential(rng, (lmmc_real_t)rate, &value);
-            CHECK(status == LMMC_STATUS_OK,
-                  "exponential returned error %d (cfg=%d, rate=%g, i=%d)",
-                  (int)status, cfg, rate, i);
-            CHECK(value >= 0.0,
-                  "exponential value %g < 0 (cfg=%d, rate=%g, i=%d)",
-                  value, cfg, rate, i);
+            status = lmmc_rng_exponential(fixture->rng, (lmmc_real_t)rate, &value);
+            assert_true(status == LMMC_STATUS_OK);
+            assert_true(value >= 0.0);
         }
     }
-
-    lmmc_rng_destroy(rng);
-    return 0;
 }
 
+static void test_exponential_nonneg_small_rate(void **state) {
+    struct test_fixture *fixture = *state;
 
-static int test_exponential_nonneg_small_rate(void)
-{
-    lmmc_rng_t* rng = NULL;
     lmmc_status_t status;
     int i;
 
-    status = lmmc_rng_create(&rng);
-    CHECK(status == LMMC_STATUS_OK, "rng_create failed");
-    lmmc_rng_seed(rng, (uint64_t)271828);
+    status = lmmc_rng_create(&fixture->rng);
+    assert_true(status == LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(fixture->rng, (uint64_t)271828), LMMC_STATUS_OK);
 
     double rate = 1e-10;
 
     for (i = 0; i < NUM_SAMPLES; i++) {
         lmmc_real_t value;
-        status = lmmc_rng_exponential(rng, (lmmc_real_t)rate, &value);
-        CHECK(status == LMMC_STATUS_OK,
-              "exponential small rate returned error %d (i=%d)", (int)status, i);
-        CHECK(value >= 0.0,
-              "exponential small rate: value %g < 0 (i=%d)", value, i);
+        status = lmmc_rng_exponential(fixture->rng, (lmmc_real_t)rate, &value);
+        assert_true(status == LMMC_STATUS_OK);
+        assert_true(value >= 0.0);
     }
-
-    lmmc_rng_destroy(rng);
-    return 0;
 }
 
+static void test_exponential_nonneg_large_rate(void **state) {
+    struct test_fixture *fixture = *state;
 
-static int test_exponential_nonneg_large_rate(void)
-{
-    lmmc_rng_t* rng = NULL;
     lmmc_status_t status;
     int i;
 
-    status = lmmc_rng_create(&rng);
-    CHECK(status == LMMC_STATUS_OK, "rng_create failed");
-    lmmc_rng_seed(rng, (uint64_t)161803);
+    status = lmmc_rng_create(&fixture->rng);
+    assert_true(status == LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(fixture->rng, (uint64_t)161803), LMMC_STATUS_OK);
 
     double rate = 1e10;
 
     for (i = 0; i < NUM_SAMPLES; i++) {
         lmmc_real_t value;
-        status = lmmc_rng_exponential(rng, (lmmc_real_t)rate, &value);
-        CHECK(status == LMMC_STATUS_OK,
-              "exponential large rate returned error %d (i=%d)", (int)status, i);
-        CHECK(value >= 0.0,
-              "exponential large rate: value %g < 0 (i=%d)", value, i);
+        status = lmmc_rng_exponential(fixture->rng, (lmmc_real_t)rate, &value);
+        assert_true(status == LMMC_STATUS_OK);
+        assert_true(value >= 0.0);
     }
-
-    lmmc_rng_destroy(rng);
-    return 0;
 }
 
-
-static int test_shuffle_preserves_elements_real(void)
-{
+static void test_shuffle_preserves_elements_real(void **state) {
+    struct test_fixture *fixture = *state;
     int cfg;
-    lmmc_rng_t* rng = NULL;
+
     lmmc_status_t status;
 
-    status = lmmc_rng_create(&rng);
-    CHECK(status == LMMC_STATUS_OK, "rng_create failed: %d", (int)status);
-    lmmc_rng_seed(rng, (uint64_t)55555);
-
-    for (cfg = 0; cfg < NUM_CONFIGS; cfg++) {
-
-        size_t n = 2 + (size_t)(rand() % 199);
-        lmmc_real_t* array = (lmmc_real_t*)malloc(n * sizeof(lmmc_real_t));
-        lmmc_real_t* sorted_before = (lmmc_real_t*)malloc(n * sizeof(lmmc_real_t));
-        size_t i;
-
-        CHECK(array != NULL && sorted_before != NULL,
-              "malloc failed (cfg=%d)", cfg);
-
-
-        for (i = 0; i < n; i++) {
-            array[i] = rand_in_range(-1000.0, 1000.0);
-        }
-
-
-        memcpy(sorted_before, array, n * sizeof(lmmc_real_t));
-        qsort(sorted_before, n, sizeof(lmmc_real_t), cmp_real);
-
-
-        status = lmmc_rng_shuffle(rng, array, n, sizeof(lmmc_real_t));
-        CHECK(status == LMMC_STATUS_OK,
-              "shuffle returned error %d (cfg=%d, n=%zu)", (int)status, cfg, n);
-
-
-        qsort(array, n, sizeof(lmmc_real_t), cmp_real);
-
-
-        for (i = 0; i < n; i++) {
-            CHECK(array[i] == sorted_before[i],
-                  "shuffle changed elements: sorted[%zu]=%g vs original sorted[%zu]=%g (cfg=%d)",
-                  i, array[i], i, sorted_before[i], cfg);
-        }
-
-        free(array);
-        free(sorted_before);
-    }
-
-    lmmc_rng_destroy(rng);
-    return 0;
-}
-
-
-static int test_shuffle_preserves_elements_int(void)
-{
-    int cfg;
-    lmmc_rng_t* rng = NULL;
-    lmmc_status_t status;
-
-    status = lmmc_rng_create(&rng);
-    CHECK(status == LMMC_STATUS_OK, "rng_create failed: %d", (int)status);
-    lmmc_rng_seed(rng, (uint64_t)88888);
+    status = lmmc_rng_create(&fixture->rng);
+    assert_true(status == LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(fixture->rng, (uint64_t)55555), LMMC_STATUS_OK);
 
     for (cfg = 0; cfg < NUM_CONFIGS; cfg++) {
         size_t n = 2 + (size_t)(rand() % 199);
-        int* array = (int*)malloc(n * sizeof(int));
-        int* sorted_before = (int*)malloc(n * sizeof(int));
+        fixture->array = (lmmc_real_t *)malloc(n * sizeof(lmmc_real_t));
+        fixture->sorted_before = (lmmc_real_t *)malloc(n * sizeof(lmmc_real_t));
         size_t i;
 
-        CHECK(array != NULL && sorted_before != NULL,
-              "malloc failed (cfg=%d)", cfg);
-
+        assert_true(fixture->array != NULL && fixture->sorted_before != NULL);
 
         for (i = 0; i < n; i++) {
-            array[i] = rand() % 1000 - 500;
+            fixture->array[i] = rand_in_range(-1000.0, 1000.0);
         }
 
+        memcpy(fixture->sorted_before, fixture->array, n * sizeof(lmmc_real_t));
+        qsort(fixture->sorted_before, n, sizeof(lmmc_real_t), cmp_real);
 
-        memcpy(sorted_before, array, n * sizeof(int));
-        qsort(sorted_before, n, sizeof(int), cmp_int);
+        status = lmmc_rng_shuffle(fixture->rng, fixture->array, n, sizeof(lmmc_real_t));
+        assert_true(status == LMMC_STATUS_OK);
 
-
-        status = lmmc_rng_shuffle(rng, array, n, sizeof(int));
-        CHECK(status == LMMC_STATUS_OK,
-              "shuffle int returned error %d (cfg=%d, n=%zu)", (int)status, cfg, n);
-
-
-        qsort(array, n, sizeof(int), cmp_int);
-
+        qsort(fixture->array, n, sizeof(lmmc_real_t), cmp_real);
 
         for (i = 0; i < n; i++) {
-            CHECK(array[i] == sorted_before[i],
-                  "shuffle int changed elements: sorted[%zu]=%d vs original sorted[%zu]=%d (cfg=%d)",
-                  i, array[i], i, sorted_before[i], cfg);
+            assert_true(fixture->array[i] == fixture->sorted_before[i]);
         }
 
-        free(array);
-        free(sorted_before);
+        free(fixture->array);
+        fixture->array = NULL;
+        free(fixture->sorted_before);
+        fixture->sorted_before = NULL;
     }
-
-    lmmc_rng_destroy(rng);
-    return 0;
 }
 
+static void test_shuffle_preserves_elements_int(void **state) {
+    struct test_fixture *fixture = *state;
+    int cfg;
 
-static int test_shuffle_single_element(void)
-{
-    lmmc_rng_t* rng = NULL;
     lmmc_status_t status;
 
-    status = lmmc_rng_create(&rng);
-    CHECK(status == LMMC_STATUS_OK, "rng_create failed");
-    lmmc_rng_seed(rng, (uint64_t)11111);
+    status = lmmc_rng_create(&fixture->rng);
+    assert_true(status == LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(fixture->rng, (uint64_t)88888), LMMC_STATUS_OK);
+
+    for (cfg = 0; cfg < NUM_CONFIGS; cfg++) {
+        size_t n = 2 + (size_t)(rand() % 199);
+        fixture->array_int = (int *)malloc(n * sizeof(int));
+        fixture->sorted_before_int = (int *)malloc(n * sizeof(int));
+        size_t i;
+
+        assert_true(fixture->array_int != NULL && fixture->sorted_before_int != NULL);
+
+        for (i = 0; i < n; i++) {
+            fixture->array_int[i] = rand() % 1000 - 500;
+        }
+
+        memcpy(fixture->sorted_before_int, fixture->array_int, n * sizeof(int));
+        qsort(fixture->sorted_before_int, n, sizeof(int), cmp_int);
+
+        status = lmmc_rng_shuffle(fixture->rng, fixture->array_int, n, sizeof(int));
+        assert_true(status == LMMC_STATUS_OK);
+
+        qsort(fixture->array_int, n, sizeof(int), cmp_int);
+
+        for (i = 0; i < n; i++) {
+            assert_true(fixture->array_int[i] == fixture->sorted_before_int[i]);
+        }
+
+        free(fixture->array_int);
+        fixture->array_int = NULL;
+        free(fixture->sorted_before_int);
+        fixture->sorted_before_int = NULL;
+    }
+}
+
+static void test_shuffle_single_element(void **state) {
+    struct test_fixture *fixture = *state;
+
+    lmmc_status_t status;
+
+    status = lmmc_rng_create(&fixture->rng);
+    assert_true(status == LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(fixture->rng, (uint64_t)11111), LMMC_STATUS_OK);
 
     lmmc_real_t val = 42.0;
-    status = lmmc_rng_shuffle(rng, &val, 1, sizeof(lmmc_real_t));
-    CHECK(status == LMMC_STATUS_OK, "shuffle single returned error %d", (int)status);
-    CHECK(val == 42.0, "shuffle single changed value: got %g", val);
-
-    lmmc_rng_destroy(rng);
-    return 0;
+    status = lmmc_rng_shuffle(fixture->rng, &val, 1, sizeof(lmmc_real_t));
+    assert_true(status == LMMC_STATUS_OK);
+    assert_true(val == 42.0);
 }
 
-
-static int test_shuffle_with_duplicates(void)
-{
+static void test_shuffle_with_duplicates(void **state) {
+    struct test_fixture *fixture = *state;
     int cfg;
-    lmmc_rng_t* rng = NULL;
+
     lmmc_status_t status;
 
-    status = lmmc_rng_create(&rng);
-    CHECK(status == LMMC_STATUS_OK, "rng_create failed");
-    lmmc_rng_seed(rng, (uint64_t)22222);
+    status = lmmc_rng_create(&fixture->rng);
+    assert_true(status == LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(fixture->rng, (uint64_t)22222), LMMC_STATUS_OK);
 
     for (cfg = 0; cfg < NUM_CONFIGS; cfg++) {
-
         size_t n = 50 + (size_t)(rand() % 151);
-        int* array = (int*)malloc(n * sizeof(int));
-        int* sorted_before = (int*)malloc(n * sizeof(int));
+        fixture->array_int = (int *)malloc(n * sizeof(int));
+        fixture->sorted_before_int = (int *)malloc(n * sizeof(int));
         size_t i;
 
-        CHECK(array != NULL && sorted_before != NULL,
-              "malloc failed (cfg=%d)", cfg);
-
+        assert_true(fixture->array_int != NULL && fixture->sorted_before_int != NULL);
 
         for (i = 0; i < n; i++) {
-            array[i] = rand() % 10;
+            fixture->array_int[i] = rand() % 10;
         }
 
-        memcpy(sorted_before, array, n * sizeof(int));
-        qsort(sorted_before, n, sizeof(int), cmp_int);
+        memcpy(fixture->sorted_before_int, fixture->array_int, n * sizeof(int));
+        qsort(fixture->sorted_before_int, n, sizeof(int), cmp_int);
 
-        status = lmmc_rng_shuffle(rng, array, n, sizeof(int));
-        CHECK(status == LMMC_STATUS_OK,
-              "shuffle duplicates returned error %d (cfg=%d)", (int)status, cfg);
+        status = lmmc_rng_shuffle(fixture->rng, fixture->array_int, n, sizeof(int));
+        assert_true(status == LMMC_STATUS_OK);
 
-        qsort(array, n, sizeof(int), cmp_int);
+        qsort(fixture->array_int, n, sizeof(int), cmp_int);
 
         for (i = 0; i < n; i++) {
-            CHECK(array[i] == sorted_before[i],
-                  "shuffle duplicates: mismatch at [%zu] (cfg=%d)", i, cfg);
+            assert_true(fixture->array_int[i] == fixture->sorted_before_int[i]);
         }
 
-        free(array);
-        free(sorted_before);
+        free(fixture->array_int);
+        fixture->array_int = NULL;
+        free(fixture->sorted_before_int);
+        fixture->sorted_before_int = NULL;
     }
-
-    lmmc_rng_destroy(rng);
-    return 0;
 }
 
-
-int main(void)
-{
-    int rc = 0;
-
-    const unsigned int seed = 0x52444953u;
-    srand(seed);
-
-    printf("=== 均匀分布范围约束 ===\n");
-
-    if (test_uniform_range_single()) { rc = 1; printf("  [FAIL] uniform range (single)\n"); }
-    else { printf("  [PASS] uniform range single (%d configs x %d samples)\n", NUM_CONFIGS, NUM_SAMPLES); }
-
-    if (test_uniform_range_fill()) { rc = 1; printf("  [FAIL] uniform range (fill)\n"); }
-    else { printf("  [PASS] uniform range fill (%d configs x %d samples)\n", NUM_CONFIGS, NUM_SAMPLES); }
-
-    if (test_uniform_range_tiny_interval()) { rc = 1; printf("  [FAIL] uniform tiny interval\n"); }
-    else { printf("  [PASS] uniform tiny interval (%d samples)\n", NUM_SAMPLES); }
-
-    if (test_uniform_range_large_interval()) { rc = 1; printf("  [FAIL] uniform large interval\n"); }
-    else { printf("  [PASS] uniform large interval (%d samples)\n", NUM_SAMPLES); }
-
-    printf("\n=== 指数分布非负性 ===\n");
-
-    if (test_exponential_nonneg()) { rc = 1; printf("  [FAIL] exponential non-negative\n"); }
-    else { printf("  [PASS] exponential non-negative (%d configs x %d samples)\n", NUM_CONFIGS, NUM_SAMPLES); }
-
-    if (test_exponential_nonneg_small_rate()) { rc = 1; printf("  [FAIL] exponential small rate\n"); }
-    else { printf("  [PASS] exponential small rate (%d samples)\n", NUM_SAMPLES); }
-
-    if (test_exponential_nonneg_large_rate()) { rc = 1; printf("  [FAIL] exponential large rate\n"); }
-    else { printf("  [PASS] exponential large rate (%d samples)\n", NUM_SAMPLES); }
-
-    printf("\n=== Shuffle 保持元素集合不变 ===\n");
-
-    if (test_shuffle_preserves_elements_real()) { rc = 1; printf("  [FAIL] shuffle preserves (real)\n"); }
-    else { printf("  [PASS] shuffle preserves elements real (%d configs)\n", NUM_CONFIGS); }
-
-    if (test_shuffle_preserves_elements_int()) { rc = 1; printf("  [FAIL] shuffle preserves (int)\n"); }
-    else { printf("  [PASS] shuffle preserves elements int (%d configs)\n", NUM_CONFIGS); }
-
-    if (test_shuffle_single_element()) { rc = 1; printf("  [FAIL] shuffle single element\n"); }
-    else { printf("  [PASS] shuffle single element\n"); }
-
-    if (test_shuffle_with_duplicates()) { rc = 1; printf("  [FAIL] shuffle with duplicates\n"); }
-    else { printf("  [PASS] shuffle with duplicates (%d configs)\n", NUM_CONFIGS); }
-
-    printf("\n");
-    if (rc == 0) {
-        printf("All distribution sampling property tests PASSED.\n");
-    } else {
-        printf("Some distribution sampling property tests FAILED.\n");
-    }
-
-    return rc;
+int main(void) {
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_uniform_range_single, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_uniform_range_fill, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_uniform_range_tiny_interval, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_uniform_range_large_interval, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_exponential_nonneg, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_exponential_nonneg_small_rate, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_exponential_nonneg_large_rate, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_shuffle_preserves_elements_real, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_shuffle_preserves_elements_int, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_shuffle_single_element, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_shuffle_with_duplicates, setup, teardown),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

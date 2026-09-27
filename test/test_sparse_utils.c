@@ -7,313 +7,279 @@
 #include "lmmc/lmmc.h"
 #include "test_common.h"
 
+#include <stdlib.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
+#include <cmocka.h>
 
-static int test_sparse_scale(void) {
+struct test_fixture {
+    lmmc_mat_t denseA;
+    lmmc_mat_t denseB;
+    lmmc_mat_t result;
+    lmmc_sparse_mat_t sparseA;
+    lmmc_sparse_mat_t sparseB;
+    lmmc_sparse_mat_t sparseC;
+    lmmc_vec_t diag;
+};
 
-    lmmc_mat_t dense = {0};
-    lmmc_sparse_mat_t sparse = {0};
+static int setup(void **state) {
+    struct test_fixture *fixture = calloc(1, sizeof(*fixture));
+    *state = fixture;
+    return fixture ? 0 : -1;
+}
+
+static int teardown(void **state) {
+    struct test_fixture *fixture = *state;
+    lmmc_vec_destroy(&fixture->diag);
+    lmmc_sparse_destroy(&fixture->sparseC);
+    lmmc_sparse_destroy(&fixture->sparseB);
+    lmmc_sparse_destroy(&fixture->sparseA);
+    lmmc_mat_destroy(&fixture->result);
+    lmmc_mat_destroy(&fixture->denseB);
+    lmmc_mat_destroy(&fixture->denseA);
+    free(fixture);
+    *state = NULL;
+    return 0;
+}
+
+static void test_sparse_scale(void **state) {
+    struct test_fixture *fixture = *state;
+
     lmmc_status_t st;
 
-    st = lmmc_mat_create(3, 3, &dense);
-    if (st != LMMC_STATUS_OK) return 1;
+    st = lmmc_mat_create(3, 3, &fixture->denseA);
+    assert_true(st == LMMC_STATUS_OK);
 
-    LMMC_REAL_SET_D(&dense.data[0], 4.0); LMMC_REAL_SET_D(&dense.data[1], 0.0); LMMC_REAL_SET_D(&dense.data[2], 0.0);
-    LMMC_REAL_SET_D(&dense.data[3], 0.0); LMMC_REAL_SET_D(&dense.data[4], 5.0); LMMC_REAL_SET_D(&dense.data[5], 1.0);
-    LMMC_REAL_SET_D(&dense.data[6], 2.0); LMMC_REAL_SET_D(&dense.data[7], 0.0); LMMC_REAL_SET_D(&dense.data[8], 3.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[0], 4.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[1], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[2], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[3], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[4], 5.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[5], 1.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[6], 2.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[7], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[8], 3.0);
 
-    st = lmmc_sparse_from_dense(&dense, 1e-14, &sparse);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&dense); return 1; }
-
+    st = lmmc_sparse_from_dense(&fixture->denseA, 1e-14, &fixture->sparseA);
+    assert_true(st == LMMC_STATUS_OK);
 
     lmmc_real_t alpha;
     LMMC_REAL_SET_D(&alpha, 2.0);
-    st = lmmc_sparse_scale(&sparse, alpha);
-    if (st != LMMC_STATUS_OK) { lmmc_sparse_destroy(&sparse); lmmc_mat_destroy(&dense); return 1; }
+    st = lmmc_sparse_scale(&fixture->sparseA, alpha);
+    assert_true(st == LMMC_STATUS_OK);
 
+    st = lmmc_mat_create(3, 3, &fixture->result);
+    assert_true(st == LMMC_STATUS_OK);
 
-    lmmc_mat_t result = {0};
-    st = lmmc_mat_create(3, 3, &result);
-    if (st != LMMC_STATUS_OK) { lmmc_sparse_destroy(&sparse); lmmc_mat_destroy(&dense); return 1; }
+    st = lmmc_sparse_to_dense(&fixture->sparseA, &fixture->result);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_sparse_to_dense(&sparse, &result);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&result); lmmc_sparse_destroy(&sparse); lmmc_mat_destroy(&dense); return 1; }
-
-
-    if (!lmmc_test_nearly_equal(result.data[0], 8.0, 1e-12) ||
-        !lmmc_test_nearly_equal(result.data[4], 10.0, 1e-12) ||
-        !lmmc_test_nearly_equal(result.data[5], 2.0, 1e-12) ||
-        !lmmc_test_nearly_equal(result.data[6], 4.0, 1e-12) ||
-        !lmmc_test_nearly_equal(result.data[8], 6.0, 1e-12)) {
-        printf("FAIL: test_sparse_scale values incorrect\n");
-        lmmc_mat_destroy(&result); lmmc_sparse_destroy(&sparse); lmmc_mat_destroy(&dense);
-        return 1;
-    }
-
-    lmmc_mat_destroy(&result);
-    lmmc_sparse_destroy(&sparse);
-    lmmc_mat_destroy(&dense);
-    printf("PASS: test_sparse_scale\n");
-    return 0;
+    assert_true(((((lmmc_test_nearly_equal(fixture->result.data[0], 8.0, 1e-12)) && (lmmc_test_nearly_equal(fixture->result.data[4], 10.0, 1e-12))) && (lmmc_test_nearly_equal(fixture->result.data[5], 2.0, 1e-12))) && (lmmc_test_nearly_equal(fixture->result.data[6], 4.0, 1e-12))) && (lmmc_test_nearly_equal(fixture->result.data[8], 6.0, 1e-12)));
 }
 
-static int test_sparse_scale_null(void) {
+static void test_sparse_scale_null(void **state) {
+    (void)state;
+
     lmmc_status_t st = lmmc_sparse_scale(NULL, 2.0);
-    if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("FAIL: test_sparse_scale_null expected INVALID_ARGUMENT\n");
-        return 1;
-    }
-    printf("PASS: test_sparse_scale_null\n");
-    return 0;
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 }
 
-static int test_sparse_norm_fro(void) {
+static void test_sparse_norm_fro(void **state) {
+    struct test_fixture *fixture = *state;
 
-    lmmc_mat_t dense = {0};
-    lmmc_sparse_mat_t sparse = {0};
     lmmc_status_t st;
     lmmc_real_t norm;
 
-    st = lmmc_mat_create(3, 3, &dense);
-    if (st != LMMC_STATUS_OK) return 1;
+    st = lmmc_mat_create(3, 3, &fixture->denseA);
+    assert_true(st == LMMC_STATUS_OK);
 
-    LMMC_REAL_SET_D(&dense.data[0], 3.0); LMMC_REAL_SET_D(&dense.data[1], 0.0); LMMC_REAL_SET_D(&dense.data[2], 0.0);
-    LMMC_REAL_SET_D(&dense.data[3], 0.0); LMMC_REAL_SET_D(&dense.data[4], 4.0); LMMC_REAL_SET_D(&dense.data[5], 0.0);
-    LMMC_REAL_SET_D(&dense.data[6], 0.0); LMMC_REAL_SET_D(&dense.data[7], 0.0); LMMC_REAL_SET_D(&dense.data[8], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[0], 3.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[1], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[2], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[3], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[4], 4.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[5], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[6], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[7], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[8], 0.0);
 
-    st = lmmc_sparse_from_dense(&dense, 1e-14, &sparse);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&dense); return 1; }
+    st = lmmc_sparse_from_dense(&fixture->denseA, 1e-14, &fixture->sparseA);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_sparse_norm_fro(&sparse, &norm);
-    if (st != LMMC_STATUS_OK) { lmmc_sparse_destroy(&sparse); lmmc_mat_destroy(&dense); return 1; }
+    st = lmmc_sparse_norm_fro(&fixture->sparseA, &norm);
+    assert_true(st == LMMC_STATUS_OK);
 
-    if (!lmmc_test_nearly_equal(norm, 5.0, 1e-12)) {
-        printf("FAIL: test_sparse_norm_fro expected 5.0, got %f\n", norm);
-        lmmc_sparse_destroy(&sparse); lmmc_mat_destroy(&dense);
-        return 1;
-    }
-
-    lmmc_sparse_destroy(&sparse);
-    lmmc_mat_destroy(&dense);
-    printf("PASS: test_sparse_norm_fro\n");
-    return 0;
+    assert_true(lmmc_test_nearly_equal(norm, 5.0, 1e-12));
 }
 
-static int test_sparse_norm_fro_null(void) {
+static void test_sparse_norm_fro_null(void **state) {
+    (void)state;
+
     lmmc_real_t norm;
     lmmc_status_t st = lmmc_sparse_norm_fro(NULL, &norm);
-    if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("FAIL: test_sparse_norm_fro_null expected INVALID_ARGUMENT\n");
-        return 1;
-    }
-    printf("PASS: test_sparse_norm_fro_null\n");
-    return 0;
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 }
 
-static int test_sparse_diag(void) {
+static void test_sparse_diag(void **state) {
+    struct test_fixture *fixture = *state;
 
-    lmmc_mat_t dense = {0};
-    lmmc_sparse_mat_t sparse = {0};
-    lmmc_vec_t diag = {0};
     lmmc_status_t st;
 
-    st = lmmc_mat_create(3, 3, &dense);
-    if (st != LMMC_STATUS_OK) return 1;
+    st = lmmc_mat_create(3, 3, &fixture->denseA);
+    assert_true(st == LMMC_STATUS_OK);
 
-    LMMC_REAL_SET_D(&dense.data[0], 4.0); LMMC_REAL_SET_D(&dense.data[1], 0.0); LMMC_REAL_SET_D(&dense.data[2], 0.0);
-    LMMC_REAL_SET_D(&dense.data[3], 0.0); LMMC_REAL_SET_D(&dense.data[4], 5.0); LMMC_REAL_SET_D(&dense.data[5], 1.0);
-    LMMC_REAL_SET_D(&dense.data[6], 2.0); LMMC_REAL_SET_D(&dense.data[7], 0.0); LMMC_REAL_SET_D(&dense.data[8], 3.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[0], 4.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[1], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[2], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[3], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[4], 5.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[5], 1.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[6], 2.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[7], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[8], 3.0);
 
-    st = lmmc_sparse_from_dense(&dense, 1e-14, &sparse);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&dense); return 1; }
+    st = lmmc_sparse_from_dense(&fixture->denseA, 1e-14, &fixture->sparseA);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_sparse_diag(&sparse, &diag);
-    if (st != LMMC_STATUS_OK) { lmmc_sparse_destroy(&sparse); lmmc_mat_destroy(&dense); return 1; }
+    st = lmmc_sparse_diag(&fixture->sparseA, &fixture->diag);
+    assert_true(st == LMMC_STATUS_OK);
 
-    if (diag.size != 3) {
-        printf("FAIL: test_sparse_diag expected size 3, got %zu\n", diag.size);
-        lmmc_vec_destroy(&diag); lmmc_sparse_destroy(&sparse); lmmc_mat_destroy(&dense);
-        return 1;
-    }
+    assert_true(fixture->diag.size == 3);
 
-    if (!lmmc_test_nearly_equal(diag.data[0], 4.0, 1e-12) ||
-        !lmmc_test_nearly_equal(diag.data[1], 5.0, 1e-12) ||
-        !lmmc_test_nearly_equal(diag.data[2], 3.0, 1e-12)) {
-        printf("FAIL: test_sparse_diag values incorrect\n");
-        lmmc_vec_destroy(&diag); lmmc_sparse_destroy(&sparse); lmmc_mat_destroy(&dense);
-        return 1;
-    }
-
-    lmmc_vec_destroy(&diag);
-    lmmc_sparse_destroy(&sparse);
-    lmmc_mat_destroy(&dense);
-    printf("PASS: test_sparse_diag\n");
-    return 0;
+    assert_true(((lmmc_test_nearly_equal(fixture->diag.data[0], 4.0, 1e-12)) && (lmmc_test_nearly_equal(fixture->diag.data[1], 5.0, 1e-12))) && (lmmc_test_nearly_equal(fixture->diag.data[2], 3.0, 1e-12)));
 }
 
-static int test_sparse_diag_non_square(void) {
+static void test_sparse_diag_non_square(void **state) {
+    struct test_fixture *fixture = *state;
 
-    lmmc_mat_t dense = {0};
-    lmmc_sparse_mat_t sparse = {0};
-    lmmc_vec_t diag = {0};
     lmmc_status_t st;
 
-    st = lmmc_mat_create(2, 3, &dense);
-    if (st != LMMC_STATUS_OK) return 1;
+    st = lmmc_mat_create(2, 3, &fixture->denseA);
+    assert_true(st == LMMC_STATUS_OK);
 
-    LMMC_REAL_SET_D(&dense.data[0], 1.0); LMMC_REAL_SET_D(&dense.data[1], 2.0); LMMC_REAL_SET_D(&dense.data[2], 3.0);
-    LMMC_REAL_SET_D(&dense.data[3], 4.0); LMMC_REAL_SET_D(&dense.data[4], 5.0); LMMC_REAL_SET_D(&dense.data[5], 6.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[0], 1.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[1], 2.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[2], 3.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[3], 4.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[4], 5.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[5], 6.0);
 
-    st = lmmc_sparse_from_dense(&dense, 1e-14, &sparse);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&dense); return 1; }
+    st = lmmc_sparse_from_dense(&fixture->denseA, 1e-14, &fixture->sparseA);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_sparse_diag(&sparse, &diag);
-    if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("FAIL: test_sparse_diag_non_square expected INVALID_ARGUMENT, got %d\n", (int)st);
-        lmmc_vec_destroy(&diag); lmmc_sparse_destroy(&sparse); lmmc_mat_destroy(&dense);
-        return 1;
-    }
-
-    lmmc_sparse_destroy(&sparse);
-    lmmc_mat_destroy(&dense);
-    printf("PASS: test_sparse_diag_non_square\n");
-    return 0;
+    st = lmmc_sparse_diag(&fixture->sparseA, &fixture->diag);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 }
 
-static int test_sparse_add(void) {
+static void create_sparse_sum(lmmc_mat_t *denseA, lmmc_mat_t *denseB, lmmc_sparse_mat_t *sparseA, lmmc_sparse_mat_t *sparseB, lmmc_sparse_mat_t *sparseC) {
 
-    lmmc_mat_t denseA = {0}, denseB = {0};
-    lmmc_sparse_mat_t sparseA = {0}, sparseB = {0}, sparseC = {0};
-    lmmc_mat_t result = {0};
     lmmc_status_t st;
+    st = lmmc_mat_create(3, 3, denseA);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_mat_create(3, 3, denseB);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_mat_create(3, 3, &denseA);
-    if (st != LMMC_STATUS_OK) return 1;
-    st = lmmc_mat_create(3, 3, &denseB);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&denseA); return 1; }
+    LMMC_REAL_SET_D(&denseA->data[0], 1.0);
+    LMMC_REAL_SET_D(&denseA->data[1], 0.0);
+    LMMC_REAL_SET_D(&denseA->data[2], 2.0);
+    LMMC_REAL_SET_D(&denseA->data[3], 0.0);
+    LMMC_REAL_SET_D(&denseA->data[4], 3.0);
+    LMMC_REAL_SET_D(&denseA->data[5], 0.0);
+    LMMC_REAL_SET_D(&denseA->data[6], 4.0);
+    LMMC_REAL_SET_D(&denseA->data[7], 0.0);
+    LMMC_REAL_SET_D(&denseA->data[8], 5.0);
 
+    LMMC_REAL_SET_D(&denseB->data[0], 0.0);
+    LMMC_REAL_SET_D(&denseB->data[1], 6.0);
+    LMMC_REAL_SET_D(&denseB->data[2], 0.0);
+    LMMC_REAL_SET_D(&denseB->data[3], 7.0);
+    LMMC_REAL_SET_D(&denseB->data[4], 0.0);
+    LMMC_REAL_SET_D(&denseB->data[5], 8.0);
+    LMMC_REAL_SET_D(&denseB->data[6], 0.0);
+    LMMC_REAL_SET_D(&denseB->data[7], 9.0);
+    LMMC_REAL_SET_D(&denseB->data[8], 0.0);
 
-    LMMC_REAL_SET_D(&denseA.data[0], 1.0); LMMC_REAL_SET_D(&denseA.data[1], 0.0); LMMC_REAL_SET_D(&denseA.data[2], 2.0);
-    LMMC_REAL_SET_D(&denseA.data[3], 0.0); LMMC_REAL_SET_D(&denseA.data[4], 3.0); LMMC_REAL_SET_D(&denseA.data[5], 0.0);
-    LMMC_REAL_SET_D(&denseA.data[6], 4.0); LMMC_REAL_SET_D(&denseA.data[7], 0.0); LMMC_REAL_SET_D(&denseA.data[8], 5.0);
-
-
-    LMMC_REAL_SET_D(&denseB.data[0], 0.0); LMMC_REAL_SET_D(&denseB.data[1], 6.0); LMMC_REAL_SET_D(&denseB.data[2], 0.0);
-    LMMC_REAL_SET_D(&denseB.data[3], 7.0); LMMC_REAL_SET_D(&denseB.data[4], 0.0); LMMC_REAL_SET_D(&denseB.data[5], 8.0);
-    LMMC_REAL_SET_D(&denseB.data[6], 0.0); LMMC_REAL_SET_D(&denseB.data[7], 9.0); LMMC_REAL_SET_D(&denseB.data[8], 0.0);
-
-    st = lmmc_sparse_from_dense(&denseA, 1e-14, &sparseA);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&denseA); lmmc_mat_destroy(&denseB); return 1; }
-    st = lmmc_sparse_from_dense(&denseB, 1e-14, &sparseB);
-    if (st != LMMC_STATUS_OK) { lmmc_sparse_destroy(&sparseA); lmmc_mat_destroy(&denseA); lmmc_mat_destroy(&denseB); return 1; }
-
+    st = lmmc_sparse_from_dense(denseA, 1e-14, sparseA);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_sparse_from_dense(denseB, 1e-14, sparseB);
+    assert_true(st == LMMC_STATUS_OK);
 
     lmmc_real_t alpha, beta;
     LMMC_REAL_SET_D(&alpha, 2.0);
     LMMC_REAL_SET_D(&beta, 3.0);
-    st = lmmc_sparse_add(alpha, &sparseA, beta, &sparseB, &sparseC);
-    if (st != LMMC_STATUS_OK) {
-        printf("FAIL: test_sparse_add lmmc_sparse_add returned %d\n", (int)st);
-        lmmc_sparse_destroy(&sparseA); lmmc_sparse_destroy(&sparseB);
-        lmmc_mat_destroy(&denseA); lmmc_mat_destroy(&denseB);
-        return 1;
-    }
+    st = lmmc_sparse_add(alpha, sparseA, beta, sparseB, sparseC);
+    assert_true(st == LMMC_STATUS_OK);
+}
 
+static void test_sparse_add(void **state) {
+    struct test_fixture *fixture = *state;
 
-    st = lmmc_mat_create(3, 3, &result);
-    if (st != LMMC_STATUS_OK) {
-        lmmc_sparse_destroy(&sparseC); lmmc_sparse_destroy(&sparseA); lmmc_sparse_destroy(&sparseB);
-        lmmc_mat_destroy(&denseA); lmmc_mat_destroy(&denseB);
-        return 1;
-    }
-    st = lmmc_sparse_to_dense(&sparseC, &result);
-    if (st != LMMC_STATUS_OK) {
-        lmmc_mat_destroy(&result); lmmc_sparse_destroy(&sparseC);
-        lmmc_sparse_destroy(&sparseA); lmmc_sparse_destroy(&sparseB);
-        lmmc_mat_destroy(&denseA); lmmc_mat_destroy(&denseB);
-        return 1;
-    }
+    lmmc_status_t st;
 
+    create_sparse_sum(&fixture->denseA, &fixture->denseB, &fixture->sparseA, &fixture->sparseB, &fixture->sparseC);
+
+    st = lmmc_mat_create(3, 3, &fixture->result);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_sparse_to_dense(&fixture->sparseC, &fixture->result);
+    assert_true(st == LMMC_STATUS_OK);
 
     double expected[9] = {2.0, 18.0, 4.0, 21.0, 6.0, 24.0, 8.0, 27.0, 10.0};
     int i;
     for (i = 0; i < 9; ++i) {
-        if (!lmmc_test_nearly_equal(result.data[i], expected[i], 1e-12)) {
-            printf("FAIL: test_sparse_add result[%d] = %f, expected %f\n", i, result.data[i], expected[i]);
-            lmmc_mat_destroy(&result); lmmc_sparse_destroy(&sparseC);
-            lmmc_sparse_destroy(&sparseA); lmmc_sparse_destroy(&sparseB);
-            lmmc_mat_destroy(&denseA); lmmc_mat_destroy(&denseB);
-            return 1;
-        }
+        assert_true(lmmc_test_nearly_equal(fixture->result.data[i], expected[i], 1e-12));
     }
-
-    lmmc_mat_destroy(&result);
-    lmmc_sparse_destroy(&sparseC);
-    lmmc_sparse_destroy(&sparseA);
-    lmmc_sparse_destroy(&sparseB);
-    lmmc_mat_destroy(&denseA);
-    lmmc_mat_destroy(&denseB);
-    printf("PASS: test_sparse_add\n");
-    return 0;
 }
 
-static int test_sparse_add_dimension_mismatch(void) {
+static void test_sparse_add_dimension_mismatch(void **state) {
+    struct test_fixture *fixture = *state;
 
-    lmmc_mat_t denseA = {0}, denseB = {0};
-    lmmc_sparse_mat_t sparseA = {0}, sparseB = {0}, sparseC = {0};
     lmmc_status_t st;
 
-    st = lmmc_mat_create(2, 3, &denseA);
-    if (st != LMMC_STATUS_OK) return 1;
-    st = lmmc_mat_create(3, 3, &denseB);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&denseA); return 1; }
+    st = lmmc_mat_create(2, 3, &fixture->denseA);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_mat_create(3, 3, &fixture->denseB);
+    assert_true(st == LMMC_STATUS_OK);
 
-    LMMC_REAL_SET_D(&denseA.data[0], 1.0); LMMC_REAL_SET_D(&denseA.data[1], 2.0); LMMC_REAL_SET_D(&denseA.data[2], 3.0);
-    LMMC_REAL_SET_D(&denseA.data[3], 4.0); LMMC_REAL_SET_D(&denseA.data[4], 5.0); LMMC_REAL_SET_D(&denseA.data[5], 6.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[0], 1.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[1], 2.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[2], 3.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[3], 4.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[4], 5.0);
+    LMMC_REAL_SET_D(&fixture->denseA.data[5], 6.0);
 
-    LMMC_REAL_SET_D(&denseB.data[0], 1.0); LMMC_REAL_SET_D(&denseB.data[1], 0.0); LMMC_REAL_SET_D(&denseB.data[2], 0.0);
-    LMMC_REAL_SET_D(&denseB.data[3], 0.0); LMMC_REAL_SET_D(&denseB.data[4], 1.0); LMMC_REAL_SET_D(&denseB.data[5], 0.0);
-    LMMC_REAL_SET_D(&denseB.data[6], 0.0); LMMC_REAL_SET_D(&denseB.data[7], 0.0); LMMC_REAL_SET_D(&denseB.data[8], 1.0);
+    LMMC_REAL_SET_D(&fixture->denseB.data[0], 1.0);
+    LMMC_REAL_SET_D(&fixture->denseB.data[1], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseB.data[2], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseB.data[3], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseB.data[4], 1.0);
+    LMMC_REAL_SET_D(&fixture->denseB.data[5], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseB.data[6], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseB.data[7], 0.0);
+    LMMC_REAL_SET_D(&fixture->denseB.data[8], 1.0);
 
-    st = lmmc_sparse_from_dense(&denseA, 1e-14, &sparseA);
-    if (st != LMMC_STATUS_OK) { lmmc_mat_destroy(&denseA); lmmc_mat_destroy(&denseB); return 1; }
-    st = lmmc_sparse_from_dense(&denseB, 1e-14, &sparseB);
-    if (st != LMMC_STATUS_OK) { lmmc_sparse_destroy(&sparseA); lmmc_mat_destroy(&denseA); lmmc_mat_destroy(&denseB); return 1; }
+    st = lmmc_sparse_from_dense(&fixture->denseA, 1e-14, &fixture->sparseA);
+    assert_true(st == LMMC_STATUS_OK);
+    st = lmmc_sparse_from_dense(&fixture->denseB, 1e-14, &fixture->sparseB);
+    assert_true(st == LMMC_STATUS_OK);
 
     lmmc_real_t alpha, beta;
     LMMC_REAL_SET_D(&alpha, 1.0);
     LMMC_REAL_SET_D(&beta, 1.0);
-    st = lmmc_sparse_add(alpha, &sparseA, beta, &sparseB, &sparseC);
-    if (st != LMMC_STATUS_DIMENSION_MISMATCH) {
-        printf("FAIL: test_sparse_add_dimension_mismatch expected DIMENSION_MISMATCH, got %d\n", (int)st);
-        lmmc_sparse_destroy(&sparseC); lmmc_sparse_destroy(&sparseA); lmmc_sparse_destroy(&sparseB);
-        lmmc_mat_destroy(&denseA); lmmc_mat_destroy(&denseB);
-        return 1;
-    }
-
-    lmmc_sparse_destroy(&sparseA);
-    lmmc_sparse_destroy(&sparseB);
-    lmmc_mat_destroy(&denseA);
-    lmmc_mat_destroy(&denseB);
-    printf("PASS: test_sparse_add_dimension_mismatch\n");
-    return 0;
+    st = lmmc_sparse_add(alpha, &fixture->sparseA, beta, &fixture->sparseB, &fixture->sparseC);
+    assert_true(st == LMMC_STATUS_DIMENSION_MISMATCH);
 }
 
 int main(void) {
-    int rc = 0;
-
-    rc |= test_sparse_scale();
-    rc |= test_sparse_scale_null();
-    rc |= test_sparse_norm_fro();
-    rc |= test_sparse_norm_fro_null();
-    rc |= test_sparse_diag();
-    rc |= test_sparse_diag_non_square();
-    rc |= test_sparse_add();
-    rc |= test_sparse_add_dimension_mismatch();
-
-    if (rc == 0) {
-        printf("\nAll sparse utility tests PASSED\n");
-    } else {
-        printf("\nSome sparse utility tests FAILED\n");
-    }
-    return rc;
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_sparse_scale, setup, teardown),
+        cmocka_unit_test(test_sparse_scale_null),
+        cmocka_unit_test_setup_teardown(test_sparse_norm_fro, setup, teardown),
+        cmocka_unit_test(test_sparse_norm_fro_null),
+        cmocka_unit_test_setup_teardown(test_sparse_diag, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_sparse_diag_non_square, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_sparse_add, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_sparse_add_dimension_mismatch, setup, teardown),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

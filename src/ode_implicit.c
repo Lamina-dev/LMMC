@@ -28,7 +28,7 @@ typedef struct {
     int callback_failed;
 } ode_implicit_euler_ctx_t;
 
-static lmmc_status_t implicit_euler_F(
+static lmmc_status_t implicit_euler_residual(
     const lmmc_vec_t* x, lmmc_vec_t* F, void* ud
 ) {
     ode_implicit_euler_ctx_t* ctx = (ode_implicit_euler_ctx_t*)ud;
@@ -36,7 +36,7 @@ static lmmc_status_t implicit_euler_F(
     lmmc_status_t st = lmmc_ode_rhs_eval(
         ctx->rhs, ctx->t_next, x->data, F->data, ctx->dim, ctx->user_data,
         ctx->rhs_eval_count, &ctx->callback_failed);
-    if (st != LMMC_STATUS_OK) return st;
+    if (st != LMMC_STATUS_OK) { return st; }
     /* G(z) = z - y_n - h*f(t_{n+1}, z) */
     for (i = 0; i < ctx->dim; ++i) {
         F->data[i] = x->data[i] - ctx->y_n[i] - ctx->h * F->data[i];
@@ -44,7 +44,7 @@ static lmmc_status_t implicit_euler_F(
     return LMMC_STATUS_OK;
 }
 
-static lmmc_status_t implicit_euler_J(
+static lmmc_status_t implicit_euler_jacobian(
     const lmmc_vec_t* x, lmmc_mat_t* J, void* ud
 ) {
     ode_implicit_euler_ctx_t* ctx = (ode_implicit_euler_ctx_t*)ud;
@@ -52,12 +52,12 @@ static lmmc_status_t implicit_euler_J(
     lmmc_real_t* jac_data = J->data;
 
     {
-        lmmc_status_t st = lmmc_ode_jacobian_eval(
+        lmmc_status_t st = lmmc_ode_jacobian_eval(&(lmmc_ode_jacobian_request_t){
             ctx->rhs, ctx->jac_cb, ctx->user_data, ctx->t_next, x->data,
             NULL, n, jac_data, ctx->jac_base_rhs, ctx->jac_y_perturbed,
             ctx->jac_rhs_perturbed, ctx->rhs_eval_count,
-            &ctx->callback_failed);
-        if (st != LMMC_STATUS_OK) return st;
+            &ctx->callback_failed});
+        if (st != LMMC_STATUS_OK) { return st; }
     }
     /* J_G = I - h * J_f */
     for (i = 0; i < n; ++i) {
@@ -67,6 +67,58 @@ static lmmc_status_t implicit_euler_J(
         jac_data[i * J->stride + i] += 1.0;
     }
     return LMMC_STATUS_OK;
+}
+
+static lmmc_status_t implicit_euler_integrate(
+    ode_implicit_euler_ctx_t* ctx, lmmc_vec_t* x_vec,
+    const lmmc_optimize_config_t* opt_cfg, lmmc_real_t* y,
+    lmmc_real_t t, lmmc_real_t h, lmmc_real_t t_end,
+    const lmmc_ode_config_t* cfg, lmmc_ode_result_t* out_result
+) {
+    const size_t dim = ctx->dim;
+    lmmc_optimize_result_t opt_res;
+    while (t < t_end && out_result->num_steps < cfg->max_steps) {
+        lmmc_real_t rem = t_end - t;
+        lmmc_status_t st;
+        if (rem <= 0.0) { break; }
+        if (h > rem) h = rem;
+
+        ctx->t_next = t + h;
+        ctx->h = h;
+        ctx->y_n = y;
+
+        /** @brief 以上一步状态作为 Newton 初值。 */
+        memcpy(x_vec->data, y, dim * sizeof(lmmc_real_t));
+
+        st = lmmc_nleq_newton(implicit_euler_residual, implicit_euler_jacobian,
+                               ctx, x_vec, opt_cfg, &opt_res);
+        if (st != LMMC_STATUS_OK || !opt_res.converged) {
+            out_result->failure_reason =
+                ctx->callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
+                                    : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            return st != LMMC_STATUS_OK ? st : LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+
+        memcpy(y, x_vec->data, dim * sizeof(lmmc_real_t));
+
+        if (!lmmc_ode_state_is_finite(y, dim)) {
+            out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+
+        t += h;
+        out_result->num_steps += 1;
+        out_result->final_t = t;
+        lmmc_ode_do_log(cfg, out_result->num_steps, t, y, dim);
+    }
+    if (t >= t_end) {
+        out_result->converged = 1;
+        out_result->failure_reason = LMMC_ODE_FAILURE_NONE;
+    } else {
+        out_result->converged = 0;
+        out_result->failure_reason = LMMC_ODE_FAILURE_MAX_STEPS;
+    }
+    return out_result->converged ? LMMC_STATUS_OK : LMMC_STATUS_CONVERGENCE_FAILED;
 }
 
 lmmc_status_t lmmc_ode_implicit_euler_solve(
@@ -87,13 +139,12 @@ lmmc_status_t lmmc_ode_implicit_euler_solve(
     lmmc_status_t init_st;
     lmmc_vec_t x_vec = {0};
     lmmc_optimize_config_t opt_cfg;
-    lmmc_optimize_result_t opt_res;
     lmmc_real_t* work = NULL;
     ode_implicit_euler_ctx_t ctx;
 
     init_st = validate_and_init_ode_config(rhs, dim, t_start, t_end, y,
                                             cfg, &local_cfg, out_result, &work_bytes);
-    if (init_st != LMMC_STATUS_OK) return init_st;
+    if (init_st != LMMC_STATUS_OK) { return init_st; }
 
     h = lmmc_clamp(local_cfg.initial_step, local_cfg.min_step, local_cfg.max_step);
     { lmmc_real_t span = t_end - t_start; if (h > span) h = span; }
@@ -108,7 +159,7 @@ lmmc_status_t lmmc_ode_implicit_euler_solve(
         out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_DIMENSION;
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    work = (lmmc_real_t*)lmmc_alloc(total_work_bytes);
+    work = (lmmc_real_t*)lmmc_memory_alloc(total_work_bytes);
     if (work == NULL) {
         out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
         return LMMC_STATUS_ALLOCATION_FAILED;
@@ -128,54 +179,10 @@ lmmc_status_t lmmc_ode_implicit_euler_solve(
     ctx.rhs_eval_count = &out_result->num_rhs_evals;
     ctx.callback_failed = 0;
     lmmc_ode_do_log(&local_cfg, 0, t, y, dim);
-
-    while (t < t_end && out_result->num_steps < local_cfg.max_steps) {
-        lmmc_real_t rem = t_end - t;
-        lmmc_status_t st;
-        if (rem <= 0.0) break;
-        if (h > rem) h = rem;
-
-        ctx.t_next = t + h;
-        ctx.h = h;
-        ctx.y_n = y;
-
-        /* Initial guess: explicit Euler prediction */
-        memcpy(x_vec.data, y, dim * sizeof(lmmc_real_t));
-
-        st = lmmc_nleq_newton(implicit_euler_F, implicit_euler_J,
-                               &ctx, &x_vec, &opt_cfg, &opt_res);
-        if (st != LMMC_STATUS_OK || !opt_res.converged) {
-            out_result->failure_reason =
-                ctx.callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
-                                    : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-            lmmc_free(work);
-            return st != LMMC_STATUS_OK ? st : LMMC_STATUS_NUMERICAL_FAILURE;
-        }
-
-        memcpy(y, x_vec.data, dim * sizeof(lmmc_real_t));
-
-        if (!lmmc_ode_state_is_finite(y, dim)) {
-            out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-            lmmc_free(work);
-            return LMMC_STATUS_NUMERICAL_FAILURE;
-        }
-
-        t += h;
-        out_result->num_steps += 1;
-        out_result->final_t = t;
-        lmmc_ode_do_log(&local_cfg, out_result->num_steps, t, y, dim);
-    }
-
-    if (t >= t_end) {
-        out_result->converged = 1;
-        out_result->failure_reason = LMMC_ODE_FAILURE_NONE;
-    } else {
-        out_result->converged = 0;
-        out_result->failure_reason = LMMC_ODE_FAILURE_MAX_STEPS;
-    }
-
-    lmmc_free(work);
-    return out_result->converged ? LMMC_STATUS_OK : LMMC_STATUS_CONVERGENCE_FAILED;
+    init_st = implicit_euler_integrate(&ctx, &x_vec, &opt_cfg, y,
+        t, h, t_end, &local_cfg, out_result);
+    lmmc_memory_free(work);
+    return init_st;
 }
 
 typedef struct {
@@ -194,7 +201,7 @@ typedef struct {
     int callback_failed;
 } ode_trapezoidal_ctx_t;
 
-static lmmc_status_t trapezoidal_F(
+static lmmc_status_t trapezoidal_residual(
     const lmmc_vec_t* x, lmmc_vec_t* F, void* ud
 ) {
     ode_trapezoidal_ctx_t* ctx = (ode_trapezoidal_ctx_t*)ud;
@@ -202,7 +209,7 @@ static lmmc_status_t trapezoidal_F(
     lmmc_status_t st = lmmc_ode_rhs_eval(
         ctx->rhs, ctx->t_next, x->data, F->data, ctx->dim, ctx->user_data,
         ctx->rhs_eval_count, &ctx->callback_failed);
-    if (st != LMMC_STATUS_OK) return st;
+    if (st != LMMC_STATUS_OK) { return st; }
     /* G(z) = z - y_n - h/2*(f_n + f(t_{n+1}, z)) */
     for (i = 0; i < ctx->dim; ++i) {
         F->data[i] = x->data[i] - ctx->y_n[i]
@@ -211,7 +218,7 @@ static lmmc_status_t trapezoidal_F(
     return LMMC_STATUS_OK;
 }
 
-static lmmc_status_t trapezoidal_J(
+static lmmc_status_t trapezoidal_jacobian(
     const lmmc_vec_t* x, lmmc_mat_t* J, void* ud
 ) {
     ode_trapezoidal_ctx_t* ctx = (ode_trapezoidal_ctx_t*)ud;
@@ -219,12 +226,12 @@ static lmmc_status_t trapezoidal_J(
     lmmc_real_t* jac_data = J->data;
 
     {
-        lmmc_status_t st = lmmc_ode_jacobian_eval(
+        lmmc_status_t st = lmmc_ode_jacobian_eval(&(lmmc_ode_jacobian_request_t){
             ctx->rhs, ctx->jac_cb, ctx->user_data, ctx->t_next, x->data,
             NULL, n, jac_data, ctx->jac_base_rhs, ctx->jac_y_perturbed,
             ctx->jac_rhs_perturbed, ctx->rhs_eval_count,
-            &ctx->callback_failed);
-        if (st != LMMC_STATUS_OK) return st;
+            &ctx->callback_failed});
+        if (st != LMMC_STATUS_OK) { return st; }
     }
     /* J_G = I - (h/2) * J_f */
     for (i = 0; i < n; ++i) {
@@ -234,6 +241,68 @@ static lmmc_status_t trapezoidal_J(
         jac_data[i * J->stride + i] += 1.0;
     }
     return LMMC_STATUS_OK;
+}
+
+static lmmc_status_t trapezoidal_integrate(
+    ode_trapezoidal_ctx_t* ctx, lmmc_vec_t* x_vec,
+    const lmmc_optimize_config_t* opt_cfg, lmmc_real_t* y,
+    lmmc_real_t t, lmmc_real_t h, lmmc_real_t t_end,
+    const lmmc_ode_config_t* cfg, lmmc_ode_result_t* out_result
+) {
+    const size_t dim = ctx->dim;
+    lmmc_optimize_result_t opt_res;
+    while (t < t_end && out_result->num_steps < cfg->max_steps) {
+        lmmc_real_t rem = t_end - t;
+        lmmc_status_t st;
+        if (rem <= 0.0) { break; }
+        if (h > rem) h = rem;
+
+        st = lmmc_ode_rhs_eval(
+            ctx->rhs, t, y, ctx->f_n, dim, ctx->user_data, &out_result->num_rhs_evals,
+            &ctx->callback_failed);
+        if (st != LMMC_STATUS_OK) {
+            out_result->failure_reason =
+                ctx->callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
+                                    : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            return st;
+        }
+
+        ctx->t_next = t + h;
+        ctx->h = h;
+        ctx->y_n = y;
+
+        /** @brief 以上一步状态作为 Newton 初值。 */
+        memcpy(x_vec->data, y, dim * sizeof(lmmc_real_t));
+
+        st = lmmc_nleq_newton(trapezoidal_residual, trapezoidal_jacobian,
+                               ctx, x_vec, opt_cfg, &opt_res);
+        if (st != LMMC_STATUS_OK || !opt_res.converged) {
+            out_result->failure_reason =
+                ctx->callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
+                                    : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            return st != LMMC_STATUS_OK ? st : LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+
+        memcpy(y, x_vec->data, dim * sizeof(lmmc_real_t));
+
+        if (!lmmc_ode_state_is_finite(y, dim)) {
+            out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+
+        t += h;
+        out_result->num_steps += 1;
+        out_result->final_t = t;
+        lmmc_ode_do_log(cfg, out_result->num_steps, t, y, dim);
+    }
+    if (t >= t_end) {
+        out_result->converged = 1;
+        out_result->failure_reason = LMMC_ODE_FAILURE_NONE;
+    } else {
+        out_result->converged = 0;
+        out_result->failure_reason = LMMC_ODE_FAILURE_MAX_STEPS;
+    }
+    return out_result->converged ? LMMC_STATUS_OK : LMMC_STATUS_CONVERGENCE_FAILED;
 }
 
 lmmc_status_t lmmc_ode_trapezoidal_solve(
@@ -256,12 +325,11 @@ lmmc_status_t lmmc_ode_trapezoidal_solve(
     lmmc_real_t* f_n = NULL;
     lmmc_real_t* work = NULL;
     lmmc_optimize_config_t opt_cfg;
-    lmmc_optimize_result_t opt_res;
     ode_trapezoidal_ctx_t ctx;
 
     init_st = validate_and_init_ode_config(rhs, dim, t_start, t_end, y,
                                             cfg, &local_cfg, out_result, &work_bytes);
-    if (init_st != LMMC_STATUS_OK) return init_st;
+    if (init_st != LMMC_STATUS_OK) { return init_st; }
 
     h = lmmc_clamp(local_cfg.initial_step, local_cfg.min_step, local_cfg.max_step);
     { lmmc_real_t span = t_end - t_start; if (h > span) h = span; }
@@ -275,7 +343,7 @@ lmmc_status_t lmmc_ode_trapezoidal_solve(
         out_result->failure_reason = LMMC_ODE_FAILURE_INVALID_DIMENSION;
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    work = (lmmc_real_t*)lmmc_alloc(total_work_bytes);
+    work = (lmmc_real_t*)lmmc_memory_alloc(total_work_bytes);
     if (work == NULL) {
         out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
         return LMMC_STATUS_ALLOCATION_FAILED;
@@ -297,64 +365,8 @@ lmmc_status_t lmmc_ode_trapezoidal_solve(
     ctx.callback_failed = 0;
 
     lmmc_ode_do_log(&local_cfg, 0, t, y, dim);
-
-    while (t < t_end && out_result->num_steps < local_cfg.max_steps) {
-        lmmc_real_t rem = t_end - t;
-        lmmc_status_t st;
-        if (rem <= 0.0) break;
-        if (h > rem) h = rem;
-
-        /* Evaluate f(t_n, y_n). */
-        st = lmmc_ode_rhs_eval(
-            rhs, t, y, f_n, dim, user_data, &out_result->num_rhs_evals,
-            &ctx.callback_failed);
-        if (st != LMMC_STATUS_OK) {
-            out_result->failure_reason =
-                ctx.callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
-                                    : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-            lmmc_free(work);
-            return st;
-        }
-
-        ctx.t_next = t + h;
-        ctx.h = h;
-        ctx.y_n = y;
-
-        /* Initial guess: explicit Euler */
-        memcpy(x_vec.data, y, dim * sizeof(lmmc_real_t));
-
-        st = lmmc_nleq_newton(trapezoidal_F, trapezoidal_J,
-                               &ctx, &x_vec, &opt_cfg, &opt_res);
-        if (st != LMMC_STATUS_OK || !opt_res.converged) {
-            out_result->failure_reason =
-                ctx.callback_failed ? LMMC_ODE_FAILURE_RHS_EVAL_FAILED
-                                    : LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-            lmmc_free(work);
-            return st != LMMC_STATUS_OK ? st : LMMC_STATUS_NUMERICAL_FAILURE;
-        }
-
-        memcpy(y, x_vec.data, dim * sizeof(lmmc_real_t));
-
-        if (!lmmc_ode_state_is_finite(y, dim)) {
-            out_result->failure_reason = LMMC_ODE_FAILURE_NUMERICAL_ISSUE;
-            lmmc_free(work);
-            return LMMC_STATUS_NUMERICAL_FAILURE;
-        }
-
-        t += h;
-        out_result->num_steps += 1;
-        out_result->final_t = t;
-        lmmc_ode_do_log(&local_cfg, out_result->num_steps, t, y, dim);
-    }
-
-    if (t >= t_end) {
-        out_result->converged = 1;
-        out_result->failure_reason = LMMC_ODE_FAILURE_NONE;
-    } else {
-        out_result->converged = 0;
-        out_result->failure_reason = LMMC_ODE_FAILURE_MAX_STEPS;
-    }
-
-    lmmc_free(work);
-    return out_result->converged ? LMMC_STATUS_OK : LMMC_STATUS_CONVERGENCE_FAILED;
+    init_st = trapezoidal_integrate(&ctx, &x_vec, &opt_cfg, y,
+        t, h, t_end, &local_cfg, out_result);
+    lmmc_memory_free(work);
+    return init_st;
 }

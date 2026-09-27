@@ -14,16 +14,12 @@
 #include "lmmc/status.h"
 
 
-struct lmmc_rng_t {
-    uint64_t state[4];
-};
+#include "random_internal.h"
+
 static _Thread_local struct lmmc_rng_t lmmc_default_rng;
 static _Thread_local int lmmc_default_rng_initialized = 0;
 
 
-static inline uint64_t rotl(const uint64_t x, int k) {
-    return (x << k) | (x >> (64 - k));
-}
 
 
 static inline uint64_t splitmix64_next(uint64_t* state) {
@@ -65,20 +61,6 @@ void lmmc_rng_default_reset(void) {
 }
 
 
-static inline uint64_t xoshiro256ss_next(uint64_t* s) {
-    const uint64_t result = rotl(s[1] * 5, 7) * 9;
-    const uint64_t t = s[1] << 17;
-
-    s[2] ^= s[0];
-    s[3] ^= s[1];
-    s[1] ^= s[2];
-    s[0] ^= s[3];
-
-    s[2] ^= t;
-    s[3] = rotl(s[3], 45);
-
-    return result;
-}
 
 static uint64_t rng_bounded_u64(uint64_t* state, uint64_t bound) {
     const uint64_t threshold = (uint64_t)(-bound) % bound;
@@ -98,7 +80,7 @@ lmmc_status_t lmmc_rng_create(lmmc_rng_t** out_rng) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    rng = (lmmc_rng_t*)lmmc_alloc(sizeof(lmmc_rng_t));
+    rng = (lmmc_rng_t*)lmmc_memory_alloc(sizeof(lmmc_rng_t));
     if (rng == NULL) {
         *out_rng = NULL;
         return LMMC_STATUS_ALLOCATION_FAILED;
@@ -130,7 +112,7 @@ lmmc_status_t lmmc_rng_seed(lmmc_rng_t* rng, uint64_t seed) {
 void lmmc_rng_destroy(lmmc_rng_t* rng) {
     if (rng != NULL) {
         memset(rng->state, 0, sizeof(rng->state));
-        lmmc_free(rng);
+        lmmc_memory_free(rng);
     }
 }
 
@@ -142,7 +124,7 @@ lmmc_status_t lmmc_rng_clone(const lmmc_rng_t* src, lmmc_rng_t** out_rng) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
-    copy = (lmmc_rng_t*)lmmc_alloc(sizeof(lmmc_rng_t));
+    copy = (lmmc_rng_t*)lmmc_memory_alloc(sizeof(lmmc_rng_t));
     if (copy == NULL) {
         *out_rng = NULL;
         return LMMC_STATUS_ALLOCATION_FAILED;
@@ -233,9 +215,6 @@ uint64_t lmmc_rng_next_u64(lmmc_rng_t* rng) {
 }
 
 
-static inline double u64_to_double01(uint64_t x) {
-    return (double)(x >> 11) * (1.0 / 9007199254740992.0);
-}
 
 
 lmmc_status_t lmmc_rng_uniform(
@@ -255,129 +234,6 @@ lmmc_status_t lmmc_rng_uniform(
 
     u = u64_to_double01(xoshiro256ss_next(rng->state));
     *out_value = fma(b, u, a * (1.0 - u));
-    return LMMC_STATUS_OK;
-}
-
-/**
- * Ziggurat normal sampler (256 rectangles)
- *
- * Reference: Marsaglia & Tsang, "The Ziggurat Method for
- * Generating Random Variables", JSS 2000.
- *
- * Tables are built for the right half of the standard normal
- * (x >= 0). The sampler generates |x| and applies a random sign.
- *
- * Table layout:
- *   zig_xtab[0] = v/f(r)  (width of base strip including tail)
- *   zig_xtab[1] = r       (tail cutoff)
- *   zig_xtab[i] for i=2..255: decreasing x-coordinates
- *   zig_xtab[256] = 0     (peak of distribution)
- *
- * For 256 rectangles:
- *   r = 3.6541528853610088
- *   v = 0.00492867323399 (area of each rectangle in the half-normal)
- */
-
-#define ZIG_N 256
-#define ZIG_R 3.6541528853610088
-#define ZIG_V 0.00492867323399
-
-static const double zig_xtab[ZIG_N + 1] = {
-#include "ziggurat_table.inc"
-};
-static inline double zig_pdf(double x) {
-    return exp(-0.5 * x * x);
-}
-
-
-/**
- * @brief Marsaglia's exact tail algorithm.
- * Samples from the tail |x| > r of the standard normal.
- */
-static double zig_sample_tail(uint64_t* state) {
-    double x, y, u1, u2;
-    for (;;) {
-        do {
-            u1 = u64_to_double01(xoshiro256ss_next(state));
-        } while (u1 == 0.0);
-        do {
-            u2 = u64_to_double01(xoshiro256ss_next(state));
-        } while (u2 == 0.0);
-
-        x = -log(u1) / ZIG_R;
-        y = -log(u2);
-
-        if (2.0 * y >= x * x) {
-            return x + ZIG_R;
-        }
-    }
-}
-
-/**
- * @brief Ziggurat standard normal sampler (256 rectangles).
- *
- * The tables are built for the right half of the normal (x >= 0).
- * We generate |x| from the half-normal and then apply a random sign.
- */
-static double ziggurat_rnor(uint64_t* state) {
-    uint64_t u, u2;
-    int i, sign;
-    double x;
-
-
-    for (;;) {
-        u = xoshiro256ss_next(state);
-        i = (int)(u & 0xFF);  /* layer index: 0..255 */
-        sign = (u & 0x100) ? -1 : 1;  /* bit 8 for sign */
-
-        /* Generate uniform x in [0, xtab[i]) using a fresh random number */
-        u2 = xoshiro256ss_next(state);
-        x = u64_to_double01(u2) * zig_xtab[i];
-
-        /* Fast accept: x < xtab[i+1] */
-        if (x < zig_xtab[i + 1]) {
-            return sign * x;
-        }
-
-        /* Layer 0 is special: it includes the tail */
-        if (i == 0) {
-            /* x is in [xtab[1], xtab[0]). Check if in rectangular part or tail */
-            if (x < zig_xtab[1]) {
-                return sign * x;
-            }
-            /* Need tail sample */
-            double tail = zig_sample_tail(state);
-            return sign * tail;
-        }
-
-        /* Wedge test: accept with probability (f(x) - f(xtab[i])) / (f(xtab[i+1]) - f(xtab[i])) */
-        {
-            double f_x = zig_pdf(x);
-            double f_outer = zig_pdf(zig_xtab[i]);     /* f at outer edge (smaller f value) */
-            double f_inner = zig_pdf(zig_xtab[i + 1]); /* f at inner edge (larger f value) */
-            double u_wedge = u64_to_double01(xoshiro256ss_next(state));
-
-            if (u_wedge * (f_inner - f_outer) < (f_x - f_outer)) {
-                return sign * x;
-            }
-        }
-    }
-}
-
-lmmc_status_t lmmc_rng_normal(
-    lmmc_rng_t* rng,
-    lmmc_real_t mean,
-    lmmc_real_t stddev,
-    lmmc_real_t* out_value)
-{
-    if (rng == NULL || out_value == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (!isfinite(mean) || !isfinite(stddev) || stddev <= 0.0) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
-    *out_value = mean + stddev * ziggurat_rnor(rng->state);
     return LMMC_STATUS_OK;
 }
 
@@ -451,7 +307,7 @@ lmmc_status_t lmmc_rng_shuffle(
     }
 
     arr = (unsigned char*)array;
-    tmp = (unsigned char*)lmmc_alloc(elem_size);
+    tmp = (unsigned char*)lmmc_memory_alloc(elem_size);
     if (tmp == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
@@ -466,419 +322,7 @@ lmmc_status_t lmmc_rng_shuffle(
         }
     }
 
-    lmmc_free(tmp);
-    return LMMC_STATUS_OK;
-}
-
-/**
- * @brief Internal: generate standard normal using Ziggurat.
- */
-static inline double rng_std_normal(uint64_t* state) {
-    return ziggurat_rnor(state);
-}
-
-lmmc_status_t lmmc_rng_gamma(
-    lmmc_rng_t* rng,
-    lmmc_real_t shape,
-    lmmc_real_t scale,
-    lmmc_real_t* out)
-{
-    double d, c, x, v, u;
-
-    if (rng == NULL || out == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (!isfinite(shape) || !isfinite(scale) ||
-        shape <= 0.0 || scale <= 0.0) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
-    /* For shape < 1, use: Gamma(shape) = Gamma(shape+1) * U^(1/shape) */
-    if (shape < 1.0) {
-        lmmc_real_t g;
-        lmmc_status_t st = lmmc_rng_gamma(rng, shape + 1.0, 1.0, &g);
-        if (st != LMMC_STATUS_OK) return st;
-
-        u = u64_to_double01(xoshiro256ss_next(rng->state));
-        while (u == 0.0) {
-            u = u64_to_double01(xoshiro256ss_next(rng->state));
-        }
-        *out = scale * g * pow(u, 1.0 / shape);
-        return LMMC_STATUS_OK;
-    }
-
-    /* Marsaglia-Tsang method for shape >= 1 */
-    d = shape - 1.0 / 3.0;
-    c = 1.0 / sqrt(9.0 * d);
-
-    for (;;) {
-        do {
-            x = rng_std_normal(rng->state);
-            v = 1.0 + c * x;
-        } while (v <= 0.0);
-
-        v = v * v * v;
-        u = u64_to_double01(xoshiro256ss_next(rng->state));
-
-        /* Squeeze test */
-        if (u < 1.0 - 0.0331 * (x * x) * (x * x)) {
-            *out = scale * d * v;
-            return LMMC_STATUS_OK;
-        }
-
-        /* Full acceptance check */
-        if (log(u) < 0.5 * x * x + d * (1.0 - v + log(v))) {
-            *out = scale * d * v;
-            return LMMC_STATUS_OK;
-        }
-    }
-}
-
-lmmc_status_t lmmc_rng_beta(
-    lmmc_rng_t* rng,
-    lmmc_real_t alpha,
-    lmmc_real_t beta_param,
-    lmmc_real_t* out)
-{
-    lmmc_real_t x, y;
-    lmmc_status_t st;
-
-    if (rng == NULL || out == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (!isfinite(alpha) || !isfinite(beta_param) ||
-        alpha <= 0.0 || beta_param <= 0.0) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
-    st = lmmc_rng_gamma(rng, alpha, 1.0, &x);
-    if (st != LMMC_STATUS_OK) return st;
-
-    st = lmmc_rng_gamma(rng, beta_param, 1.0, &y);
-    if (st != LMMC_STATUS_OK) return st;
-
-    *out = x / (x + y);
-    return LMMC_STATUS_OK;
-}
-
-lmmc_status_t lmmc_rng_chi_squared(
-    lmmc_rng_t* rng,
-    lmmc_real_t df,
-    lmmc_real_t* out)
-{
-    if (rng == NULL || out == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (!isfinite(df) || df <= 0.0) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
-    return lmmc_rng_gamma(rng, df / 2.0, 2.0, out);
-}
-
-lmmc_status_t lmmc_rng_student_t(
-    lmmc_rng_t* rng,
-    lmmc_real_t df,
-    lmmc_real_t* out)
-{
-    lmmc_real_t z, chi2;
-    lmmc_status_t st;
-
-    if (rng == NULL || out == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (!isfinite(df) || df <= 0.0) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
-    z = rng_std_normal(rng->state);
-
-    st = lmmc_rng_chi_squared(rng, df, &chi2);
-    if (st != LMMC_STATUS_OK) return st;
-
-    *out = z / sqrt(chi2 / df);
-    return LMMC_STATUS_OK;
-}
-
-lmmc_status_t lmmc_rng_f(
-    lmmc_rng_t* rng,
-    lmmc_real_t df1,
-    lmmc_real_t df2,
-    lmmc_real_t* out)
-{
-    lmmc_real_t chi1, chi2;
-    lmmc_status_t st;
-
-    if (rng == NULL || out == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (!isfinite(df1) || !isfinite(df2) ||
-        df1 <= 0.0 || df2 <= 0.0) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
-    st = lmmc_rng_chi_squared(rng, df1, &chi1);
-    if (st != LMMC_STATUS_OK) return st;
-
-    st = lmmc_rng_chi_squared(rng, df2, &chi2);
-    if (st != LMMC_STATUS_OK) return st;
-
-    *out = (chi1 / df1) / (chi2 / df2);
-    return LMMC_STATUS_OK;
-}
-
-
-/**
- * Poisson distribution
- * - Inversion for lambda < 10
- * - PTRD (Hörmann) for lambda >= 10
- */
-
-/**
- * @brief Poisson inversion method for small lambda.
- */
-static size_t poisson_inversion(uint64_t* state, double lambda) {
-    double L = exp(-lambda);
-    double p = 1.0;
-    size_t k = 0;
-
-    do {
-        k++;
-        p *= u64_to_double01(xoshiro256ss_next(state));
-    } while (p > L);
-
-    return k - 1;
-}
-
-/**
- * @brief PTRD (Transformed Rejection with Decomposition) for Poisson, lambda >= 10.
- * Reference: Hörmann, "The transformed rejection method for generating Poisson
- * random variables", Insurance: Mathematics and Economics 12 (1993) 39-45.
- */
-static size_t poisson_ptrd(uint64_t* state, double lambda) {
-    double smu = sqrt(lambda);
-    double b = 0.931 + 2.53 * smu;
-    double a = -0.059 + 0.02483 * b;
-    double inv_alpha = 1.1239 + 1.1328 / (b - 3.4);
-    double vr = 0.9277 - 3.6224 / (b - 2.0);
-    double us, v, u, k_real;
-    int64_t k;
-
-    for (;;) {
-        v = u64_to_double01(xoshiro256ss_next(state));
-        if (v <= 0.86 * vr) {
-            u = v / vr - 0.43;
-            k_real = floor((2.0 * a / (0.5 - fabs(u)) + b) * u + lambda + 0.445);
-            if (k_real >= 0.0) return (size_t)k_real;
-        }
-
-        if (v >= vr) {
-            u = u64_to_double01(xoshiro256ss_next(state)) - 0.5;
-        } else {
-            u = v / vr - 0.93;
-            u = ((u >= 0.0) ? 0.5 : -0.5) - u;
-            v = u64_to_double01(xoshiro256ss_next(state)) * vr;
-        }
-
-        us = 0.5 - fabs(u);
-        if (us < 0.013 && v > us) continue;
-
-        k_real = floor((2.0 * a / us + b) * u + lambda + 0.445);
-        k = (int64_t)k_real;
-        if (k < 0) continue;
-
-        /* Acceptance: log(v * inv_alpha / (a/(us*us) + b)) <=
-         * -lambda + k*log(lambda) - lgamma(k+1) */
-        v = v * inv_alpha / (a / (us * us) + b);
-        {
-            /* Acceptance: log(v) <= k*log(lambda) - lambda - lgamma(k+1) */
-            double log_accept = (double)k * log(lambda) - lambda - lgamma((double)k + 1.0);
-            if (log(v) <= log_accept) return (size_t)k;
-        }
-    }
-}
-
-lmmc_status_t lmmc_rng_poisson(
-    lmmc_rng_t* rng,
-    lmmc_real_t lambda,
-    size_t* out)
-{
-    if (rng == NULL || out == NULL) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (!isfinite(lambda) || lambda <= 0.0) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-
-    if (lambda < 10.0) {
-        *out = poisson_inversion(rng->state, lambda);
-    } else {
-        *out = poisson_ptrd(rng->state, lambda);
-    }
-
-    return LMMC_STATUS_OK;
-}
-
-
-/**
- * 二项分布。
- * np<30 时使用自底向上的精确逆 CDF, 其余情况使用
- * Kachitvichyanukul-Schmeiser BTPE 变换拒绝法.
- */
-static uint64_t binomial_inversion(uint64_t* state, uint64_t n, double p) {
-    const double q = 1.0 - p;
-    const double qn = exp((double)n * log1p(-p));
-    const double np = (double)n * p;
-    const uint64_t bound = (uint64_t)fmin((double)n, np + 10.0 * sqrt(np * q + 1.0));
-    uint64_t x = 0;
-    double px = qn;
-    double u = u64_to_double01(xoshiro256ss_next(state));
-
-    while (u > px) {
-        ++x;
-        if (x > bound) {
-            x = 0;
-            px = qn;
-            u = u64_to_double01(xoshiro256ss_next(state));
-        } else {
-            u -= px;
-            px = (((double)(n - x + 1) * p) * px) / ((double)x * q);
-        }
-    }
-    return x;
-}
-
-static uint64_t binomial_btpe(uint64_t* state, uint64_t n, double p) {
-    const double r = fmin(p, 1.0 - p);
-    const double q = 1.0 - r;
-    const double fm = (double)n * r + r;
-    const int64_t m = (int64_t)floor(fm);
-    const double p1 = floor(2.195 * sqrt((double)n * r * q) - 4.6 * q) + 0.5;
-    const double xm = (double)m + 0.5;
-    const double xl = xm - p1;
-    const double xr = xm + p1;
-    const double c = 0.134 + 20.5 / (15.3 + (double)m);
-    double a = (fm - xl) / (fm - xl * r);
-    const double laml = a * (1.0 + a / 2.0);
-    double lamr;
-    const double p2 = p1 * (1.0 + 2.0 * c);
-    const double p3 = p2 + c / laml;
-    double p4;
-    const double nrq = (double)n * r * q;
-
-    a = (xr - fm) / (xr * q);
-    lamr = a * (1.0 + a / 2.0);
-    p4 = p3 + c / lamr;
-
-    for (;;) {
-        double u = u64_to_double01(xoshiro256ss_next(state)) * p4;
-        double v = u64_to_double01(xoshiro256ss_next(state));
-        double x;
-        int64_t y;
-        uint64_t k;
-
-        if (u <= p1) {
-            uint64_t result;
-            y = (int64_t)floor(xm - p1 * v + u);
-            result = (uint64_t)y;
-            return p > 0.5 ? n - result : result;
-        } else if (u <= p2) {
-            x = xl + (u - p1) / c;
-            v = v * c + 1.0 - fabs((double)m - x + 0.5) / p1;
-            if (v > 1.0) continue;
-            y = (int64_t)floor(x);
-        } else if (u <= p3) {
-            if (v == 0.0) continue;
-            y = (int64_t)floor(xl + log(v) / laml);
-            if (y < 0) continue;
-            v = v * (u - p2) * laml;
-        } else {
-            if (v == 0.0) continue;
-            y = (int64_t)floor(xr - log(v) / lamr);
-            if (y < 0 || (uint64_t)y > n) continue;
-            v = v * (u - p3) * lamr;
-        }
-
-        k = (uint64_t)llabs(y - m);
-        if (k <= 20 || (double)k >= nrq / 2.0 - 1.0) {
-            const double s = r / q;
-            const double aa = s * ((double)n + 1.0);
-            double f = 1.0;
-            int64_t i;
-            if (m < y) {
-                for (i = m + 1; i <= y; ++i) f *= aa / (double)i - s;
-            } else if (m > y) {
-                for (i = y + 1; i <= m; ++i) f /= aa / (double)i - s;
-            }
-            if (v > f) continue;
-        } else {
-            const double kd = (double)k;
-            const double rho = (kd / nrq) *
-                ((kd * (kd / 3.0 + 0.625) + 1.0 / 6.0) / nrq + 0.5);
-            const double t = -kd * kd / (2.0 * nrq);
-            const double logv = log(v);
-            if (logv > t - rho) {
-                const double x1 = (double)y + 1.0;
-                const double f1 = (double)m + 1.0;
-                const double z = (double)n + 1.0 - (double)m;
-                const double w = (double)n - (double)y + 1.0;
-                const double x2 = x1 * x1, f2 = f1 * f1, z2 = z * z, w2 = w * w;
-                double accept;
-                if (logv > t + rho) continue;
-                accept = xm * log(f1 / x1) + ((double)n - (double)m + 0.5) * log(z / w)
-                       + ((double)y - (double)m) * log(w * r / (x1 * q))
-                       + (13860.0 - (462.0 - (132.0 - (99.0 - 140.0 / f2) / f2) / f2) / f2) / f1 / 166320.0
-                       + (13860.0 - (462.0 - (132.0 - (99.0 - 140.0 / z2) / z2) / z2) / z2) / z / 166320.0
-                       - (13860.0 - (462.0 - (132.0 - (99.0 - 140.0 / x2) / x2) / x2) / x2) / x1 / 166320.0
-                       - (13860.0 - (462.0 - (132.0 - (99.0 - 140.0 / w2) / w2) / w2) / w2) / w / 166320.0;
-                if (logv > accept) continue;
-            }
-        }
-        {
-            uint64_t result = (uint64_t)y;
-            return p > 0.5 ? n - result : result;
-        }
-    }
-}
-
-static uint64_t binomial_chunk(uint64_t* state, uint64_t n, double p) {
-    const double working_p = p <= 0.5 ? p : 1.0 - p;
-    uint64_t value;
-    if ((double)n * working_p < 30.0) {
-        value = binomial_inversion(state, n, working_p);
-        return p <= 0.5 ? value : n - value;
-    }
-    return binomial_btpe(state, n, p);
-}
-
-lmmc_status_t lmmc_rng_binomial(
-    lmmc_rng_t* rng,
-    size_t n,
-    lmmc_real_t p,
-    size_t* out
-) {
-    const uint64_t max_chunk = (UINT64_C(1) << 53) - UINT64_C(1);
-    uint64_t remaining;
-    uint64_t total = 0;
-    if (rng == NULL || out == NULL || !isfinite(p) || p < 0.0 || p > 1.0) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (n == 0 || p == 0.0) {
-        *out = 0;
-        return LMMC_STATUS_OK;
-    }
-    if (p == 1.0) {
-        *out = n;
-        return LMMC_STATUS_OK;
-    }
-
-    remaining = (uint64_t)n;
-    while (remaining != 0) {
-        uint64_t chunk = remaining > max_chunk ? max_chunk : remaining;
-        total += binomial_chunk(rng->state, chunk, p);
-        remaining -= chunk;
-    }
-    *out = (size_t)total;
+    lmmc_memory_free(tmp);
     return LMMC_STATUS_OK;
 }
 

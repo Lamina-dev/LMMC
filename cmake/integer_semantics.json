@@ -1,0 +1,1412 @@
+{
+  "schema_version": 1,
+  "reviews": [
+    {
+      "fingerprint": "0c3a5a61c6b9519a6924cd395010bbc599d6b09870538673effed00ffe4af10b",
+      "path": "example/example_lmmp_ext.c",
+      "normalized_line": "[\"(\",\"uint64_t\",\")\",\"strong_values\",\"[\",\"0\",\"]\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Example prints a single LMMP random limb in [0, 2^64-1], not a whole arbitrary-precision number. LMMP/include/lmmp/lmmp.h defines mp_limb_t as uint64_t; lmmp_random_, lmmp_seed_random_ and lmmp_strong_random_ write limb arrays, so these PRIu64 conversions preserve the selected word exactly."
+    },
+    {
+      "fingerprint": "ce1084500082af3aae68eb0ebd83d4e846cb6186e45ea7a7409c9c69bd278eeb",
+      "path": "example/example_lmmp_ext.c",
+      "normalized_line": "[\"h_xx\",\"=\",\"lmmp_xxhash_\",\"(\",\"words\",\",\",\"4\",\",\",\"(\",\"const\",\"uint64_t\",\"[\",\"1\",\"]\",\")\",\"{\",\"UINT64_C\",\"(\",\"0x9e3779b97f4a7c15\",\")\",\"}\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The compound one-element uint64_t array is the xxHash 64-bit seed/key for hashing four backend words; its fixed 0x9e3779b97f4a7c15 value is hash configuration, not a mathematical coefficient."
+    },
+    {
+      "fingerprint": "4927164221ac0431a9f632ace5e9c244d1e853898406678bb6143201b92a56e8",
+      "path": "example/example_lmmp_ext.c",
+      "normalized_line": "[\"printf\",\"(\",\"PRIu64\",\",\",\"(\",\"uint64_t\",\")\",\"lmmp_gcd_11_\",\"(\",\"48\",\",\",\"18\",\")\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "The backend single-word gcd example uses fixed operands 48 and 18, so the result is 6 <= 18 and fits uint64_t exactly for PRIu64 output."
+    },
+    {
+      "fingerprint": "fce03aa85ba85594ad4d9e9bbfd4311d7d81038225c3661ac433d552c9356e10",
+      "path": "example/example_lmmp_ext.c",
+      "normalized_line": "[\"printf\",\"(\",\"PRIu64\",\",\",\"(\",\"uint64_t\",\")\",\"lmmp_powmod_ulong_odd_\",\"(\",\"7\",\",\",\"128\",\",\",\"13\",\")\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "The backend single-word modular-power example uses 7^128 mod 13; the result is a residue in [0,12] (3), not storage for 7^128. Conversion to uint64_t for printing is exact."
+    },
+    {
+      "fingerprint": "d3ba2c9e2def05625dac09f416bf03e536c7c7f892aa0a0a193b2f5f50c38611",
+      "path": "example/example_lmmp_ext.c",
+      "normalized_line": "[\"printf\",\"(\",\"PRIu64\",\",\",\"(\",\"uint64_t\",\")\",\"rnd\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Example prints a single LMMP random limb in [0, 2^64-1], not a whole arbitrary-precision number. LMMP/include/lmmp/lmmp.h defines mp_limb_t as uint64_t; lmmp_random_, lmmp_seed_random_ and lmmp_strong_random_ write limb arrays, so these PRIu64 conversions preserve the selected word exactly."
+    },
+    {
+      "fingerprint": "b85e545f1a41fdb1e696151da2cac508d0997019c51d326e8a4de79bd26e9d38",
+      "path": "example/example_lmmp_ext.c",
+      "normalized_line": "[\"uint64_t\",\"h_sip\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "Example hash output is a 64-bit xxHash/SipHash fingerprint of words[4]; backend APIs return uint64_t and the result is printed, never treated as an exact mathematical value."
+    },
+    {
+      "fingerprint": "584e9f4361c18ca9ea90f1cb545eee9c8437183a104bc98b5e2187db5bfe91b8",
+      "path": "example/example_lmmp_ext.c",
+      "normalized_line": "[\"uint64_t\",\"h_xx\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "Example hash output is a 64-bit xxHash/SipHash fingerprint of words[4]; backend APIs return uint64_t and the result is printed, never treated as an exact mathematical value."
+    },
+    {
+      "fingerprint": "446afbfeb0c98f19b6cfb14f5793388be9ebb4b0aa606ccd370628ed9fd2f1b3",
+      "path": "example/example_lmmp_ext.c",
+      "normalized_line": "[\"uint64_t\",\"sip_key\",\"[\",\"2\",\"]\",\"=\",\"{\",\"UINT64_C\",\"(\",\"0x0123456789abcdef\",\")\",\",\",\"UINT64_C\",\"(\",\"0xfedcba9876543210\",\")\",\"}\",\";\"]",
+      "category": "machine",
+      "rationale": "Two fixed 64-bit words form the SipHash-2-4 128-bit key passed to lmmp_siphash24_; each hexadecimal word lies in [0,UINT64_MAX] and represents key bits, not a symbolic integer."
+    },
+    {
+      "fingerprint": "05708b57f52a42d0f41909cd0ffc83919a75626ce8604c612d7adf07f20acba2",
+      "path": "example/example_lmmp_ext.c",
+      "normalized_line": "[\"uint64_t\",\"words\",\"[\",\"4\",\"]\",\"=\",\"{\",\"11\",\",\",\"22\",\",\",\"33\",\",\",\"44\",\"}\",\";\"]",
+      "category": "machine",
+      "rationale": "The four values 11,22,33,44 are native-word input payload to lmmp_xxhash_ and lmmp_siphash24_, whose mp_srcptr contract is a uint64_t limb array; no algebraic computation stores an unbounded integer here."
+    },
+    {
+      "fingerprint": "11724a8cfca17c6588c2cd985dcc1d565faec0d9649d304b776da1c10964ec8f",
+      "path": "include/lmmc/random.h",
+      "normalized_line": "[\"int64_t\",\"*\",\"out\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "bc9b4b4b226d6353ee914a2e4727a64c78e92b291558b5519cb832ba5317bfcf",
+      "path": "include/lmmc/random.h",
+      "normalized_line": "[\"int64_t\",\"hi\",\",\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "06e06d104a041145fc9a04d1b395b0d26119b8854e16b0cd6ceff3dc1cdadbaf",
+      "path": "include/lmmc/random.h",
+      "normalized_line": "[\"int64_t\",\"lo\",\",\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "f2be3e00b3743fa65a00498b501da05324ac6213a635f92ca7b8c93c8db7a401",
+      "path": "include/lmmc/random.h",
+      "normalized_line": "[\"lmmc_status_t\",\"lmmc_rng_seed\",\"(\",\"lmmc_rng_t\",\"*\",\"rng\",\",\",\"uint64_t\",\"seed\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The seed parameter is a 64-bit RNG initialization word in [0,UINT64_MAX]; lmmc_rng_seed expands it with SplitMix64 into four xoshiro256** state words. Default and stdlib wrappers preserve the same seed-state contract."
+    },
+    {
+      "fingerprint": "173890b86e0e8c9400470738e907f8165336ca0d5d7d9d25ba81a55b50075cd4",
+      "path": "include/lmmc/random.h",
+      "normalized_line": "[\"uint64_t\",\"lmmc_rng_next_u64\",\"(\",\"lmmc_rng_t\",\"*\",\"rng\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. lmmc_rng_next_u64 returns that word directly (or zero for a null handle)."
+    },
+    {
+      "fingerprint": "534e71e9aceaed2f6c3e43fe2c8d1556d63abc50037ef716880cf9330788883d",
+      "path": "include/lmmc/stdlib_linalg.h",
+      "normalized_line": "[\"int64_t\",\"exponent\",\",\"]",
+      "category": "bounded-kernel",
+      "rationale": "The numerical matrix-power API accepts exponent in [-2^63, 2^63-1], not an unbounded symbolic exponent. Negative exponents first invert the finite square matrix; -(exponent+1) is representable and the subsequent unsigned +1 gives magnitude <= 2^63 even at INT64_MIN. The nonnegative branch casts only [0, INT64_MAX]; unsigned right shifts terminate after at most 64 iterations. Matrix arithmetic remains floating-point and products are checked finite."
+    },
+    {
+      "fingerprint": "b34ab94fd815f7701ffe0a2c97684eb0b9a979430f8206ec9a9a8ae5baa200b0",
+      "path": "include/lmmc/stdlib_sets.h",
+      "normalized_line": "[\"lmmc_status_t\",\"lmmc_std_bool_hash\",\"(\",\"int\",\"value\",\",\",\"uint64_t\",\"*\",\"out\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "Boolean key hash output mixes only validated 0/1 using lmmc_std_hash_mix64. The uint64_t is a 64-bit table-key fingerprint, not the Boolean value or an exact arithmetic result."
+    },
+    {
+      "fingerprint": "ec7dc5aa4b4a9ea7aad8d2ac84848a9718b39669b6ab93f0d531bf2fcf2e9818",
+      "path": "include/lmmc/stdlib_sets.h",
+      "normalized_line": "[\"lmmc_status_t\",\"lmmc_std_num_hash\",\"(\",\"lmmc_real_t\",\"value\",\",\",\"uint64_t\",\"*\",\"out\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "Numeric key hashing rejects nonfinite values, canonicalizes signed zero, copies the double representation into 64-bit bits, and applies modulo-2^64 hash mixing. The returned word is a table-key fingerprint, not an integer approximation of the number."
+    },
+    {
+      "fingerprint": "7a459b41777fd2931d5bcb97f68c8c02e4ef4982defa7a6c8bc086693c5a6fc5",
+      "path": "include/lmmc/stdlib_sets.h",
+      "normalized_line": "[\"lmmc_status_t\",\"lmmc_std_text_hash\",\"(\",\"const\",\"char\",\"*\",\"value\",\",\",\"uint64_t\",\"*\",\"out\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "Text key hash output is the 64-bit byte-hash/mix fingerprint of a nonnull string. Repeated xor and unsigned multiplication intentionally wrap modulo 2^64; text values themselves are not encoded as mathematical integers."
+    },
+    {
+      "fingerprint": "71aa7fcdf026dc367fcd3d6510b18347000c97d95dbf4d83a2ed8e5d96ae3387",
+      "path": "include/lmmc/stdlib_sets.h",
+      "normalized_line": "[\"uint64_t\",\"*\",\"out\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "Complex key hashing checks finite real/imaginary components, hashes their canonicalized double bit representations separately, then combines with xor, shifts and addition modulo 2^64. These words are hash fingerprints, not storage for the complex components."
+    },
+    {
+      "fingerprint": "5f911abc9346987381b9b02d6166cb598f51aef5d0a42f67ecc1ca23a4aa5fef",
+      "path": "include/lmmc/stdlib_stats.h",
+      "normalized_line": "[\"int64_t\",\"*\",\"out\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "c13e74595dc2c767586e16675835d8c8260a59c7d5ab6b01b052ae8493849ef0",
+      "path": "include/lmmc/stdlib_stats.h",
+      "normalized_line": "[\"int64_t\",\"hi\",\",\",\"int64_t\",\"*\",\"out\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "e87552ad6a6628c035927c881a2143174984f0ca719062155ce981da41b9f018",
+      "path": "include/lmmc/stdlib_stats.h",
+      "normalized_line": "[\"int64_t\",\"hi\",\",\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "b367af2606cf4ee33184d8e247b71a2e5af7a3bfe46c79c861867d427f9290bb",
+      "path": "include/lmmc/stdlib_stats.h",
+      "normalized_line": "[\"lmmc_status_t\",\"lmmc_std_random_default_randint\",\"(\",\"int64_t\",\"lo\",\",\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "d44e2d6ec63a7f260f1688b27c1816f0f98131e8086658aa9b3d08e2a6d55222",
+      "path": "include/lmmc/stdlib_stats.h",
+      "normalized_line": "[\"lmmc_status_t\",\"lmmc_std_random_default_seed\",\"(\",\"uint64_t\",\"seed\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The seed parameter is a 64-bit RNG initialization word in [0,UINT64_MAX]; lmmc_rng_seed expands it with SplitMix64 into four xoshiro256** state words. Default and stdlib wrappers preserve the same seed-state contract."
+    },
+    {
+      "fingerprint": "4ac9077a511a3ed9f6b0d981efa21175162127bd302e3cf6a13dfb7a4ef19e8e",
+      "path": "include/lmmc/stdlib_stats.h",
+      "normalized_line": "[\"lmmc_status_t\",\"lmmc_std_random_randint\",\"(\",\"lmmc_rng_t\",\"*\",\"rng\",\",\",\"int64_t\",\"lo\",\",\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "2d70dfc612d34a4d0a1bc7513413886e19882adb20d78be14805ad53930be3fd",
+      "path": "include/lmmc/stdlib_stats.h",
+      "normalized_line": "[\"lmmc_status_t\",\"lmmc_std_random_seed\",\"(\",\"lmmc_rng_t\",\"*\",\"rng\",\",\",\"uint64_t\",\"seed\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The seed parameter is a 64-bit RNG initialization word in [0,UINT64_MAX]; lmmc_rng_seed expands it with SplitMix64 into four xoshiro256** state words. Default and stdlib wrappers preserve the same seed-state contract."
+    },
+    {
+      "fingerprint": "a9c7f6a008223da3f1cdef60525798b0fe40d9c8d3c47b4daf79639ecaf710fd",
+      "path": "src/random.c",
+      "normalized_line": "[\"*\",\"out\",\"=\",\"(\",\"int64_t\",\")\",\"bits\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "23186eebe2f077396957f6b618e3a4d171fa9e0d92890127703d59187cb5be5b",
+      "path": "src/random.c",
+      "normalized_line": "[\"*\",\"out\",\"=\",\"INT64_MIN\",\"+\",\"(\",\"int64_t\",\")\",\"(\",\"bits\",\"-\",\"(\",\"UINT64_C\",\"(\",\"1\",\")\",\"<\",\"<\",\"63\",\")\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "ba7e30dd4afcd9e251ad38df4102598d73a0f10e21c5135992cf2410085f1192",
+      "path": "src/random.c",
+      "normalized_line": "[\"bits\",\"=\",\"(\",\"uint64_t\",\")\",\"lo\",\"+\",\"offset\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "f92aebfa35934f324b87b48ed7fcb66a2e6d5ed7a6c208f6a400bd9bdc50dba3",
+      "path": "src/random.c",
+      "normalized_line": "[\"const\",\"uint64_t\",\"threshold\",\"=\",\"(\",\"uint64_t\",\")\",\"(\",\"-\",\"bound\",\")\",\"%\",\"bound\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "rng_bounded_u64 accepts nonzero bound in [1,UINT64_MAX] and returns [0,bound-1]. Unsigned -bound wraps modulo 2^64; threshold=(-bound)%bound removes the incomplete residue prefix, drawing until value>=threshold before value%bound. Callers supply nonzero shuffle size or a nonzero signed-interval span; the state pointer is xoshiro state."
+    },
+    {
+      "fingerprint": "329d141792a18940bff4fccdc9963d00ffb6de966c5e5cf44122a1ca11050ff4",
+      "path": "src/random.c",
+      "normalized_line": "[\"if\",\"(\",\"bits\",\"<\",\"=\",\"(\",\"uint64_t\",\")\",\"INT64_MAX\",\")\",\"{\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "55a15742dc227fc7fb93b734ecafc0b4593f94b9ad57ab12702db4bdeb62119a",
+      "path": "src/random.c",
+      "normalized_line": "[\"int64_t\",\"*\",\"out\",\")\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "9ee421afe589400529b08892ee95223779b94d82c100df5cb883c92f95c93d8d",
+      "path": "src/random.c",
+      "normalized_line": "[\"int64_t\",\"hi\",\",\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "da29d845f4ea267e1f794271501612bf9ee34bf1f5c263ee61dd3ef465ad48c2",
+      "path": "src/random.c",
+      "normalized_line": "[\"int64_t\",\"lo\",\",\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "2fe61d1d63e4e25a27fb8582aeec926eb8179052b9760cc2b7ff0e555f1a9492",
+      "path": "src/random.c",
+      "normalized_line": "[\"j\",\"=\",\"(\",\"size_t\",\")\",\"rng_bounded_u64\",\"(\",\"rng\",\"-\",\">\",\"state\",\",\",\"(\",\"uint64_t\",\")\",\"i\",\"+\",\"UINT64_C\",\"(\",\"1\",\")\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "Fisher-Yates chooses an array index j in [0,i]. Its loop begins at count-1 and decrements while i>0, so 1<=i<=SIZE_MAX-1 and on supported <=64-bit size_t targets the exact uint64_t bound i+1 is nonzero and <=UINT64_MAX. rng_bounded_u64 rejection reduction preserves the index interval."
+    },
+    {
+      "fingerprint": "ea973c3e053169610434072abdbaeae0110a0877f7787caf72fbe42110ede89b",
+      "path": "src/random.c",
+      "normalized_line": "[\"lmmc_status_t\",\"lmmc_rng_seed\",\"(\",\"lmmc_rng_t\",\"*\",\"rng\",\",\",\"uint64_t\",\"seed\",\")\",\"{\"]",
+      "category": "machine",
+      "rationale": "The seed parameter is a 64-bit RNG initialization word in [0,UINT64_MAX]; lmmc_rng_seed expands it with SplitMix64 into four xoshiro256** state words. Default and stdlib wrappers preserve the same seed-state contract."
+    },
+    {
+      "fingerprint": "1763c3cf64cb2568d0c6bbcc34a4eadfe8625c52b9630a0bdb1ba1e8984bd4fd",
+      "path": "src/random.c",
+      "normalized_line": "[\"span\",\"=\",\"(\",\"uint64_t\",\")\",\"hi\",\"-\",\"(\",\"uint64_t\",\")\",\"lo\",\"+\",\"UINT64_C\",\"(\",\"1\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "eed592236eebd37374faa7ab9bbd2b46505a726e131c6aee9db0682f879fc4f4",
+      "path": "src/random.c",
+      "normalized_line": "[\"static\",\"_Atomic\",\"uint64_t\",\"seed_counter\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "The atomic seed_counter counts default RNG initializations and is fetched/incremented only to diversify seed entropy. Its unsigned wrap is defined; it is not a mathematical result or a uniqueness proof."
+    },
+    {
+      "fingerprint": "c7eacaebc58e4ab40826d775132bb71d2f672d1e301dcfe27de67a13f0417f6c",
+      "path": "src/random.c",
+      "normalized_line": "[\"static\",\"const\",\"uint64_t\",\"JUMP_POLY\",\"[\",\"4\",\"]\",\"=\",\"{\"]",
+      "category": "machine",
+      "rationale": "Four 64-bit masks encode the xoshiro256** jump polynomial for advancing state by 2^128 steps. rng_apply_jump_poly visits four words and bit positions 0..63 and xor-accumulates state; it does not store the integer 2^128."
+    },
+    {
+      "fingerprint": "1447a5a6db7fb7441c03e59cbec87bbbd15a2af41948bcf9556d907bab6dde82",
+      "path": "src/random.c",
+      "normalized_line": "[\"static\",\"const\",\"uint64_t\",\"LONG_JUMP_POLY\",\"[\",\"4\",\"]\",\"=\",\"{\"]",
+      "category": "machine",
+      "rationale": "Four 64-bit masks encode the xoshiro256** long-jump polynomial for advancing state by 2^192 steps. They are consumed one bit at a time over positions 0..63, not used to store the integer step distance."
+    },
+    {
+      "fingerprint": "db7e5827f84368fa29ab6d96918a76e67915429b07ebe3b8705e603b9fd65ed2",
+      "path": "src/random.c",
+      "normalized_line": "[\"static\",\"inline\",\"uint64_t\",\"splitmix64_next\",\"(\",\"uint64_t\",\"*\",\"state\",\")\",\"{\"]",
+      "category": "machine",
+      "rationale": "SplitMix64 seeding state and its local z advance/add/xor/multiply modulo 2^64 using fixed 64-bit constants. Four such outputs initialize xoshiro state; unsigned wrap is the specified seed-mixing operation."
+    },
+    {
+      "fingerprint": "32b3f05bc388ea89212cad43e7ad89c7f100820a8e8b73a50a5a3b4232d1183b",
+      "path": "src/random.c",
+      "normalized_line": "[\"static\",\"uint64_t\",\"generate_default_seed\",\"(\",\"void\",\")\",\"{\"]",
+      "category": "machine",
+      "rationale": "Default seed generation mixes a timestamp, a uintptr_t stack-address entropy word and an atomic initialization counter into SplitMix64. The uint64_t conversions and xor produce seed bits, not an exact timestamp computation, pointer dereference or mathematical integer."
+    },
+    {
+      "fingerprint": "7500fe19667e1dd9c5b9dfbc585395097d0b9460bc36ef5004b7a525491494a7",
+      "path": "src/random.c",
+      "normalized_line": "[\"static\",\"uint64_t\",\"rng_bounded_u64\",\"(\",\"uint64_t\",\"*\",\"state\",\",\",\"uint64_t\",\"bound\",\")\",\"{\"]",
+      "category": "bounded-kernel",
+      "rationale": "rng_bounded_u64 accepts nonzero bound in [1,UINT64_MAX] and returns [0,bound-1]. Unsigned -bound wraps modulo 2^64; threshold=(-bound)%bound removes the incomplete residue prefix, drawing until value>=threshold before value%bound. Callers supply nonzero shuffle size or a nonzero signed-interval span; the state pointer is xoshiro state."
+    },
+    {
+      "fingerprint": "de7f82d829b81d424f77a9d969c125127e0b5a0cad03e1796b2c53c9b704e10e",
+      "path": "src/random.c",
+      "normalized_line": "[\"static\",\"void\",\"rng_apply_jump_poly\",\"(\",\"uint64_t\",\"*\",\"s\",\",\",\"const\",\"uint64_t\",\"*\",\"poly\",\")\",\"{\"]",
+      "category": "machine",
+      "rationale": "Jump application borrows four uint64_t RNG state words and four polynomial masks, then xor-accumulates s0..s3 over four words and 64 bit positions. All storage is finite RNG transition state, with bit shifts restricted to 0..63."
+    },
+    {
+      "fingerprint": "262d55b49e04f0da8a831984648fac3befc34fc5347079bfa39eb86821a6c21d",
+      "path": "src/random.c",
+      "normalized_line": "[\"uint64_t\",\"addr\",\"=\",\"(\",\"uint64_t\",\")\",\"(\",\"uintptr_t\",\")\",\"&\",\"stack_var\",\";\"]",
+      "category": "machine",
+      "rationale": "Default seed generation mixes a timestamp, a uintptr_t stack-address entropy word and an atomic initialization counter into SplitMix64. The uint64_t conversions and xor produce seed bits, not an exact timestamp computation, pointer dereference or mathematical integer."
+    },
+    {
+      "fingerprint": "5acf2c9e02bea3758b310418d25422dd49b5e63802dc1b7ab5d96e359a2811e7",
+      "path": "src/random.c",
+      "normalized_line": "[\"uint64_t\",\"counter\",\"=\",\"atomic_fetch_add\",\"(\",\"&\",\"seed_counter\",\",\",\"1\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The atomic seed_counter counts default RNG initializations and is fetched/incremented only to diversify seed entropy. Its unsigned wrap is defined; it is not a mathematical result or a uniqueness proof."
+    },
+    {
+      "fingerprint": "d1b28cfb546663d02ebedd85641e264e28dbeda7c5a2061d33ae9ea1b55035b7",
+      "path": "src/random.c",
+      "normalized_line": "[\"uint64_t\",\"lmmc_rng_next_u64\",\"(\",\"lmmc_rng_t\",\"*\",\"rng\",\")\",\"{\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. lmmc_rng_next_u64 returns that word directly (or zero for a null handle)."
+    },
+    {
+      "fingerprint": "d0f5ee1619174b3152976c241ea3c2f1c5afe8b1163ae0656cb7632c25967936",
+      "path": "src/random.c",
+      "normalized_line": "[\"uint64_t\",\"mixed\",\"=\",\"t\",\"^\",\"addr\",\"^\",\"counter\",\";\"]",
+      "category": "machine",
+      "rationale": "Default seed generation mixes a timestamp, a uintptr_t stack-address entropy word and an atomic initialization counter into SplitMix64. The uint64_t conversions and xor produce seed bits, not an exact timestamp computation, pointer dereference or mathematical integer."
+    },
+    {
+      "fingerprint": "ccd38f2ccad5d9370607da2e28a33c36d82f8ff51a315eb9196dc47a42cb799c",
+      "path": "src/random.c",
+      "normalized_line": "[\"uint64_t\",\"s0\",\"=\",\"0\",\",\",\"s1\",\"=\",\"0\",\",\",\"s2\",\"=\",\"0\",\",\",\"s3\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "Jump application borrows four uint64_t RNG state words and four polynomial masks, then xor-accumulates s0..s3 over four words and 64 bit positions. All storage is finite RNG transition state, with bit shifts restricted to 0..63."
+    },
+    {
+      "fingerprint": "4356f860d9d981a5abc6efb697acd8f7b88b09bd2a55621000c0e5e61b4e9d16",
+      "path": "src/random.c",
+      "normalized_line": "[\"uint64_t\",\"sm_state\",\";\"]",
+      "category": "machine",
+      "rationale": "SplitMix64 seeding state and its local z advance/add/xor/multiply modulo 2^64 using fixed 64-bit constants. Four such outputs initialize xoshiro state; unsigned wrap is the specified seed-mixing operation."
+    },
+    {
+      "fingerprint": "082353dfaf837cc65d3af6e619f356f261745f03fafb57d0f407e6119c0affa8",
+      "path": "src/random.c",
+      "normalized_line": "[\"uint64_t\",\"span\",\",\",\"offset\",\",\",\"bits\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "cfad69163fb42c732c37ef8508ca480e53c2b72ff99bbd37034b11eacfd0d11d",
+      "path": "src/random.c",
+      "normalized_line": "[\"uint64_t\",\"t\",\"=\",\"(\",\"uint64_t\",\")\",\"time\",\"(\",\"NULL\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "Default seed generation mixes a timestamp, a uintptr_t stack-address entropy word and an atomic initialization counter into SplitMix64. The uint64_t conversions and xor produce seed bits, not an exact timestamp computation, pointer dereference or mathematical integer."
+    },
+    {
+      "fingerprint": "9a352a48279ecf9c0ee23e692637e8b3c8d31b66de49c9bde01440474d7438b8",
+      "path": "src/random.c",
+      "normalized_line": "[\"uint64_t\",\"value\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Within rng_bounded_u64, value is a raw word in [0,2^64-1]. Rejection below (-bound)%bound removes the incomplete residue prefix before value%bound returns a sample in [0,bound-1]; value is a bounded sample, not RNG state."
+    },
+    {
+      "fingerprint": "40b297e5e9352aa4c4e50a7c551a1da38cdff28725a50416430db69ab1084f1b",
+      "path": "src/random.c",
+      "normalized_line": "[\"uint64_t\",\"z\",\"=\",\"(\",\"*\",\"state\",\"+\",\"=\",\"UINT64_C\",\"(\",\"0x9e3779b97f4a7c15\",\")\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "SplitMix64 seeding state and its local z advance/add/xor/multiply modulo 2^64 using fixed 64-bit constants. Four such outputs initialize xoshiro state; unsigned wrap is the specified seed-mixing operation."
+    },
+    {
+      "fingerprint": "5df0f3b44cf9a1e06fa28e8a2f075630e8b5463c749ef6150605dd0c7f1853de",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"const\",\"int64_t\",\"m\",\"=\",\"(\",\"int64_t\",\")\",\"floor\",\"(\",\"fm\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Private binomial BTPE is called only with 1 <= n <= 2^53-1 and n*r >= 30, r=min(p,1-p)<=1/2. Thus nrq>=15, p1>=3.5 and p1<1.1*sqrt(n)+1; the central candidates lie in [0,n]. Tail draws skip v=0 and otherwise v>=2^-53, so abs(log(v))<37. Both tail slopes exceed 2^-53 (positive numerators at least 3 and denominators below 2^54), giving conservative abs(candidate)<2^59 before signed casts. Negative left-tail candidates and right-tail candidates outside [0,n] are rejected. Accepted y and m lie in [0,n], unsigned distance <=n, and the returned y or n-y is in [0,n]."
+    },
+    {
+      "fingerprint": "2f82153037663d5a1fa2ed36bcdb63cd8f4ca11d8f01f441e4a4c1f7d311d24d",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"const\",\"uint64_t\",\"bound\",\"=\",\"(\",\"uint64_t\",\")\",\"fmin\",\"(\",\"(\",\"double\",\")\",\"n\",\",\",\"np\",\"+\",\"10.0\",\"*\",\"sqrt\",\"(\",\"np\",\"*\",\"q\",\"+\",\"1.0\",\")\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Private binomial inversion receives n<=2^53-1, 0<p<=1/2, np<30. Its finite restart bound is floor(min(n,np+10*sqrt(np*(1-p)+1))), in [0,n] and below 86. x starts at zero, increments only up to bound+1, then resets; returned x is in [0,bound] subset [0,n]. n-x+1 is evaluated only with 1<=x<=bound, so unsigned subtraction is safe. The state pointer remains the four-word RNG state."
+    },
+    {
+      "fingerprint": "0793afc464d1365eda76061f636b0accdc1cff8479c44b8aad42c29539257379",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"const\",\"uint64_t\",\"k\",\"=\",\"y\",\">\",\"=\",\"m\",\"?\",\"(\",\"uint64_t\",\")\",\"y\",\"-\",\"(\",\"uint64_t\",\")\",\"m\",\":\",\"(\",\"uint64_t\",\")\",\"m\",\"-\",\"(\",\"uint64_t\",\")\",\"y\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "BTPE binomial chunk parameters and proposal displacement. lmmc_rng_binomial limits each chunk to 2^53-1; m and accepted y are finite count coordinates, and the unsigned difference avoids signed subtraction overflow. The sampler returns a bounded size_t count, not an unbounded symbolic integer."
+    },
+    {
+      "fingerprint": "283f950bebbadd1745c24d26949300eee2bc39b6041bd52a62a46c5abf2ca024",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"const\",\"uint64_t\",\"max_chunk\",\"=\",\"(\",\"UINT64_C\",\"(\",\"1\",\")\",\"<\",\"<\",\"53\",\")\",\"-\",\"UINT64_C\",\"(\",\"1\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "The public binomial trial count is size_t (at most 64 bits on supported targets), converted exactly to uint64_t. Each private call receives min(remaining, 2^53-1); inversion/BTPE return [0,chunk]. Hence remaining stays in [0,n], accumulated total never exceeds processed trials <= original n <= SIZE_MAX, and conversion back to size_t is exact. p is checked finite in [0,1], with n=0 and p=0/1 handled directly."
+    },
+    {
+      "fingerprint": "c0561670c9988c203212d838b01763be46fa215db77da6706c5b07f4014b5ed9",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"double\",\"xm\",\",\",\"int64_t\",\"y\",\",\",\"double\",\"v\",\")\",\"{\"]",
+      "category": "bounded-kernel",
+      "rationale": "BTPE binomial chunk parameters and proposal displacement. lmmc_rng_binomial limits each chunk to 2^53-1; m and accepted y are finite count coordinates, and the unsigned difference avoids signed subtraction overflow. The sampler returns a bounded size_t count, not an unbounded symbolic integer."
+    },
+    {
+      "fingerprint": "8be1ab5a64b889c9d48433015e96d02cb897df8c048247423f7406fe37edd9f1",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"if\",\"(\",\"y\",\"<\",\"0\",\"|\",\"|\",\"(\",\"uint64_t\",\")\",\"y\",\">\",\"n\",\")\",\"{\"]",
+      "category": "bounded-kernel",
+      "rationale": "BTPE binomial chunk parameters and proposal displacement. lmmc_rng_binomial limits each chunk to 2^53-1; m and accepted y are finite count coordinates, and the unsigned difference avoids signed subtraction overflow. The sampler returns a bounded size_t count, not an unbounded symbolic integer."
+    },
+    {
+      "fingerprint": "1497755c66a28648e16b526f4b91ad7f177ac57bdc8afca8c59fab65353444a0",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"int64_t\",\"i\",\";\"]",
+      "category": "machine",
+      "rationale": "BTPE probability-ratio loop index ranges between accepted candidate y and mode m, both in [0,n] with n<=2^53-1. Starting from the smaller +1 and the terminal increment stay <=2^53, well below INT64_MAX; it counts finite recurrence steps."
+    },
+    {
+      "fingerprint": "6a91f988f64bc07bf3a0aabf1c3b4862a9cbdcd27037b60f8cf93111a368e3c1",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"int64_t\",\"y\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Private binomial BTPE is called only with 1 <= n <= 2^53-1 and n*r >= 30, r=min(p,1-p)<=1/2. Thus nrq>=15, p1>=3.5 and p1<1.1*sqrt(n)+1; the central candidates lie in [0,n]. Tail draws skip v=0 and otherwise v>=2^-53, so abs(log(v))<37. Both tail slopes exceed 2^-53 (positive numerators at least 3 and denominators below 2^54), giving conservative abs(candidate)<2^59 before signed casts. Negative left-tail candidates and right-tail candidates outside [0,n] are rejected. Accepted y and m lie in [0,n], unsigned distance <=n, and the returned y or n-y is in [0,n]."
+    },
+    {
+      "fingerprint": "4733f69d3a364a0dc45cd0450c649264c8412310286d1d8bcdd08ddb5dac6e74",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"remaining\",\"=\",\"(\",\"uint64_t\",\")\",\"n\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "The public binomial trial count is size_t (at most 64 bits on supported targets), converted exactly to uint64_t. Each private call receives min(remaining, 2^53-1); inversion/BTPE return [0,chunk]. Hence remaining stays in [0,n], accumulated total never exceeds processed trials <= original n <= SIZE_MAX, and conversion back to size_t is exact. p is checked finite in [0,1], with n=0 and p=0/1 handled directly."
+    },
+    {
+      "fingerprint": "7130ea65b2fcb11a6942126968258267cc5c005272cf8100f6d20ecf7963a827",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"result\",\"=\",\"(\",\"uint64_t\",\")\",\"y\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Private binomial BTPE is called only with 1 <= n <= 2^53-1 and n*r >= 30, r=min(p,1-p)<=1/2. Thus nrq>=15, p1>=3.5 and p1<1.1*sqrt(n)+1; the central candidates lie in [0,n]. Tail draws skip v=0 and otherwise v>=2^-53, so abs(log(v))<37. Both tail slopes exceed 2^-53 (positive numerators at least 3 and denominators below 2^54), giving conservative abs(candidate)<2^59 before signed casts. Negative left-tail candidates and right-tail candidates outside [0,n] are rejected. Accepted y and m lie in [0,n], unsigned distance <=n, and the returned y or n-y is in [0,n]."
+    },
+    {
+      "fingerprint": "235ff36c530d7177d2f9df2ef9c62c104777dbfd1823854cf27c408372290274",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"static\",\"lmmc_status_t\",\"poisson_ptrd\",\"(\",\"uint64_t\",\"*\",\"state\",\",\",\"double\",\"lambda\",\",\",\"size_t\",\"*\",\"out\",\")\",\"{\"]",
+      "category": "machine",
+      "rationale": "Borrowed four-word xoshiro RNG state; this uint64_t pointer stores generator bits, not the Poisson proposal or output sample."
+    },
+    {
+      "fingerprint": "e11007ab98d45a606ff7504b78ae4d9b5a3e10e1ccefe69a5e677aeae7520378",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"static\",\"size_t\",\"poisson_inversion\",\"(\",\"uint64_t\",\"*\",\"state\",\",\",\"double\",\"lambda\",\")\",\"{\"]",
+      "category": "machine",
+      "rationale": "The uint64_t pointer is the borrowed four-word xoshiro256** RNG state, passed to xoshiro256ss_next/normal sampling to obtain random bits. It does not hold the real-valued distribution parameter or sample (nor the Poisson candidate)."
+    },
+    {
+      "fingerprint": "c6995a372a3a4b8f8461b89ae7de3e25ab3e9fdbbeed2c6794849e0c8ed4be88",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"static\",\"uint64_t\",\"binomial_btpe\",\"(\",\"uint64_t\",\"*\",\"state\",\",\",\"uint64_t\",\"n\",\",\",\"double\",\"p\",\")\",\"{\"]",
+      "category": "bounded-kernel",
+      "rationale": "Private binomial BTPE is called only with 1 <= n <= 2^53-1 and n*r >= 30, r=min(p,1-p)<=1/2. Thus nrq>=15, p1>=3.5 and p1<1.1*sqrt(n)+1; the central candidates lie in [0,n]. Tail draws skip v=0 and otherwise v>=2^-53, so abs(log(v))<37. Both tail slopes exceed 2^-53 (positive numerators at least 3 and denominators below 2^54), giving conservative abs(candidate)<2^59 before signed casts. Negative left-tail candidates and right-tail candidates outside [0,n] are rejected. Accepted y and m lie in [0,n], unsigned distance <=n, and the returned y or n-y is in [0,n]."
+    },
+    {
+      "fingerprint": "7f42c1b2a919f527f0bde23aeca39e5d511ae7ff1d810d345b6d45c3d4c0ea10",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"static\",\"uint64_t\",\"binomial_chunk\",\"(\",\"uint64_t\",\"*\",\"state\",\",\",\"uint64_t\",\"n\",\",\",\"double\",\"p\",\")\",\"{\"]",
+      "category": "bounded-kernel",
+      "rationale": "The public binomial trial count is size_t (at most 64 bits on supported targets), converted exactly to uint64_t. Each private call receives min(remaining, 2^53-1); inversion/BTPE return [0,chunk]. Hence remaining stays in [0,n], accumulated total never exceeds processed trials <= original n <= SIZE_MAX, and conversion back to size_t is exact. p is checked finite in [0,1], with n=0 and p=0/1 handled directly."
+    },
+    {
+      "fingerprint": "e97ae0c3b59caea70117709b58fbc994884a62b9f3cd497980789c04f2f1be89",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"static\",\"uint64_t\",\"binomial_inversion\",\"(\",\"uint64_t\",\"*\",\"state\",\",\",\"uint64_t\",\"n\",\",\",\"double\",\"p\",\")\",\"{\"]",
+      "category": "bounded-kernel",
+      "rationale": "Private binomial inversion receives n<=2^53-1, 0<p<=1/2, np<30. Its finite restart bound is floor(min(n,np+10*sqrt(np*(1-p)+1))), in [0,n] and below 86. x starts at zero, increments only up to bound+1, then resets; returned x is in [0,bound] subset [0,n]. n-x+1 is evaluated only with 1<=x<=bound, so unsigned subtraction is safe. The state pointer remains the four-word RNG state."
+    },
+    {
+      "fingerprint": "3101d951d1e4e2e7df7fb7fe8f6e601185fdfcaa91fc420399c5da469a95f6a8",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"uint64_t\",\"chunk\",\"=\",\"remaining\",\">\",\"max_chunk\",\"?\",\"max_chunk\",\":\",\"remaining\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "The public binomial trial count is size_t (at most 64 bits on supported targets), converted exactly to uint64_t. Each private call receives min(remaining, 2^53-1); inversion/BTPE return [0,chunk]. Hence remaining stays in [0,n], accumulated total never exceeds processed trials <= original n <= SIZE_MAX, and conversion back to size_t is exact. p is checked finite in [0,1], with n=0 and p=0/1 handled directly."
+    },
+    {
+      "fingerprint": "16120bd07cd0f7a780f57bc0b7b7aa5513cb577986ec74005ef933946dd91515",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"uint64_t\",\"n\",\",\",\"double\",\"r\",\",\",\"double\",\"q\",\",\",\"int64_t\",\"m\",\",\",\"double\",\"nrq\",\",\"]",
+      "category": "bounded-kernel",
+      "rationale": "BTPE binomial chunk parameters and proposal displacement. lmmc_rng_binomial limits each chunk to 2^53-1; m and accepted y are finite count coordinates, and the unsigned difference avoids signed subtraction overflow. The sampler returns a bounded size_t count, not an unbounded symbolic integer."
+    },
+    {
+      "fingerprint": "95c7aab196d944743e55515e0eaac7be0ee038d52fcd8fedbe0481167768757f",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"uint64_t\",\"remaining\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "The public binomial trial count is size_t (at most 64 bits on supported targets), converted exactly to uint64_t. Each private call receives min(remaining, 2^53-1); inversion/BTPE return [0,chunk]. Hence remaining stays in [0,n], accumulated total never exceeds processed trials <= original n <= SIZE_MAX, and conversion back to size_t is exact. p is checked finite in [0,1], with n=0 and p=0/1 handled directly."
+    },
+    {
+      "fingerprint": "bd10ad03cf5623f6333428ddfa76e5eedd643028abd7796aa5d51e0be56c687c",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"uint64_t\",\"result\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Private binomial BTPE is called only with 1 <= n <= 2^53-1 and n*r >= 30, r=min(p,1-p)<=1/2. Thus nrq>=15, p1>=3.5 and p1<1.1*sqrt(n)+1; the central candidates lie in [0,n]. Tail draws skip v=0 and otherwise v>=2^-53, so abs(log(v))<37. Both tail slopes exceed 2^-53 (positive numerators at least 3 and denominators below 2^54), giving conservative abs(candidate)<2^59 before signed casts. Negative left-tail candidates and right-tail candidates outside [0,n] are rejected. Accepted y and m lie in [0,n], unsigned distance <=n, and the returned y or n-y is in [0,n]."
+    },
+    {
+      "fingerprint": "90b9ca165c32ed88382417de6bf7bbdbf1c27eeb316e39382dd64ea2bbc1c341",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"uint64_t\",\"result\",\"=\",\"(\",\"uint64_t\",\")\",\"y\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Private binomial BTPE is called only with 1 <= n <= 2^53-1 and n*r >= 30, r=min(p,1-p)<=1/2. Thus nrq>=15, p1>=3.5 and p1<1.1*sqrt(n)+1; the central candidates lie in [0,n]. Tail draws skip v=0 and otherwise v>=2^-53, so abs(log(v))<37. Both tail slopes exceed 2^-53 (positive numerators at least 3 and denominators below 2^54), giving conservative abs(candidate)<2^59 before signed casts. Negative left-tail candidates and right-tail candidates outside [0,n] are rejected. Accepted y and m lie in [0,n], unsigned distance <=n, and the returned y or n-y is in [0,n]."
+    },
+    {
+      "fingerprint": "ad502a5066fa00b29197639b9b0c5faa3ba1e4cde3341c5c52d20b51516ed4b7",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"uint64_t\",\"total\",\"=\",\"0\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "The public binomial trial count is size_t (at most 64 bits on supported targets), converted exactly to uint64_t. Each private call receives min(remaining, 2^53-1); inversion/BTPE return [0,chunk]. Hence remaining stays in [0,n], accumulated total never exceeds processed trials <= original n <= SIZE_MAX, and conversion back to size_t is exact. p is checked finite in [0,1], with n=0 and p=0/1 handled directly."
+    },
+    {
+      "fingerprint": "1c9e33c23d7108ab8846b05bd35e15345ea27e21e370ab1932b28c0d8dc03cb6",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"uint64_t\",\"value\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Within binomial_chunk, value receives an inversion or BTPE sample in [0,n], where n<=2^53-1, and the function returns value or n-value. The result remains in [0,n] and is a bounded sample, not RNG state."
+    },
+    {
+      "fingerprint": "33be8aabff665d33055a2af943d6bcccb1ad316701eafacf1c4ad01372ce2a3b",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"uint64_t\",\"x\",\"=\",\"0\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Private binomial inversion receives n<=2^53-1, 0<p<=1/2, np<30. Its finite restart bound is floor(min(n,np+10*sqrt(np*(1-p)+1))), in [0,n] and below 86. x starts at zero, increments only up to bound+1, then resets; returned x is in [0,bound] subset [0,n]. n-x+1 is evaluated only with 1<=x<=bound, so unsigned subtraction is safe. The state pointer remains the four-word RNG state."
+    },
+    {
+      "fingerprint": "6092f0f39bb4d2d5deda212029c5cb97ec88e75e49334ea9e808dc76cc69bd6f",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"y\",\"=\",\"(\",\"int64_t\",\")\",\"floor\",\"(\",\"x\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Private binomial BTPE is called only with 1 <= n <= 2^53-1 and n*r >= 30, r=min(p,1-p)<=1/2. Thus nrq>=15, p1>=3.5 and p1<1.1*sqrt(n)+1; the central candidates lie in [0,n]. Tail draws skip v=0 and otherwise v>=2^-53, so abs(log(v))<37. Both tail slopes exceed 2^-53 (positive numerators at least 3 and denominators below 2^54), giving conservative abs(candidate)<2^59 before signed casts. Negative left-tail candidates and right-tail candidates outside [0,n] are rejected. Accepted y and m lie in [0,n], unsigned distance <=n, and the returned y or n-y is in [0,n]."
+    },
+    {
+      "fingerprint": "f80fba9baaa820b272e21fdbb05877292a9ead0b8975b7deb55df8a1fe96f09e",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"y\",\"=\",\"(\",\"int64_t\",\")\",\"floor\",\"(\",\"xl\",\"+\",\"log\",\"(\",\"v\",\")\",\"/\",\"laml\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Private binomial BTPE is called only with 1 <= n <= 2^53-1 and n*r >= 30, r=min(p,1-p)<=1/2. Thus nrq>=15, p1>=3.5 and p1<1.1*sqrt(n)+1; the central candidates lie in [0,n]. Tail draws skip v=0 and otherwise v>=2^-53, so abs(log(v))<37. Both tail slopes exceed 2^-53 (positive numerators at least 3 and denominators below 2^54), giving conservative abs(candidate)<2^59 before signed casts. Negative left-tail candidates and right-tail candidates outside [0,n] are rejected. Accepted y and m lie in [0,n], unsigned distance <=n, and the returned y or n-y is in [0,n]."
+    },
+    {
+      "fingerprint": "82f90b2f0370406e4a46a5fdfb5837b38ea8d54804e0afc74fea0f53c09fcc7f",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"y\",\"=\",\"(\",\"int64_t\",\")\",\"floor\",\"(\",\"xm\",\"-\",\"p1\",\"*\",\"v\",\"+\",\"u\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Private binomial BTPE is called only with 1 <= n <= 2^53-1 and n*r >= 30, r=min(p,1-p)<=1/2. Thus nrq>=15, p1>=3.5 and p1<1.1*sqrt(n)+1; the central candidates lie in [0,n]. Tail draws skip v=0 and otherwise v>=2^-53, so abs(log(v))<37. Both tail slopes exceed 2^-53 (positive numerators at least 3 and denominators below 2^54), giving conservative abs(candidate)<2^59 before signed casts. Negative left-tail candidates and right-tail candidates outside [0,n] are rejected. Accepted y and m lie in [0,n], unsigned distance <=n, and the returned y or n-y is in [0,n]."
+    },
+    {
+      "fingerprint": "a2d7ddb31f2a7538473b32cb95e73d753c07702667eb9e61e98d0d1142ae219f",
+      "path": "src/random_discrete.c",
+      "normalized_line": "[\"y\",\"=\",\"(\",\"int64_t\",\")\",\"floor\",\"(\",\"xr\",\"-\",\"log\",\"(\",\"v\",\")\",\"/\",\"lamr\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Private binomial BTPE is called only with 1 <= n <= 2^53-1 and n*r >= 30, r=min(p,1-p)<=1/2. Thus nrq>=15, p1>=3.5 and p1<1.1*sqrt(n)+1; the central candidates lie in [0,n]. Tail draws skip v=0 and otherwise v>=2^-53, so abs(log(v))<37. Both tail slopes exceed 2^-53 (positive numerators at least 3 and denominators below 2^54), giving conservative abs(candidate)<2^59 before signed casts. Negative left-tail candidates and right-tail candidates outside [0,n] are rejected. Accepted y and m lie in [0,n], unsigned distance <=n, and the returned y or n-y is in [0,n]."
+    },
+    {
+      "fingerprint": "9a884873792b1d5d25f7ef9414f2e02b36af6a9bf49c6cf333c907f7ab1f1610",
+      "path": "src/random_internal.h",
+      "normalized_line": "[\"const\",\"uint64_t\",\"result\",\"=\",\"rotl\",\"(\",\"s\",\"[\",\"1\",\"]\",\"*\",\"5\",\",\",\"7\",\")\",\"*\",\"9\",\";\"]",
+      "category": "machine",
+      "rationale": "xoshiro256** uses four 64-bit state words with xor, shifts and rotates; its scrambler multiplies modulo 2^64. rotl is called only with k=7 or 45, avoiding shifts by 0/64. These fields/intermediates implement finite RNG state and transition bits, not symbolic integer arithmetic."
+    },
+    {
+      "fingerprint": "349c0a411ed96c67ed874bb565e72b9974fb2cbd94bf6e4bdaa76a8fe82547c8",
+      "path": "src/random_internal.h",
+      "normalized_line": "[\"const\",\"uint64_t\",\"t\",\"=\",\"s\",\"[\",\"1\",\"]\",\"<\",\"<\",\"17\",\";\"]",
+      "category": "machine",
+      "rationale": "xoshiro256** uses four 64-bit state words with xor, shifts and rotates; its scrambler multiplies modulo 2^64. rotl is called only with k=7 or 45, avoiding shifts by 0/64. These fields/intermediates implement finite RNG state and transition bits, not symbolic integer arithmetic."
+    },
+    {
+      "fingerprint": "9c765397324a60b32a85275af8a5f1664813d83f9caba035c5bf48be6c0060f4",
+      "path": "src/random_internal.h",
+      "normalized_line": "[\"double\",\"lmmc_rng_standard_normal\",\"(\",\"uint64_t\",\"*\",\"state\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "Borrowed xoshiro256** state words for the shared standard-normal sampler; uint64_t encodes the fixed-width PRNG state and is not a mathematical result."
+    },
+    {
+      "fingerprint": "1925ff9f6e01334d90e66c9067c1ebb895f4d3bddc8e851dc3ce37a3897ffcbb",
+      "path": "src/random_internal.h",
+      "normalized_line": "[\"static\",\"inline\",\"double\",\"u64_to_double01\",\"(\",\"uint64_t\",\"x\",\")\",\"{\"]",
+      "category": "bounded-kernel",
+      "rationale": "Uniform conversion consumes a raw word in [0,2^64-1], shifts right 11 to an exactly representable integer [0,2^53-1], then multiplies by 2^-53. Its output lies in [0,1-2^-53], and no potentially overflowing integer arithmetic or narrowing is used."
+    },
+    {
+      "fingerprint": "9b40b38e1be7a420acd91189c1b679ae2b33fb53a3c906554a1a0481856c7548",
+      "path": "src/random_internal.h",
+      "normalized_line": "[\"static\",\"inline\",\"uint64_t\",\"rotl\",\"(\",\"const\",\"uint64_t\",\"x\",\",\",\"int\",\"k\",\")\",\"{\"]",
+      "category": "machine",
+      "rationale": "xoshiro256** uses four 64-bit state words with xor, shifts and rotates; its scrambler multiplies modulo 2^64. rotl is called only with k=7 or 45, avoiding shifts by 0/64. These fields/intermediates implement finite RNG state and transition bits, not symbolic integer arithmetic."
+    },
+    {
+      "fingerprint": "f4e681d0650ec34f45b0d5a190d2cdbbf1c79d74e3535ab25f1691fb7d9add2d",
+      "path": "src/random_internal.h",
+      "normalized_line": "[\"static\",\"inline\",\"uint64_t\",\"xoshiro256ss_next\",\"(\",\"uint64_t\",\"*\",\"s\",\")\",\"{\"]",
+      "category": "machine",
+      "rationale": "xoshiro256** uses four 64-bit state words with xor, shifts and rotates; its scrambler multiplies modulo 2^64. rotl is called only with k=7 or 45, avoiding shifts by 0/64. These fields/intermediates implement finite RNG state and transition bits, not symbolic integer arithmetic."
+    },
+    {
+      "fingerprint": "c96ac34381a4a729a86e215fd785a6eaf7970e454fadc17fffaa864465fcd65f",
+      "path": "src/random_internal.h",
+      "normalized_line": "[\"uint64_t\",\"state\",\"[\",\"4\",\"]\",\";\"]",
+      "category": "machine",
+      "rationale": "xoshiro256** uses four 64-bit state words with xor, shifts and rotates; its scrambler multiplies modulo 2^64. rotl is called only with k=7 or 45, avoiding shifts by 0/64. These fields/intermediates implement finite RNG state and transition bits, not symbolic integer arithmetic."
+    },
+    {
+      "fingerprint": "24eacf84a2e3ead62d40a08e968fff1b3479bd452ffdbc64491dbe539e53b65b",
+      "path": "src/random_normal.c",
+      "normalized_line": "[\"double\",\"lmmc_rng_standard_normal\",\"(\",\"uint64_t\",\"*\",\"state\",\")\",\"{\"]",
+      "category": "machine",
+      "rationale": "Borrowed xoshiro256** state words for the shared standard-normal sampler; uint64_t encodes the fixed-width PRNG state and is not a mathematical result."
+    },
+    {
+      "fingerprint": "a760dbd796f8cd02fbf48fc534b228df8ea6342fe8f45567eb5d7d7cac4679d0",
+      "path": "src/random_normal.c",
+      "normalized_line": "[\"static\",\"double\",\"zig_sample_tail\",\"(\",\"uint64_t\",\"*\",\"state\",\")\",\"{\"]",
+      "category": "machine",
+      "rationale": "The uint64_t pointer is the borrowed four-word xoshiro256** RNG state, passed to xoshiro256ss_next/normal sampling to obtain random bits. It does not hold the real-valued distribution parameter or sample (nor the Poisson candidate)."
+    },
+    {
+      "fingerprint": "9a19ea06dda10769a2d615c694eec4a2b69b986007a47894ceb1cc9a9fb40329",
+      "path": "src/random_normal.c",
+      "normalized_line": "[\"uint64_t\",\"u\",\",\",\"u2\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. Ziggurat uses u&0xFF for layer 0..255, bit 8 for sign, and u2>>11 scaled by 2^-53 for a real sample in [0,1); u/u2 are random outputs rather than state."
+    },
+    {
+      "fingerprint": "437940b2f9b5210589be8a61c2573a6a90db39835f8745d9c8fd5de034cea1cb",
+      "path": "src/stdlib_boolean_sets.c",
+      "normalized_line": "[\"lmmc_status_t\",\"lmmc_std_bool_hash\",\"(\",\"int\",\"value\",\",\",\"uint64_t\",\"*\",\"out\",\")\"]",
+      "category": "machine",
+      "rationale": "Boolean key hash output mixes only validated 0/1 using lmmc_std_hash_mix64. The uint64_t is a 64-bit table-key fingerprint, not the Boolean value or an exact arithmetic result."
+    },
+    {
+      "fingerprint": "6eab5aea53d4c4ffc711d9a99a54f4eaeb9a0fc8bae1a7788c742d5fd8bd3dd0",
+      "path": "src/stdlib_complex_sets.c",
+      "normalized_line": "[\"uint64_t\",\"*\",\"out\",\")\"]",
+      "category": "machine",
+      "rationale": "Complex key hashing checks finite real/imaginary components, hashes their canonicalized double bit representations separately, then combines with xor, shifts and addition modulo 2^64. These words are hash fingerprints, not storage for the complex components."
+    },
+    {
+      "fingerprint": "ecabc67a660f7a6814be51209ed70d30e87ec0d3869f69539d4c405b4a08f586",
+      "path": "src/stdlib_complex_sets.c",
+      "normalized_line": "[\"uint64_t\",\"imag_hash\",\";\"]",
+      "category": "machine",
+      "rationale": "Complex key hashing checks finite real/imaginary components, hashes their canonicalized double bit representations separately, then combines with xor, shifts and addition modulo 2^64. These words are hash fingerprints, not storage for the complex components."
+    },
+    {
+      "fingerprint": "ae0066acdc435e8ca8b947426673a951561a976d18a77ab6ec9227fab6b1430b",
+      "path": "src/stdlib_complex_sets.c",
+      "normalized_line": "[\"uint64_t\",\"real_hash\",\";\"]",
+      "category": "machine",
+      "rationale": "Complex key hashing checks finite real/imaginary components, hashes their canonicalized double bit representations separately, then combines with xor, shifts and addition modulo 2^64. These words are hash fingerprints, not storage for the complex components."
+    },
+    {
+      "fingerprint": "2d8503b700aa4e433c3e3619dcc82cff6e423695ec1a3a13995a2047fbe6b35c",
+      "path": "src/stdlib_internal.h",
+      "normalized_line": "[\"hash\",\"^\",\"=\",\"(\",\"uint64_t\",\")\",\"(\",\"*\",\"cursor\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "Text hash loop reads an unsigned char, so the widening operand is in [0,255] on supported 8-bit-byte targets. It is xor-folded into a 64-bit FNV-style fingerprint; subsequent multiplication intentionally wraps modulo 2^64."
+    },
+    {
+      "fingerprint": "31a1d33d172d3ff5fe99c6eb4b798c4e7fa617fe37432151296db877f9844efb",
+      "path": "src/stdlib_internal.h",
+      "normalized_line": "[\"static\",\"inline\",\"uint64_t\",\"lmmc_std_hash_mix64\",\"(\",\"uint64_t\",\"value\",\")\"]",
+      "category": "machine",
+      "rationale": "lmmc_std_hash_mix64 is a finite 64-bit avalanche hash: xor-shifts 30/27/31 and multiplication by fixed constants intentionally use unsigned arithmetic modulo 2^64. Neither input nor output is an exact algebraic integer."
+    },
+    {
+      "fingerprint": "a61bfb241bfb61c5342d2655ab869ecf25127b4da3c2d854565456b4bd76b5e1",
+      "path": "src/stdlib_internal.h",
+      "normalized_line": "[\"static\",\"inline\",\"uint64_t\",\"lmmc_std_real_hash_bits\",\"(\",\"lmmc_real_t\",\"value\",\")\"]",
+      "category": "machine",
+      "rationale": "lmmc_real_t is double (config.h). On supported binary64 targets real_hash_bits canonicalizes signed zero, then memcpy copies its eight representation bytes into uint64_t before hash mixing; bits encodes the floating representation, not the numerical value as an integer."
+    },
+    {
+      "fingerprint": "c2e870a6372d04724bb01fb16e6fedfd2489e28cf8bcb38aeee4739f8917d456",
+      "path": "src/stdlib_internal.h",
+      "normalized_line": "[\"static\",\"inline\",\"uint64_t\",\"lmmc_std_text_hash_bytes\",\"(\",\"const\",\"char\",\"*\",\"value\",\")\"]",
+      "category": "machine",
+      "rationale": "The text fingerprint starts at fixed uint64_t hash seed 1469598103934665603, xor-folds each unsigned byte, multiplies by 1099511628211 modulo 2^64 and applies hash_mix64. The word is hash state independent of string length or mathematical values."
+    },
+    {
+      "fingerprint": "5f606d4bf361c2c89c6589225a4de83cb8ca672e7ccf2f851986858b4e7ad097",
+      "path": "src/stdlib_internal.h",
+      "normalized_line": "[\"uint64_t\",\"bits\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "lmmc_real_t is double (config.h). On supported binary64 targets real_hash_bits canonicalizes signed zero, then memcpy copies its eight representation bytes into uint64_t before hash mixing; bits encodes the floating representation, not the numerical value as an integer."
+    },
+    {
+      "fingerprint": "52e2d7e196409b7d221b174186cff51aadbfdbfa474599fc921b67c86d7d7980",
+      "path": "src/stdlib_internal.h",
+      "normalized_line": "[\"uint64_t\",\"hash\",\"=\",\"UINT64_C\",\"(\",\"1469598103934665603\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The text fingerprint starts at fixed uint64_t hash seed 1469598103934665603, xor-folds each unsigned byte, multiplies by 1099511628211 modulo 2^64 and applies hash_mix64. The word is hash state independent of string length or mathematical values."
+    },
+    {
+      "fingerprint": "de0442468610aff1ede60d29c3f430d046d120cc03754c29f6358bcca8e9ccd5",
+      "path": "src/stdlib_linalg_elementwise.c",
+      "normalized_line": "[\"int64_t\",\"exponent\",\",\"]",
+      "category": "bounded-kernel",
+      "rationale": "The numerical matrix-power API accepts exponent in [-2^63, 2^63-1], not an unbounded symbolic exponent. Negative exponents first invert the finite square matrix; -(exponent+1) is representable and the subsequent unsigned +1 gives magnitude <= 2^63 even at INT64_MIN. The nonnegative branch casts only [0, INT64_MAX]; unsigned right shifts terminate after at most 64 iterations. Matrix arithmetic remains floating-point and products are checked finite."
+    },
+    {
+      "fingerprint": "cd2ae1c7f7057b5626744a10682f88469ef0ac062fff6631b44b19b355c02600",
+      "path": "src/stdlib_linalg_elementwise.c",
+      "normalized_line": "[\"power\",\"=\",\"(\",\"uint64_t\",\")\",\"(\",\"-\",\"(\",\"exponent\",\"+\",\"1\",\")\",\")\",\"+\",\"UINT64_C\",\"(\",\"1\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "The numerical matrix-power API accepts exponent in [-2^63, 2^63-1], not an unbounded symbolic exponent. Negative exponents first invert the finite square matrix; -(exponent+1) is representable and the subsequent unsigned +1 gives magnitude <= 2^63 even at INT64_MIN. The nonnegative branch casts only [0, INT64_MAX]; unsigned right shifts terminate after at most 64 iterations. Matrix arithmetic remains floating-point and products are checked finite."
+    },
+    {
+      "fingerprint": "fa95d13af5721a20b097da8d2cc2831a403d464c8f4cc1eb8fe652e2926e0c72",
+      "path": "src/stdlib_linalg_elementwise.c",
+      "normalized_line": "[\"power\",\"=\",\"(\",\"uint64_t\",\")\",\"exponent\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "The numerical matrix-power API accepts exponent in [-2^63, 2^63-1], not an unbounded symbolic exponent. Negative exponents first invert the finite square matrix; -(exponent+1) is representable and the subsequent unsigned +1 gives magnitude <= 2^63 even at INT64_MIN. The nonnegative branch casts only [0, INT64_MAX]; unsigned right shifts terminate after at most 64 iterations. Matrix arithmetic remains floating-point and products are checked finite."
+    },
+    {
+      "fingerprint": "2aa07aa6396dd6bca6f42b787379ae7e84f6e552f73841878ad30702eba15d03",
+      "path": "src/stdlib_linalg_elementwise.c",
+      "normalized_line": "[\"uint64_t\",\"power\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "The numerical matrix-power API accepts exponent in [-2^63, 2^63-1], not an unbounded symbolic exponent. Negative exponents first invert the finite square matrix; -(exponent+1) is representable and the subsequent unsigned +1 gives magnitude <= 2^63 even at INT64_MIN. The nonnegative branch casts only [0, INT64_MAX]; unsigned right shifts terminate after at most 64 iterations. Matrix arithmetic remains floating-point and products are checked finite."
+    },
+    {
+      "fingerprint": "784a8553dfea76ae8ba44b90c1a8f5975de84fc97ccfc11cc54c52fb02d6e889",
+      "path": "src/stdlib_numeric_sets.c",
+      "normalized_line": "[\"lmmc_status_t\",\"lmmc_std_num_hash\",\"(\",\"lmmc_real_t\",\"value\",\",\",\"uint64_t\",\"*\",\"out\",\")\"]",
+      "category": "machine",
+      "rationale": "Numeric key hashing rejects nonfinite values, canonicalizes signed zero, copies the double representation into 64-bit bits, and applies modulo-2^64 hash mixing. The returned word is a table-key fingerprint, not an integer approximation of the number."
+    },
+    {
+      "fingerprint": "fe263653ac47f682e1c1cfd0126fe65861d8c88ebc01ae04a97b2ea825a3b7a2",
+      "path": "src/stdlib_random.c",
+      "normalized_line": "[\"int64_t\",\"*\",\"out\",\")\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "ae326c12df37319c68789d5f23acfac6cad3ffb974e19c0aabc018e5a6d0d59c",
+      "path": "src/stdlib_random.c",
+      "normalized_line": "[\"int64_t\",\"hi\",\",\",\"int64_t\",\"*\",\"out\",\")\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "76ce42d44b6fbdda67b9aacf6fbfa90c789f705381dee3fb3f360ae50949680d",
+      "path": "src/stdlib_random.c",
+      "normalized_line": "[\"int64_t\",\"hi\",\",\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "f7b9ed671f8495876871c4e317d29ab2dd52295ff9ec7e83f28f58ffdaf10fff",
+      "path": "src/stdlib_random.c",
+      "normalized_line": "[\"int64_t\",\"index\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "random_choice uses this integer only as an array index. It rejects count==0 and count>INT64_MAX before the cast, then samples inclusive [0,count-1], so count narrowing is exact and index lies in [0,INT64_MAX-1] within the input array."
+    },
+    {
+      "fingerprint": "c4b00bc76f36b1a0487b9074f8aa70e265b5bc8d650960213c1e9bc2113492b2",
+      "path": "src/stdlib_random.c",
+      "normalized_line": "[\"lmmc_status_t\",\"lmmc_std_random_default_randint\",\"(\",\"int64_t\",\"lo\",\",\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "a0f942e6b2c4511ee27c17d7e73dfe8b132c72b5776c5618f6d4b4beb08b9bba",
+      "path": "src/stdlib_random.c",
+      "normalized_line": "[\"lmmc_status_t\",\"lmmc_std_random_default_seed\",\"(\",\"uint64_t\",\"seed\",\")\"]",
+      "category": "machine",
+      "rationale": "The seed parameter is a 64-bit RNG initialization word in [0,UINT64_MAX]; lmmc_rng_seed expands it with SplitMix64 into four xoshiro256** state words. Default and stdlib wrappers preserve the same seed-state contract."
+    },
+    {
+      "fingerprint": "2cc9d38b481b2bcfc02a7936645739bfabc56e0eb713e03e1e28abd74b2410a7",
+      "path": "src/stdlib_random.c",
+      "normalized_line": "[\"lmmc_status_t\",\"lmmc_std_random_randint\",\"(\",\"lmmc_rng_t\",\"*\",\"rng\",\",\",\"int64_t\",\"lo\",\",\"]",
+      "category": "bounded-kernel",
+      "rationale": "lmmc_rng_int_uniform returns exactly a machine-domain sample in inclusive [lo, hi], with INT64_MIN <= lo <= hi <= INT64_MAX. It rejects lo > hi; equal endpoints return directly. Unsigned span represents hi-lo+1 modulo 2^64; zero means the full 2^64 interval. Otherwise rejection below (-span)%span precedes modulo reduction. Signed reconstruction casts only values <= INT64_MAX and uses INT64_MIN plus a nonnegative <= INT64_MAX offset for the upper bit half."
+    },
+    {
+      "fingerprint": "a734fe2bfeacd76317998ee645d6451d014a395516289467be803a06204d13dc",
+      "path": "src/stdlib_random.c",
+      "normalized_line": "[\"lmmc_status_t\",\"lmmc_std_random_seed\",\"(\",\"lmmc_rng_t\",\"*\",\"rng\",\",\",\"uint64_t\",\"seed\",\")\"]",
+      "category": "machine",
+      "rationale": "The seed parameter is a 64-bit RNG initialization word in [0,UINT64_MAX]; lmmc_rng_seed expands it with SplitMix64 into four xoshiro256** state words. Default and stdlib wrappers preserve the same seed-state contract."
+    },
+    {
+      "fingerprint": "2c63c7c1d69f9f76c5318cbc125b86689cbc7d7c1be70d4a576f9419eb498b76",
+      "path": "src/stdlib_random.c",
+      "normalized_line": "[\"status\",\"=\",\"lmmc_rng_int_uniform\",\"(\",\"rng\",\",\",\"0\",\",\",\"(\",\"int64_t\",\")\",\"count\",\"-\",\"1\",\",\",\"&\",\"index\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "random_choice uses this integer only as an array index. It rejects count==0 and count>INT64_MAX before the cast, then samples inclusive [0,count-1], so count narrowing is exact and index lies in [0,INT64_MAX-1] within the input array."
+    },
+    {
+      "fingerprint": "187a3f5e3ac436ad145b8dfdf59fd59b973b3c7a14a7fbda47f919310836bb5e",
+      "path": "src/stdlib_text_sets.c",
+      "normalized_line": "[\"lmmc_status_t\",\"lmmc_std_text_hash\",\"(\",\"const\",\"char\",\"*\",\"value\",\",\",\"uint64_t\",\"*\",\"out\",\")\"]",
+      "category": "machine",
+      "rationale": "Text key hash output is the 64-bit byte-hash/mix fingerprint of a nonnull string. Repeated xor and unsigned multiplication intentionally wrap modulo 2^64; text values themselves are not encoded as mathematical integers."
+    },
+    {
+      "fingerprint": "2cac61f5e364c310cb666b85bf663c8116372e4d5f71f2f89cfd21edf4056756",
+      "path": "test/test_dist_roundtrip_prop.c",
+      "normalized_line": "[\"static\",\"uint64_t\",\"g_rng_state\",\"=\",\"RNG_SEED\",\";\"]",
+      "category": "machine",
+      "rationale": "The local property-test generator keeps xorshift64 state in g_rng_state/x; seed zero is mapped to one, then shifts 12/25/27 xor-update the state modulo 2^64. It supplies deterministic floating test inputs, not exact mathematical coefficients stored as native integers."
+    },
+    {
+      "fingerprint": "d083f67889851aff760ee889f671e8db512f26b859a6f38f578f6f781edcbdfe",
+      "path": "test/test_dist_roundtrip_prop.c",
+      "normalized_line": "[\"static\",\"uint64_t\",\"rng_u64\",\"(\",\"void\",\")\",\"{\"]",
+      "category": "bounded-kernel",
+      "rationale": "The local xorshift64* generator explicitly returns a word in [0,2^64-1], multiplying by 2685821657736338717 modulo 2^64. Its floating-input helper takes the top 53 bits and scales by 2^-53, producing [0,1-2^-53]; the return word is a bounded random output, not symbolic storage."
+    },
+    {
+      "fingerprint": "fd6cb782623974d16cda2ced0a673d4f3334c92e3f25c207e7d0b9451e050abc",
+      "path": "test/test_dist_roundtrip_prop.c",
+      "normalized_line": "[\"static\",\"void\",\"rng_seed\",\"(\",\"uint64_t\",\"s\",\")\",\"{\",\"g_rng_state\",\"=\",\"(\",\"s\",\"=\",\"=\",\"0\",\")\",\"?\",\"UINT64_C\",\"(\",\"1\",\")\",\":\",\"s\",\";\",\"}\"]",
+      "category": "machine",
+      "rationale": "The local property-test generator keeps xorshift64 state in g_rng_state/x; seed zero is mapped to one, then shifts 12/25/27 xor-update the state modulo 2^64. It supplies deterministic floating test inputs, not exact mathematical coefficients stored as native integers."
+    },
+    {
+      "fingerprint": "336e5a78af70897269459bc8adfbeaad44974d1db74a877ce8df2e6b0fa193c5",
+      "path": "test/test_dist_roundtrip_prop.c",
+      "normalized_line": "[\"uint64_t\",\"x\",\"=\",\"g_rng_state\",\";\"]",
+      "category": "machine",
+      "rationale": "The local property-test generator keeps xorshift64 state in g_rng_state/x; seed zero is mapped to one, then shifts 12/25/27 xor-update the state modulo 2^64. It supplies deterministic floating test inputs, not exact mathematical coefficients stored as native integers."
+    },
+    {
+      "fingerprint": "0d36d1b45fe85602a5051705d9dccd1c13b92ba6ad7f6da839e4f8a7cbfb91e0",
+      "path": "test/test_eigen_full.c",
+      "normalized_line": "[\"uint64_t\",\"random_state\",\";\"]",
+      "category": "machine",
+      "rationale": "The deterministic eigen-matrix fixture uses fixture->random_state as LCG state: multiply by 1664525 and add 1013904223 modulo 2^64, mask low 32 bits and divide by 2^32 to generate [0,1). The integer is generator state; matrix values remain lmmc_real_t."
+    },
+    {
+      "fingerprint": "c6059fa25393ee53bf26b89fe728718ade1332a269b9bd537f7df5ad81b8a479",
+      "path": "test/test_eigen_gen_prop.c",
+      "normalized_line": "[\"static\",\"uint64_t\",\"g_rng_state\",\"=\",\"RNG_SEED\",\";\"]",
+      "category": "machine",
+      "rationale": "The local property-test generator keeps xorshift64 state in g_rng_state/x; seed zero is mapped to one, then shifts 12/25/27 xor-update the state modulo 2^64. It supplies deterministic floating test inputs, not exact mathematical coefficients stored as native integers."
+    },
+    {
+      "fingerprint": "ef2409d80de556c3405c783d8512e5c9193402576cd07887eae9f4dbbe217b2c",
+      "path": "test/test_eigen_gen_prop.c",
+      "normalized_line": "[\"static\",\"uint64_t\",\"rng_u64\",\"(\",\"void\",\")\",\"{\"]",
+      "category": "bounded-kernel",
+      "rationale": "The local xorshift64* generator explicitly returns a word in [0,2^64-1], multiplying by 2685821657736338717 modulo 2^64. Its floating-input helper takes the top 53 bits and scales by 2^-53, producing [0,1-2^-53]; the return word is a bounded random output, not symbolic storage."
+    },
+    {
+      "fingerprint": "dc75dd706303f4ab07ac29fda6b1bbcfbbd6c1c1c55110a5f5ca9a6e42bf2c53",
+      "path": "test/test_eigen_gen_prop.c",
+      "normalized_line": "[\"static\",\"void\",\"rng_seed\",\"(\",\"uint64_t\",\"s\",\")\",\"{\",\"g_rng_state\",\"=\",\"(\",\"s\",\"=\",\"=\",\"0\",\")\",\"?\",\"UINT64_C\",\"(\",\"1\",\")\",\":\",\"s\",\";\",\"}\"]",
+      "category": "machine",
+      "rationale": "The local property-test generator keeps xorshift64 state in g_rng_state/x; seed zero is mapped to one, then shifts 12/25/27 xor-update the state modulo 2^64. It supplies deterministic floating test inputs, not exact mathematical coefficients stored as native integers."
+    },
+    {
+      "fingerprint": "3cd2967ac68e1dea0cfaf8808a5d048daf10cf4b0e6ca05573939aeab661b727",
+      "path": "test/test_eigen_gen_prop.c",
+      "normalized_line": "[\"uint64_t\",\"x\",\"=\",\"g_rng_state\",\";\"]",
+      "category": "machine",
+      "rationale": "The local property-test generator keeps xorshift64 state in g_rng_state/x; seed zero is mapped to one, then shifts 12/25/27 xor-update the state modulo 2^64. It supplies deterministic floating test inputs, not exact mathematical coefficients stored as native integers."
+    },
+    {
+      "fingerprint": "62f02c333e9f2075f19c04fd2b75b3ed1a0303a85f6c0015fd56ef78359dcba2",
+      "path": "test/test_eigen_general.c",
+      "normalized_line": "[\"uint64_t\",\"random_state\",\";\"]",
+      "category": "machine",
+      "rationale": "The deterministic eigen-matrix fixture uses fixture->random_state as LCG state: multiply by 1664525 and add 1013904223 modulo 2^64, mask low 32 bits and divide by 2^32 to generate [0,1). The integer is generator state; matrix values remain lmmc_real_t."
+    },
+    {
+      "fingerprint": "b0943a4524d68cac92b66b614fcb473eb4a4464e3d801d1bd608963dc4b78151",
+      "path": "test/test_fft_roundtrip_prop.c",
+      "normalized_line": "[\"static\",\"uint64_t\",\"g_rng_state\",\"=\",\"RNG_SEED\",\";\"]",
+      "category": "machine",
+      "rationale": "The local property-test generator keeps xorshift64 state in g_rng_state/x; seed zero is mapped to one, then shifts 12/25/27 xor-update the state modulo 2^64. It supplies deterministic floating test inputs, not exact mathematical coefficients stored as native integers."
+    },
+    {
+      "fingerprint": "7c7334c50900a6e18cdd6ce9b7e674f32e1f116280444eb2c3b2cf8df4c35815",
+      "path": "test/test_fft_roundtrip_prop.c",
+      "normalized_line": "[\"static\",\"uint64_t\",\"rng_u64\",\"(\",\"void\",\")\",\"{\"]",
+      "category": "bounded-kernel",
+      "rationale": "The local xorshift64* generator explicitly returns a word in [0,2^64-1], multiplying by 2685821657736338717 modulo 2^64. Its floating-input helper takes the top 53 bits and scales by 2^-53, producing [0,1-2^-53]; the return word is a bounded random output, not symbolic storage."
+    },
+    {
+      "fingerprint": "fffcf9d393e7394251bad358bbb14137dc0edaee419db09b312adb8e0e553b55",
+      "path": "test/test_fft_roundtrip_prop.c",
+      "normalized_line": "[\"static\",\"void\",\"rng_seed\",\"(\",\"uint64_t\",\"s\",\")\",\"{\",\"g_rng_state\",\"=\",\"(\",\"s\",\"=\",\"=\",\"0\",\")\",\"?\",\"UINT64_C\",\"(\",\"1\",\")\",\":\",\"s\",\";\",\"}\"]",
+      "category": "machine",
+      "rationale": "The local property-test generator keeps xorshift64 state in g_rng_state/x; seed zero is mapped to one, then shifts 12/25/27 xor-update the state modulo 2^64. It supplies deterministic floating test inputs, not exact mathematical coefficients stored as native integers."
+    },
+    {
+      "fingerprint": "e68a6ec80189ff97ce4520e6259275492771441be87161dc8417b0520795f383",
+      "path": "test/test_fft_roundtrip_prop.c",
+      "normalized_line": "[\"uint64_t\",\"range\",\"=\",\"(\",\"uint64_t\",\")\",\"(\",\"hi\",\"-\",\"lo\",\"+\",\"1\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "FFT rng_int uses this as a dimension/index sampling span. Its callsites in generate_n are [0,11], [0,5], [0,36], [1,64] and [1,2048], so hi-lo+1 is in [6,2048], fits size_t/uint64_t exactly and is never zero. Modulo and lo addition return the requested bounded index/dimension."
+    },
+    {
+      "fingerprint": "7ef264de20648702dc9b91275f3fff6c002948a2c5176ee58cc538031a6536c1",
+      "path": "test/test_fft_roundtrip_prop.c",
+      "normalized_line": "[\"uint64_t\",\"x\",\"=\",\"g_rng_state\",\";\"]",
+      "category": "machine",
+      "rationale": "The local property-test generator keeps xorshift64 state in g_rng_state/x; seed zero is mapped to one, then shifts 12/25/27 xor-update the state modulo 2^64. It supplies deterministic floating test inputs, not exact mathematical coefficients stored as native integers."
+    },
+    {
+      "fingerprint": "98205ade5a01f73b14c8bd9a6db55bf6f90f50cb3b45e5b7f60a704a75928a84",
+      "path": "test/test_init.c",
+      "normalized_line": "[\"UINT64_C\",\"(\",\"0x123456789abcdef0\",\")\",\"+\",\"(\",\"uint64_t\",\")\",\"index\",\")\",\"!\",\"=\",\"LMMC_STATUS_OK\",\";\"]",
+      "category": "machine",
+      "rationale": "Deterministic per-worker 64-bit PRNG seed formed from a fixed seed and bounded concurrency-worker index; unsigned wrap is the seed-word arithmetic."
+    },
+    {
+      "fingerprint": "ff7c61f5702c62f2d80fe28e04167cdca95c018782c4a0675a1abe11f6c75376",
+      "path": "test/test_lambertw_prop.c",
+      "normalized_line": "[\"static\",\"uint64_t\",\"rng_state\",\"=\",\"RNG_SEED\",\";\"]",
+      "category": "machine",
+      "rationale": "Deterministic xorshift64* PRNG state and its working word use unsigned shifts and multiplication modulo 2^64; the top 53 bits map exactly to a binary64 uniform variate for branch-separated Lambert W reference tests."
+    },
+    {
+      "fingerprint": "e8629344c4f267966b6dd1e23d01816226907ec1b24a3fc0fa6f3274007996f5",
+      "path": "test/test_lambertw_prop.c",
+      "normalized_line": "[\"uint64_t\",\"x\",\"=\",\"rng_state\",\";\"]",
+      "category": "machine",
+      "rationale": "Deterministic xorshift64* PRNG state and its working word use unsigned shifts and multiplication modulo 2^64; the top 53 bits map exactly to a binary64 uniform variate for branch-separated Lambert W reference tests."
+    },
+    {
+      "fingerprint": "c07f668a6bc481598e4dd5100a01d9135e1295f597500df51f2db5c8201047f2",
+      "path": "test/test_lmmp_ext.c",
+      "normalized_line": "[\"h0\",\"=\",\"lmmp_xxhash_\",\"(\",\"words\",\",\",\"4\",\",\",\"(\",\"const\",\"uint64_t\",\"[\",\"1\",\"]\",\")\",\"{\",\"UINT64_C\",\"(\",\"0x9e3779b97f4a7c15\",\")\",\"}\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The one-word uint64_t compound literal is the fixed xxHash seed 0x9e3779b97f4a7c15; repeated hashing of words[4] checks deterministic native hash output, not arbitrary-precision arithmetic."
+    },
+    {
+      "fingerprint": "84c7e1c528b18b86edd8e1190f4ea0a88fe79996079a73b4303086693121da32",
+      "path": "test/test_lmmp_ext.c",
+      "normalized_line": "[\"h1\",\"=\",\"lmmp_xxhash_\",\"(\",\"words\",\",\",\"4\",\",\",\"(\",\"const\",\"uint64_t\",\"[\",\"1\",\"]\",\")\",\"{\",\"UINT64_C\",\"(\",\"0x9e3779b97f4a7c15\",\")\",\"}\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The one-word uint64_t compound literal is the fixed xxHash seed 0x9e3779b97f4a7c15; repeated hashing of words[4] checks deterministic native hash output, not arbitrary-precision arithmetic."
+    },
+    {
+      "fingerprint": "7916b06d11041d8595cc938a5928d02d85b32b844435928e5896bece2b68dbc0",
+      "path": "test/test_lmmp_ext.c",
+      "normalized_line": "[\"uint64_t\",\"h0\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "h0/h1 receive lmmp_xxhash_ and lmmp_siphash24_ 64-bit fingerprints and are compared for repeatability. These are native hash outputs, not the factorial/npr/ncr mathematical results, which this same fixture stores in LMMP limbs and converts to text."
+    },
+    {
+      "fingerprint": "7a6326fe6febef97f0162a83aeb33c7590a5dad853e7ef588b1ffcd66ef01dc2",
+      "path": "test/test_lmmp_ext.c",
+      "normalized_line": "[\"uint64_t\",\"h1\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "h0/h1 receive lmmp_xxhash_ and lmmp_siphash24_ 64-bit fingerprints and are compared for repeatability. These are native hash outputs, not the factorial/npr/ncr mathematical results, which this same fixture stores in LMMP limbs and converts to text."
+    },
+    {
+      "fingerprint": "24d91c9f97747a123d3e0f313804824f3a5ec8e6535c68ae3acc19d72e4767ac",
+      "path": "test/test_lmmp_ext.c",
+      "normalized_line": "[\"uint64_t\",\"sip_key\",\"[\",\"2\",\"]\",\"=\",\"{\",\"UINT64_C\",\"(\",\"0x0123456789abcdef\",\")\",\",\",\"UINT64_C\",\"(\",\"0xfedcba9876543210\",\")\",\"}\",\";\"]",
+      "category": "machine",
+      "rationale": "Two fixed 64-bit words form the SipHash-2-4 128-bit key passed to lmmp_siphash24_; each hexadecimal word lies in [0,UINT64_MAX] and represents key bits, not a symbolic integer."
+    },
+    {
+      "fingerprint": "8a816cc9bb17d65042aa8ad02efa5b44af9fd89b822b6e73972919ea9cfe754c",
+      "path": "test/test_lmmp_ext.c",
+      "normalized_line": "[\"uint64_t\",\"values\",\"[\",\"4\",\"]\",\"=\",\"{\",\"0\",\",\",\"0\",\",\",\"0\",\",\",\"0\",\"}\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "The strong RNG fixture passes this four-element buffer as mp_ptr to lmmp_strong_random_(...,4,...), then checks the returned limb count <=4. Backend mp_limb_t is uint64_t; each sampled word has interval [0,2^64-1], with no conversion to a single unbounded integer."
+    },
+    {
+      "fingerprint": "861e647fce69290284daa6ba3d964bf99d5f0b5e462b4c49756969b2e02e3e40",
+      "path": "test/test_random_dist.c",
+      "normalized_line": "[\"assert_int_equal\",\"(\",\"lmmc_rng_seed\",\"(\",\"fixture\",\"-\",\">\",\"rng\",\",\",\"(\",\"uint64_t\",\")\",\"11111\",\")\",\",\",\"LMMC_STATUS_OK\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The single-element shuffle fixture casts the fixed nonnegative value 11111 exactly to uint64_t and passes it to lmmc_rng_seed. It selects a reproducible RNG state only; generated samples and mathematical distribution parameters are stored separately."
+    },
+    {
+      "fingerprint": "ed3e474a2ff98485041a5fe5db17da2e44bf00b60fd7fc769e1646be67a133bd",
+      "path": "test/test_random_dist.c",
+      "normalized_line": "[\"assert_int_equal\",\"(\",\"lmmc_rng_seed\",\"(\",\"fixture\",\"-\",\">\",\"rng\",\",\",\"(\",\"uint64_t\",\")\",\"123\",\")\",\",\",\"LMMC_STATUS_OK\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The uniform array filling fixture casts the fixed nonnegative value 123 exactly to uint64_t and passes it to lmmc_rng_seed. It selects a reproducible RNG state only; generated samples and mathematical distribution parameters are stored separately."
+    },
+    {
+      "fingerprint": "b57340986ce6196de96fbac007d74c907ed5cf08368f187eadfed38569e0f148",
+      "path": "test/test_random_dist.c",
+      "normalized_line": "[\"assert_int_equal\",\"(\",\"lmmc_rng_seed\",\"(\",\"fixture\",\"-\",\">\",\"rng\",\",\",\"(\",\"uint64_t\",\")\",\"161803\",\")\",\",\",\"LMMC_STATUS_OK\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The large-rate exponential fixture casts the fixed nonnegative value 161803 exactly to uint64_t and passes it to lmmc_rng_seed. It selects a reproducible RNG state only; generated samples and mathematical distribution parameters are stored separately."
+    },
+    {
+      "fingerprint": "ada8d5f27ebf692137b88e1483bc48e814be5cb74630c4e4bfd262db364fc4cc",
+      "path": "test/test_random_dist.c",
+      "normalized_line": "[\"assert_int_equal\",\"(\",\"lmmc_rng_seed\",\"(\",\"fixture\",\"-\",\">\",\"rng\",\",\",\"(\",\"uint64_t\",\")\",\"22222\",\")\",\",\",\"LMMC_STATUS_OK\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The shuffle-with-duplicates fixture casts the fixed nonnegative value 22222 exactly to uint64_t and passes it to lmmc_rng_seed. It selects a reproducible RNG state only; generated samples and mathematical distribution parameters are stored separately."
+    },
+    {
+      "fingerprint": "14af2a7c02c04986b962ca20f88fbc4e6c20dbd35f6d853fbcceb76baacbc58e",
+      "path": "test/test_random_dist.c",
+      "normalized_line": "[\"assert_int_equal\",\"(\",\"lmmc_rng_seed\",\"(\",\"fixture\",\"-\",\">\",\"rng\",\",\",\"(\",\"uint64_t\",\")\",\"271828\",\")\",\",\",\"LMMC_STATUS_OK\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The small-rate exponential fixture casts the fixed nonnegative value 271828 exactly to uint64_t and passes it to lmmc_rng_seed. It selects a reproducible RNG state only; generated samples and mathematical distribution parameters are stored separately."
+    },
+    {
+      "fingerprint": "4c4351a5cd925935f8441fad2af5e9a95f4e414903eba5ca5e7fc66f589f8ced",
+      "path": "test/test_random_dist.c",
+      "normalized_line": "[\"assert_int_equal\",\"(\",\"lmmc_rng_seed\",\"(\",\"fixture\",\"-\",\">\",\"rng\",\",\",\"(\",\"uint64_t\",\")\",\"314159\",\")\",\",\",\"LMMC_STATUS_OK\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The exponential nonnegativity fixture casts the fixed nonnegative value 314159 exactly to uint64_t and passes it to lmmc_rng_seed. It selects a reproducible RNG state only; generated samples and mathematical distribution parameters are stored separately."
+    },
+    {
+      "fingerprint": "f463439bcc46d8b6f53cdd8d0313bdd85853f30b7dec0c298ba533979fc96733",
+      "path": "test/test_random_dist.c",
+      "normalized_line": "[\"assert_int_equal\",\"(\",\"lmmc_rng_seed\",\"(\",\"fixture\",\"-\",\">\",\"rng\",\",\",\"(\",\"uint64_t\",\")\",\"42\",\")\",\",\",\"LMMC_STATUS_OK\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The uniform scalar range fixture casts the fixed nonnegative value 42 exactly to uint64_t and passes it to lmmc_rng_seed. It selects a reproducible RNG state only; generated samples and mathematical distribution parameters are stored separately."
+    },
+    {
+      "fingerprint": "48e2b0af6dcea31834fd39985d3733a3edffe711cb10b40f42802b05fbc447b6",
+      "path": "test/test_random_dist.c",
+      "normalized_line": "[\"assert_int_equal\",\"(\",\"lmmc_rng_seed\",\"(\",\"fixture\",\"-\",\">\",\"rng\",\",\",\"(\",\"uint64_t\",\")\",\"55555\",\")\",\",\",\"LMMC_STATUS_OK\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The real-element shuffle fixture casts the fixed nonnegative value 55555 exactly to uint64_t and passes it to lmmc_rng_seed. It selects a reproducible RNG state only; generated samples and mathematical distribution parameters are stored separately."
+    },
+    {
+      "fingerprint": "8bbfbedb719eeb991c8cde7ef5c98d662dc2a9286f067133af939f0fd7127d5a",
+      "path": "test/test_random_dist.c",
+      "normalized_line": "[\"assert_int_equal\",\"(\",\"lmmc_rng_seed\",\"(\",\"fixture\",\"-\",\">\",\"rng\",\",\",\"(\",\"uint64_t\",\")\",\"7777\",\")\",\",\",\"LMMC_STATUS_OK\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The large-interval uniform fixture casts the fixed nonnegative value 7777 exactly to uint64_t and passes it to lmmc_rng_seed. It selects a reproducible RNG state only; generated samples and mathematical distribution parameters are stored separately."
+    },
+    {
+      "fingerprint": "db5110314cf045f2613dd69d96c80745e837581c571dd4bb80b2110be8f92192",
+      "path": "test/test_random_dist.c",
+      "normalized_line": "[\"assert_int_equal\",\"(\",\"lmmc_rng_seed\",\"(\",\"fixture\",\"-\",\">\",\"rng\",\",\",\"(\",\"uint64_t\",\")\",\"88888\",\")\",\",\",\"LMMC_STATUS_OK\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The integer-element shuffle fixture casts the fixed nonnegative value 88888 exactly to uint64_t and passes it to lmmc_rng_seed. It selects a reproducible RNG state only; generated samples and mathematical distribution parameters are stored separately."
+    },
+    {
+      "fingerprint": "9f87bf36765ee4b74c456e864d18face0577cd675838e753fcf504077277a9cf",
+      "path": "test/test_random_dist.c",
+      "normalized_line": "[\"assert_int_equal\",\"(\",\"lmmc_rng_seed\",\"(\",\"fixture\",\"-\",\">\",\"rng\",\",\",\"(\",\"uint64_t\",\")\",\"999\",\")\",\",\",\"LMMC_STATUS_OK\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "The tiny-interval uniform fixture casts the fixed nonnegative value 999 exactly to uint64_t and passes it to lmmc_rng_seed. It selects a reproducible RNG state only; generated samples and mathematical distribution parameters are stored separately."
+    },
+    {
+      "fingerprint": "d8beb05edb051dc050a52d2944c6142cae7f61a73394461e514accc99a75d59c",
+      "path": "test/test_random_extended.c",
+      "normalized_line": "[\":\",\"INT64_MIN\",\"+\",\"(\",\"int64_t\",\")\",\"(\",\"bits\",\"-\",\"(\",\"UINT64_C\",\"(\",\"1\",\")\",\"<\",\"<\",\"63\",\")\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Reference fixture exercises inclusive intervals [INT64_MIN,INT64_MAX], [-17,23], [INT64_MIN,INT64_MIN+100], and [INT64_MAX-100,INT64_MAX], plus equal endpoint -7. Unsigned span wraps to zero only for the full 2^64 interval; other spans use rejection below (-bound)%bound before modulo. Signed bit conversion casts only <=INT64_MAX, subtracting 2^63 first for the upper half. Actual/expected values are finite-domain RNG samples in those intervals, not state or symbolic integers."
+    },
+    {
+      "fingerprint": "691176b6b7d0080c2ef2541417c4de70f8feda1a1f6cd0a896c3f125b482c47c",
+      "path": "test/test_random_extended.c",
+      "normalized_line": "[\"?\",\"(\",\"int64_t\",\")\",\"bits\"]",
+      "category": "bounded-kernel",
+      "rationale": "Reference fixture exercises inclusive intervals [INT64_MIN,INT64_MAX], [-17,23], [INT64_MIN,INT64_MIN+100], and [INT64_MAX-100,INT64_MAX], plus equal endpoint -7. Unsigned span wraps to zero only for the full 2^64 interval; other spans use rejection below (-bound)%bound before modulo. Signed bit conversion casts only <=INT64_MAX, subtracting 2^63 first for the upper half. Actual/expected values are finite-domain RNG samples in those intervals, not state or symbolic integers."
+    },
+    {
+      "fingerprint": "493b0b802d7e15ca532614e3dd3a1da7bdaf1dc54f5063e722795982b8f81f03",
+      "path": "test/test_random_extended.c",
+      "normalized_line": "[\"int64_t\",\"actual\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Reference fixture exercises inclusive intervals [INT64_MIN,INT64_MAX], [-17,23], [INT64_MIN,INT64_MIN+100], and [INT64_MAX-100,INT64_MAX], plus equal endpoint -7. Unsigned span wraps to zero only for the full 2^64 interval; other spans use rejection below (-bound)%bound before modulo. Signed bit conversion casts only <=INT64_MAX, subtracting 2^63 first for the upper half. Actual/expected values are finite-domain RNG samples in those intervals, not state or symbolic integers."
+    },
+    {
+      "fingerprint": "d287dfb8935b78c8f309e83bc41e0e548da35faaf88d7579afc211fad01fe013",
+      "path": "test/test_random_extended.c",
+      "normalized_line": "[\"int64_t\",\"expected\",\"=\",\"bits\",\"<\",\"=\",\"(\",\"uint64_t\",\")\",\"INT64_MAX\"]",
+      "category": "bounded-kernel",
+      "rationale": "Reference finite-width uniform-integer mapping: uint64_t raw words and modular offsets encode the full int64_t interval. Conversion below INT64_MAX is checked; high words are mapped using INT64_MIN plus a representable nonnegative offset, avoiding implementation-defined narrowing."
+    },
+    {
+      "fingerprint": "9f4687ec84dc84e881c1eb3d9553f45861ef158d8202b61b7c6343d08a10fb24",
+      "path": "test/test_random_extended.c",
+      "normalized_line": "[\"uint64_t\",\"bits\",\"=\",\"(\",\"uint64_t\",\")\",\"INT64_MIN\",\"+\",\"raw\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Reference finite-width uniform-integer mapping: uint64_t raw words and modular offsets encode the full int64_t interval. Conversion below INT64_MAX is checked; high words are mapped using INT64_MIN plus a representable nonnegative offset, avoiding implementation-defined narrowing."
+    },
+    {
+      "fingerprint": "c03a6fa7d5fba734ae20fbf637c111c8118bfef7b02bf848ae6a4701d088db84",
+      "path": "test/test_random_extended.c",
+      "normalized_line": "[\"uint64_t\",\"raw\",\"=\",\"lmmc_rng_next_u64\",\"(\",\"rng1\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Reference finite-width uniform-integer mapping: uint64_t raw words and modular offsets encode the full int64_t interval. Conversion below INT64_MAX is checked; high words are mapped using INT64_MIN plus a representable nonnegative offset, avoiding implementation-defined narrowing."
+    },
+    {
+      "fingerprint": "aed62216ee3f625d1ff8fb406a4597638f7c67a4eeccef6b3dd3ce54b1c7bca5",
+      "path": "test/test_random_extended.c",
+      "normalized_line": "[\"uint64_t\",\"v1\",\"=\",\"lmmc_rng_next_u64\",\"(\",\"fixture\",\"-\",\">\",\"rng1\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. This fixture compares 100 outputs from two identically seeded RNGs; v1/v2 are bounded sampled words, not state."
+    },
+    {
+      "fingerprint": "8d8f54ec92177a0fbb1c0da041d5479bf00b1fa1abe98bc4ed76fd5f9bf2ca10",
+      "path": "test/test_random_extended.c",
+      "normalized_line": "[\"uint64_t\",\"v2\",\"=\",\"lmmc_rng_next_u64\",\"(\",\"fixture\",\"-\",\">\",\"rng2\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. This fixture compares 100 outputs from two identically seeded RNGs; v1/v2 are bounded sampled words, not state."
+    },
+    {
+      "fingerprint": "6aae2935f1e1ce47a63931ae006376c0951c3b95f35e70833336de602a71a161",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"const\",\"uint64_t\",\"seed\",\"=\",\"UINT64_C\",\"(\",\"0x0123456789abcdef\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "RNG reproducibility fixture passes these uint64_t seed words directly to lmmc_rng_seed (or check_same_seed_same_sequence). Explicit seeds include 0,1,UINT64_MAX and fixed bit patterns; randomized seeds are assembled from eight masked bytes. All 64 seed bits are configuration, not a mathematical sample."
+    },
+    {
+      "fingerprint": "109b60c554484f4a859c31cae94a7a00379844e9021f701970b88646547b1926",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"for\",\"(\",\"i\",\"=\",\"0\",\";\",\"i\",\"<\",\"sizeof\",\"(\",\"uint64_t\",\")\",\";\",\"i\",\"+\",\"+\",\")\",\"{\"]",
+      "category": "machine",
+      "rationale": "sizeof(uint64_t) is used only as the loop bound for assembling a seed from eight bytes on supported 8-bit-byte targets; the size_t index stays 0..7 and does not represent a mathematical integer value."
+    },
+    {
+      "fingerprint": "f1f5f0b00d1563f586140e5c68b2559716d73bc21dfa27c78a63b42a0452da8b",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"static\",\"const\",\"uint64_t\",\"expected_u64\",\"[\",\"]\",\"=\",\"{\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. Reproducibility fixtures store/compare raw sampled words: first_run/second_run have 200 entries, and expected_u64 contains four fixed native output words for seed 0x0123456789abcdef. No arithmetic treats the sequence as an unbounded number."
+    },
+    {
+      "fingerprint": "b6fcbad208ed8e3a5cb8287b9b69cfbeddfceb815253342aa0d59ba46091d0e8",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"static\",\"uint64_t\",\"rand_u64\",\"(\",\"void\",\")\",\"{\"]",
+      "category": "machine",
+      "rationale": "rand_u64 constructs a seed word, not a distribution sample: starting at zero, eight iterations shift by 8 and OR rand()&0xFF (0..255). After k<=8 iterations at most 8*k bits are populated, so the final [0,UINT64_MAX] word is valid input to lmmc_rng_seed."
+    },
+    {
+      "fingerprint": "a94165eb78d4f6f3b6253ce18ac1715cc117a9f382d6e866b3af68c648e55ce3",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"static\",\"void\",\"check_same_seed_same_sequence\",\"(\",\"struct\",\"test_fixture\",\"*\",\"fixture\",\",\",\"uint64_t\",\"seed\",\")\",\"{\"]",
+      "category": "machine",
+      "rationale": "RNG reproducibility fixture passes these uint64_t seed words directly to lmmc_rng_seed (or check_same_seed_same_sequence). Explicit seeds include 0,1,UINT64_MAX and fixed bit patterns; randomized seeds are assembled from eight masked bytes. All 64 seed bits are configuration, not a mathematical sample."
+    },
+    {
+      "fingerprint": "48e6071e07d5ae6bb9c82b5f24590f33ccc1858f0ec591719662faa6ffc3487b",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"uint64_t\",\"first_run\",\"[\",\"SEQUENCE_LENGTH\",\"]\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. Reproducibility fixtures store/compare raw sampled words: first_run/second_run have 200 entries, and expected_u64 contains four fixed native output words for seed 0x0123456789abcdef. No arithmetic treats the sequence as an unbounded number."
+    },
+    {
+      "fingerprint": "7314733ce97663a7e5022bc4f1033fd60f446037957b8910eaf26ce958e23b3f",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"uint64_t\",\"second_run\",\"[\",\"SEQUENCE_LENGTH\",\"]\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. Reproducibility fixtures store/compare raw sampled words: first_run/second_run have 200 entries, and expected_u64 contains four fixed native output words for seed 0x0123456789abcdef. No arithmetic treats the sequence as an unbounded number."
+    },
+    {
+      "fingerprint": "c70471d64075719e9bccd03079a7a5f159393ee51b916de44cdf077796f98817",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"uint64_t\",\"seed\",\"=\",\"UINT64_C\",\"(\",\"0xABCDEF0123456789\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "RNG reproducibility fixture passes these uint64_t seed words directly to lmmc_rng_seed (or check_same_seed_same_sequence). Explicit seeds include 0,1,UINT64_MAX and fixed bit patterns; randomized seeds are assembled from eight masked bytes. All 64 seed bits are configuration, not a mathematical sample."
+    },
+    {
+      "fingerprint": "c4ff38d5bf3bb68509602cd00d5a8f07046cb893a98dfe9e7c28c9c8cbf1861d",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"uint64_t\",\"seed\",\"=\",\"rand_u64\",\"(\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "RNG reproducibility fixture passes these uint64_t seed words directly to lmmc_rng_seed (or check_same_seed_same_sequence). Explicit seeds include 0,1,UINT64_MAX and fixed bit patterns; randomized seeds are assembled from eight masked bytes. All 64 seed bits are configuration, not a mathematical sample."
+    },
+    {
+      "fingerprint": "d4bec6caf2ad3c69abca5d95857516489ae99d002d84b4424b9c665e81e4299b",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"uint64_t\",\"seed1\",\"=\",\"12345\",\";\"]",
+      "category": "machine",
+      "rationale": "RNG reproducibility fixture passes these uint64_t seed words directly to lmmc_rng_seed (or check_same_seed_same_sequence). Explicit seeds include 0,1,UINT64_MAX and fixed bit patterns; randomized seeds are assembled from eight masked bytes. All 64 seed bits are configuration, not a mathematical sample."
+    },
+    {
+      "fingerprint": "07fc9c8892f1d563840ea873cc719bbba50705697c5b0fe400027cbfb3e36d02",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"uint64_t\",\"seed1\",\"=\",\"rand_u64\",\"(\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "RNG reproducibility fixture passes these uint64_t seed words directly to lmmc_rng_seed (or check_same_seed_same_sequence). Explicit seeds include 0,1,UINT64_MAX and fixed bit patterns; randomized seeds are assembled from eight masked bytes. All 64 seed bits are configuration, not a mathematical sample."
+    },
+    {
+      "fingerprint": "3d9271ec6da153279025fc579bb5ee3897b51671ce2e8c44c1da2b71419796f6",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"uint64_t\",\"seed2\",\"=\",\"67890\",\";\"]",
+      "category": "machine",
+      "rationale": "RNG reproducibility fixture passes these uint64_t seed words directly to lmmc_rng_seed (or check_same_seed_same_sequence). Explicit seeds include 0,1,UINT64_MAX and fixed bit patterns; randomized seeds are assembled from eight masked bytes. All 64 seed bits are configuration, not a mathematical sample."
+    },
+    {
+      "fingerprint": "24cbd7354e0015bc280c338311414a0daecea7378d0218fd73f3ad3a0fd1ad5c",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"uint64_t\",\"seed2\",\"=\",\"rand_u64\",\"(\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "RNG reproducibility fixture passes these uint64_t seed words directly to lmmc_rng_seed (or check_same_seed_same_sequence). Explicit seeds include 0,1,UINT64_MAX and fixed bit patterns; randomized seeds are assembled from eight masked bytes. All 64 seed bits are configuration, not a mathematical sample."
+    },
+    {
+      "fingerprint": "1038b8835c1aca6deb110981bea49ec2a5e35fe1bb66e0abfd1c19b3a09180c0",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"uint64_t\",\"seeds\",\"[\",\"]\",\"=\",\"{\"]",
+      "category": "machine",
+      "rationale": "RNG reproducibility fixture passes these uint64_t seed words directly to lmmc_rng_seed (or check_same_seed_same_sequence). Explicit seeds include 0,1,UINT64_MAX and fixed bit patterns; randomized seeds are assembled from eight masked bytes. All 64 seed bits are configuration, not a mathematical sample."
+    },
+    {
+      "fingerprint": "711f43110360413d7727df85ecd958aa5d478594465243d024bc318e319f8e7f",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"uint64_t\",\"v1\",\"=\",\"lmmc_rng_next_u64\",\"(\",\"fixture\",\"-\",\">\",\"rng1\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. Reproducibility fixtures store/compare raw sampled words: first_run/second_run have 200 entries, and expected_u64 contains four fixed native output words for seed 0x0123456789abcdef. No arithmetic treats the sequence as an unbounded number."
+    },
+    {
+      "fingerprint": "36ee804f79d9d5257ffc514b57ca92d31e6f5d57860adebeda53e1465c8b9366",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"uint64_t\",\"v2\",\"=\",\"lmmc_rng_next_u64\",\"(\",\"fixture\",\"-\",\">\",\"rng2\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. Reproducibility fixtures store/compare raw sampled words: first_run/second_run have 200 entries, and expected_u64 contains four fixed native output words for seed 0x0123456789abcdef. No arithmetic treats the sequence as an unbounded number."
+    },
+    {
+      "fingerprint": "05a697dab912becde5aeee44b217ed7a6b92ec6c3235c9f7383dbdaaef09d647",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"uint64_t\",\"val\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "rand_u64 constructs a seed word, not a distribution sample: starting at zero, eight iterations shift by 8 and OR rand()&0xFF (0..255). After k<=8 iterations at most 8*k bits are populated, so the final [0,UINT64_MAX] word is valid input to lmmc_rng_seed."
+    },
+    {
+      "fingerprint": "96f937b9af8557a859515a81b7c7ab1d4bf06b64ddc471e3682bc6f0324a8b5d",
+      "path": "test/test_random_rng.c",
+      "normalized_line": "[\"val\",\"=\",\"(\",\"val\",\"<\",\"<\",\"8\",\")\",\"|\",\"(\",\"uint64_t\",\")\",\"(\",\"rand\",\"(\",\")\",\"&\",\"0xFF\",\")\",\";\"]",
+      "category": "machine",
+      "rationale": "rand_u64 constructs a seed word, not a distribution sample: starting at zero, eight iterations shift by 8 and OR rand()&0xFF (0..255). After k<=8 iterations at most 8*k bits are populated, so the final [0,UINT64_MAX] word is valid input to lmmc_rng_seed."
+    },
+    {
+      "fingerprint": "33a8f3bc4a9dcc5a6b0072365617ebaf520143b83f890af049600fa611ea6724",
+      "path": "test/test_rng_jump.c",
+      "normalized_line": "[\"static\",\"uint64_t\",\"seq_clone\",\"[\",\"OVERLAP_SAMPLES\",\"]\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. Jump/clone fixtures compare these sampled words for equality or divergence; the two no-overlap buffers hold 1000 independent uint64_t output words each. The uint64_t values do not encode the 2^128/2^192 jump distance."
+    },
+    {
+      "fingerprint": "cae187cbb3065beab4050dc6490370d1c3fd1d3d820d507b44ca476e5516b074",
+      "path": "test/test_rng_jump.c",
+      "normalized_line": "[\"static\",\"uint64_t\",\"seq_orig\",\"[\",\"OVERLAP_SAMPLES\",\"]\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. Jump/clone fixtures compare these sampled words for equality or divergence; the two no-overlap buffers hold 1000 independent uint64_t output words each. The uint64_t values do not encode the 2^128/2^192 jump distance."
+    },
+    {
+      "fingerprint": "311225448b4b6fd7ecf120ea9edfec667ee1a5840b1934f14d07e6fe07ff0fda",
+      "path": "test/test_rng_jump.c",
+      "normalized_line": "[\"uint64_t\",\"v1\",\"=\",\"lmmc_rng_next_u64\",\"(\",\"fixture\",\"-\",\">\",\"rng\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. Jump/clone fixtures compare these sampled words for equality or divergence; the two no-overlap buffers hold 1000 independent uint64_t output words each. The uint64_t values do not encode the 2^128/2^192 jump distance."
+    },
+    {
+      "fingerprint": "51de66f7df427024a298ad8d1d3c2381bdef035fb4b0395b006d9a003078e94f",
+      "path": "test/test_rng_jump.c",
+      "normalized_line": "[\"uint64_t\",\"v1\",\"=\",\"lmmc_rng_next_u64\",\"(\",\"fixture\",\"-\",\">\",\"rng1\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. Jump/clone fixtures compare these sampled words for equality or divergence; the two no-overlap buffers hold 1000 independent uint64_t output words each. The uint64_t values do not encode the 2^128/2^192 jump distance."
+    },
+    {
+      "fingerprint": "0cb81da3a4a2ba141ef6600e6d0183e1da2fc7ba5bf1aaec606640b316452939",
+      "path": "test/test_rng_jump.c",
+      "normalized_line": "[\"uint64_t\",\"v1\",\"=\",\"lmmc_rng_next_u64\",\"(\",\"fixture\",\"-\",\">\",\"rng_jump\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. Jump/clone fixtures compare these sampled words for equality or divergence; the two no-overlap buffers hold 1000 independent uint64_t output words each. The uint64_t values do not encode the 2^128/2^192 jump distance."
+    },
+    {
+      "fingerprint": "c196cb2f6b724274268a1e4a734ff20f332bdf0e270284a240185d0430c2daed",
+      "path": "test/test_rng_jump.c",
+      "normalized_line": "[\"uint64_t\",\"v2\",\"=\",\"lmmc_rng_next_u64\",\"(\",\"fixture\",\"-\",\">\",\"clone\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. Jump/clone fixtures compare these sampled words for equality or divergence; the two no-overlap buffers hold 1000 independent uint64_t output words each. The uint64_t values do not encode the 2^128/2^192 jump distance."
+    },
+    {
+      "fingerprint": "81e2f2009a7e0dd573605ce576e1f771970334afb2b7b6008516f19f113dc2fe",
+      "path": "test/test_rng_jump.c",
+      "normalized_line": "[\"uint64_t\",\"v2\",\"=\",\"lmmc_rng_next_u64\",\"(\",\"fixture\",\"-\",\">\",\"rng2\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. Jump/clone fixtures compare these sampled words for equality or divergence; the two no-overlap buffers hold 1000 independent uint64_t output words each. The uint64_t values do not encode the 2^128/2^192 jump distance."
+    },
+    {
+      "fingerprint": "efe365c2760b87ca180b16969dc256b261613ec065b802d8f7e1461e0e2d23ad",
+      "path": "test/test_rng_jump.c",
+      "normalized_line": "[\"uint64_t\",\"v2\",\"=\",\"lmmc_rng_next_u64\",\"(\",\"fixture\",\"-\",\">\",\"rng_long\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. Jump/clone fixtures compare these sampled words for equality or divergence; the two no-overlap buffers hold 1000 independent uint64_t output words each. The uint64_t values do not encode the 2^128/2^192 jump distance."
+    },
+    {
+      "fingerprint": "7ea1a282a18a2a26f9df55a6ae6c4267486e280da070a7afac32b883dc061e0f",
+      "path": "test/test_rng_uniformity_prop.c",
+      "normalized_line": "[\"uint64_t\",\"sample\",\"=\",\"lmmc_rng_next_u64\",\"(\",\"fixture\",\"-\",\">\",\"rng\",\")\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. The uniformity fixture takes sample>>56, an exact index in [0,255], into 256 histogram bins; it never narrows the full sample to a signed type."
+    },
+    {
+      "fingerprint": "63e7c39f3020d4f9fc8acc6541c552b8003e99cbb65b7612f74d8f687bf350f1",
+      "path": "test/test_rng_uniformity_prop.c",
+      "normalized_line": "[\"uint64_t\",\"seq1\",\"[\",\"16\",\"]\",\",\",\"seq2\",\"[\",\"16\",\"]\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "Raw xoshiro256** output has the explicit interval [0, 2^64-1]; unsigned shifts, rotates and multiplication are defined modulo 2^64, and no signed narrowing is performed. The unique-default-seed fixture stores 16 raw words from each RNG and compares corresponding outputs; array length and loop indices are separate machine counts."
+    },
+    {
+      "fingerprint": "36109310cfe195ac5821a8c9e7f2d30c735b708d7850874b5db986514efbffc7",
+      "path": "test/test_stdlib_boolean_sets.c",
+      "normalized_line": "[\"uint64_t\",\"bool_hash\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "Boolean-key fixtures receive uint64_t hashes of 0 or 1 and compare repeatability/distinction; invalid value 2 is rejected. These variables store table-key fingerprints, not Boolean set cardinalities or mathematical integers."
+    },
+    {
+      "fingerprint": "d8fcd0962a3a75d9e32d0a4faf55509419ca14358a33fc3a9f6514ea4aac8831",
+      "path": "test/test_stdlib_boolean_sets.c",
+      "normalized_line": "[\"uint64_t\",\"bool_hash_other\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "Boolean-key fixtures receive uint64_t hashes of 0 or 1 and compare repeatability/distinction; invalid value 2 is rejected. These variables store table-key fingerprints, not Boolean set cardinalities or mathematical integers."
+    },
+    {
+      "fingerprint": "e68fae1497a1f55fb9d6151564248189026ab9064b86777949d6b1c29b9c6615",
+      "path": "test/test_stdlib_boolean_sets.c",
+      "normalized_line": "[\"uint64_t\",\"bool_hash_same\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "Boolean-key fixtures receive uint64_t hashes of 0 or 1 and compare repeatability/distinction; invalid value 2 is rejected. These variables store table-key fingerprints, not Boolean set cardinalities or mathematical integers."
+    },
+    {
+      "fingerprint": "5bdfa2107daf74b0feb7d9bae934dc044d897c49c9c8baf4871369d8be98224d",
+      "path": "test/test_stdlib_complex_sets.c",
+      "normalized_line": "[\"uint64_t\",\"complex_hash\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "Complex-key fixtures receive 64-bit fingerprints for (3,4), (3,5) and signed-zero variants, with invalid/nonfinite inputs rejected. Hash comparisons test key semantics; complex components remain floating values rather than integer-packed mathematics."
+    },
+    {
+      "fingerprint": "c93bb875e9f8d9c0349736da6077d13b9758541910707a8325186326cac694c2",
+      "path": "test/test_stdlib_complex_sets.c",
+      "normalized_line": "[\"uint64_t\",\"complex_hash_other\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "Complex-key fixtures receive 64-bit fingerprints for (3,4), (3,5) and signed-zero variants, with invalid/nonfinite inputs rejected. Hash comparisons test key semantics; complex components remain floating values rather than integer-packed mathematics."
+    },
+    {
+      "fingerprint": "7db6d15f31275977fd3009ddeb494ef6c0f6c8546746edfea419fd6bfbb6dd3c",
+      "path": "test/test_stdlib_complex_sets.c",
+      "normalized_line": "[\"uint64_t\",\"complex_hash_same\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "Complex-key fixtures receive 64-bit fingerprints for (3,4), (3,5) and signed-zero variants, with invalid/nonfinite inputs rejected. Hash comparisons test key semantics; complex components remain floating values rather than integer-packed mathematics."
+    },
+    {
+      "fingerprint": "505371e842f7a4ccdb3c5effaf247605828617f967847338cd6cb91879c561d8",
+      "path": "test/test_stdlib_numeric_sets.c",
+      "normalized_line": "[\"uint64_t\",\"num_hash\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "Numeric-key fixtures receive uint64_t fingerprints for 1.5,2.5 and canonicalized +/-0; NaN/infinity calls exercise rejection. The words are double-bit hashes compared as table keys, not integer approximations of numeric inputs."
+    },
+    {
+      "fingerprint": "de5233494cb88c86505777750e897275e99392227af2c80ba2d77600f1413fd5",
+      "path": "test/test_stdlib_numeric_sets.c",
+      "normalized_line": "[\"uint64_t\",\"num_hash_other\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "Numeric-key fixtures receive uint64_t fingerprints for 1.5,2.5 and canonicalized +/-0; NaN/infinity calls exercise rejection. The words are double-bit hashes compared as table keys, not integer approximations of numeric inputs."
+    },
+    {
+      "fingerprint": "b81cbe825411a93484934b65fcdab538d3ab56f797bce8266ca2841eee74abef",
+      "path": "test/test_stdlib_numeric_sets.c",
+      "normalized_line": "[\"uint64_t\",\"num_hash_same\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "Numeric-key fixtures receive uint64_t fingerprints for 1.5,2.5 and canonicalized +/-0; NaN/infinity calls exercise rejection. The words are double-bit hashes compared as table keys, not integer approximations of numeric inputs."
+    },
+    {
+      "fingerprint": "a9e9df6bc2f436a2722b8ced93bb7dbcf05c132bb163ccfba51f9ca1a57b466a",
+      "path": "test/test_stdlib_random.c",
+      "normalized_line": "[\"int64_t\",\"randint_out\",\"=\",\"0\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "stdlib randint fixtures receive inclusive [1,3] samples (and randint_out also [2,5] through the default RNG); assertions check those bounds and reseed repeatability. Invalid reversed bounds and null handles exercise native-API errors. Wrappers delegate to the unsigned-span rejection/safe signed-reconstruction kernel supporting [INT64_MIN,INT64_MAX]; these variables are sampled outputs, not state."
+    },
+    {
+      "fingerprint": "d8404129baca574d8b4704d675ffec287d361fc8502d3ecc17ffbf23b2ce4424",
+      "path": "test/test_stdlib_random.c",
+      "normalized_line": "[\"int64_t\",\"randint_out2\",\"=\",\"0\",\";\"]",
+      "category": "bounded-kernel",
+      "rationale": "stdlib randint fixtures receive inclusive [1,3] samples (and randint_out also [2,5] through the default RNG); assertions check those bounds and reseed repeatability. Invalid reversed bounds and null handles exercise native-API errors. Wrappers delegate to the unsigned-span rejection/safe signed-reconstruction kernel supporting [INT64_MIN,INT64_MAX]; these variables are sampled outputs, not state."
+    },
+    {
+      "fingerprint": "cd9b764c56a2097e17026986a14578c86ac3fc66e9dabe0df2dd2c657e764ca4",
+      "path": "test/test_stdlib_text_sets.c",
+      "normalized_line": "[\"uint64_t\",\"text_hash\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "Text-key fixtures receive uint64_t hash fingerprints of alpha/beta and compare repeatability/distinction, with null input rejected. Words represent table-key hash bits, not text-as-mathematical-integer encodings."
+    },
+    {
+      "fingerprint": "dd27730e79d6579bb9f9463d77c2e3612d6f60b08b65440d5c8c814f37b54864",
+      "path": "test/test_stdlib_text_sets.c",
+      "normalized_line": "[\"uint64_t\",\"text_hash_other\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "Text-key fixtures receive uint64_t hash fingerprints of alpha/beta and compare repeatability/distinction, with null input rejected. Words represent table-key hash bits, not text-as-mathematical-integer encodings."
+    },
+    {
+      "fingerprint": "9dc1c24d42258ee53d9aa7ab15f63f6fe8cb7c0f82aa348afde1c3282905fddd",
+      "path": "test/test_stdlib_text_sets.c",
+      "normalized_line": "[\"uint64_t\",\"text_hash_same\",\"=\",\"0\",\";\"]",
+      "category": "machine",
+      "rationale": "Text-key fixtures receive uint64_t hash fingerprints of alpha/beta and compare repeatability/distinction, with null input rejected. Words represent table-key hash bits, not text-as-mathematical-integer encodings."
+    }
+  ]
+}

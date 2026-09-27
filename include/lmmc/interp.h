@@ -257,6 +257,17 @@ lmmc_status_t lmmc_interp_bilinear(
 /**
  * @brief 双三次插值(矩形网格).
  *
+ * 使用每轴相邻四个实际坐标节点的局部重心 Lagrange 插值的张量积；
+ * 支持任意严格升序的非均匀网格，每轴三次以内多项式可精确再现
+ * （浮点舍入误差除外）。边界使用最前/最后四个不同节点。
+ * 查询恰好落在节点时直接采用该节点的基函数值。
+ *
+ * @return 非有限查询、非有限/非严格升序坐标或选中 4×4 网格值非有限时
+ *         返回 ::LMMC_STATUS_INVALID_ARGUMENT；查询超出网格返回
+ *         ::LMMC_STATUS_OUT_OF_RANGE；权重分母为零或中间算术非有限
+ *         返回 ::LMMC_STATUS_NUMERICAL_FAILURE。
+ * @note 不分配堆内存；仅成功且结果有限时写入 out_z。
+ *
  * @param[in]  xs    x 方向严格升序节点数组,长度 nx >= 4.
  * @param[in]  nx    x 方向节点数.
  * @param[in]  ys    y 方向严格升序节点数组,长度 ny >= 4.

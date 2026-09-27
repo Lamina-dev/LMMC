@@ -102,10 +102,14 @@ lmmc_status_t lmmc_sparse_transpose(const lmmc_sparse_mat_t* sparse, lmmc_sparse
     size_t* next = NULL;
     lmmc_status_t st = lmmc_sparse_validate(sparse);
 
-    if (st != LMMC_STATUS_OK || out_transposed == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (st != LMMC_STATUS_OK || out_transposed == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
 
     st = lmmc_sparse_create(sparse->cols, sparse->rows, sparse->nnz, sparse->format, out_transposed);
-    if (st != LMMC_STATUS_OK) return st;
+    if (st != LMMC_STATUS_OK) {
+        return st;
+    }
 
     size_t outer_size_src = (sparse->format == LMMC_SPARSE_CSR) ? sparse->rows : sparse->cols;
     size_t inner_size_src = (sparse->format == LMMC_SPARSE_CSR) ? sparse->cols : sparse->rows;
@@ -118,9 +122,11 @@ lmmc_status_t lmmc_sparse_transpose(const lmmc_sparse_mat_t* sparse, lmmc_sparse
         out_transposed->row_ptr[i + 1] += out_transposed->row_ptr[i];
     }
 
-    if (out_transposed->nnz == 0) return LMMC_STATUS_OK;
+    if (out_transposed->nnz == 0) {
+        return LMMC_STATUS_OK;
+    }
 
-    next = (size_t*)lmmc_alloc_array(inner_size_src, sizeof(size_t));
+    next = (size_t*)lmmc_memory_alloc_array(inner_size_src, sizeof(size_t));
     if (next == NULL) {
         lmmc_sparse_destroy(out_transposed);
         return LMMC_STATUS_ALLOCATION_FAILED;
@@ -136,17 +142,23 @@ lmmc_status_t lmmc_sparse_transpose(const lmmc_sparse_mat_t* sparse, lmmc_sparse
         }
     }
 
-    lmmc_free(next);
+    lmmc_memory_free(next);
     return LMMC_STATUS_OK;
 }
 lmmc_status_t lmmc_sparse_to_csc(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t* dst) {
-    if (src == NULL || dst == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (src == NULL || dst == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
     lmmc_status_t st = lmmc_sparse_validate(src);
-    if (st != LMMC_STATUS_OK) return st;
+    if (st != LMMC_STATUS_OK) {
+        return st;
+    }
 
     if (src->format == LMMC_SPARSE_CSC) {
         st = lmmc_sparse_create_csc(src->rows, src->cols, src->nnz, dst);
-        if (st != LMMC_STATUS_OK) return st;
+        if (st != LMMC_STATUS_OK) {
+            return st;
+        }
         memcpy(dst->row_ptr, src->row_ptr, (src->cols + 1) * sizeof(size_t));
         if (src->nnz > 0) {
             memcpy(dst->col_idx, src->col_idx, src->nnz * sizeof(size_t));
@@ -158,7 +170,9 @@ lmmc_status_t lmmc_sparse_to_csc(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
     }
 
     st = lmmc_sparse_create_csc(src->rows, src->cols, src->nnz, dst);
-    if (st != LMMC_STATUS_OK) return st;
+    if (st != LMMC_STATUS_OK) {
+        return st;
+    }
 
     for (size_t p = 0; p < src->nnz; ++p) {
         ++dst->row_ptr[src->col_idx[p] + 1];
@@ -167,7 +181,7 @@ lmmc_status_t lmmc_sparse_to_csc(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
         dst->row_ptr[i + 1] += dst->row_ptr[i];
     }
 
-    size_t* next = (size_t*)lmmc_alloc_array(src->cols, sizeof(size_t));
+    size_t* next = (size_t*)lmmc_memory_alloc_array(src->cols, sizeof(size_t));
     if (next == NULL) {
         lmmc_sparse_destroy(dst);
         return LMMC_STATUS_ALLOCATION_FAILED;
@@ -182,18 +196,24 @@ lmmc_status_t lmmc_sparse_to_csc(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
             LMMC_REAL_SET(&dst->values[dest_idx], &src->values[p]);
         }
     }
-    lmmc_free(next);
+    lmmc_memory_free(next);
     return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_sparse_to_csr(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t* dst) {
-    if (src == NULL || dst == NULL) return LMMC_STATUS_INVALID_ARGUMENT;
+    if (src == NULL || dst == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
     lmmc_status_t st = lmmc_sparse_validate(src);
-    if (st != LMMC_STATUS_OK) return st;
+    if (st != LMMC_STATUS_OK) {
+        return st;
+    }
 
     if (src->format == LMMC_SPARSE_CSR) {
         st = lmmc_sparse_create_csr(src->rows, src->cols, src->nnz, dst);
-        if (st != LMMC_STATUS_OK) return st;
+        if (st != LMMC_STATUS_OK) {
+            return st;
+        }
         memcpy(dst->row_ptr, src->row_ptr, (src->rows + 1) * sizeof(size_t));
         if (src->nnz > 0) {
             memcpy(dst->col_idx, src->col_idx, src->nnz * sizeof(size_t));
@@ -205,7 +225,9 @@ lmmc_status_t lmmc_sparse_to_csr(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
     }
 
     st = lmmc_sparse_create_csr(src->rows, src->cols, src->nnz, dst);
-    if (st != LMMC_STATUS_OK) return st;
+    if (st != LMMC_STATUS_OK) {
+        return st;
+    }
 
     for (size_t p = 0; p < src->nnz; ++p) {
         ++dst->row_ptr[src->col_idx[p] + 1];
@@ -214,7 +236,7 @@ lmmc_status_t lmmc_sparse_to_csr(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
         dst->row_ptr[i + 1] += dst->row_ptr[i];
     }
 
-    size_t* next = (size_t*)lmmc_alloc_array(src->rows, sizeof(size_t));
+    size_t* next = (size_t*)lmmc_memory_alloc_array(src->rows, sizeof(size_t));
     if (next == NULL) {
         lmmc_sparse_destroy(dst);
         return LMMC_STATUS_ALLOCATION_FAILED;
@@ -229,7 +251,7 @@ lmmc_status_t lmmc_sparse_to_csr(const lmmc_sparse_mat_t* src, lmmc_sparse_mat_t
             LMMC_REAL_SET(&dst->values[dest_idx], &src->values[p]);
         }
     }
-    lmmc_free(next);
+    lmmc_memory_free(next);
     return LMMC_STATUS_OK;
 }
 typedef struct {
@@ -241,18 +263,87 @@ typedef struct {
 static int lmmc_coo_cmp_row_col(const void* a, const void* b) {
     const lmmc_coo_sort_entry_t* ea = (const lmmc_coo_sort_entry_t*)a;
     const lmmc_coo_sort_entry_t* eb = (const lmmc_coo_sort_entry_t*)b;
-    if (ea->row != eb->row) return (ea->row < eb->row) ? -1 : 1;
-    if (ea->col != eb->col) return (ea->col < eb->col) ? -1 : 1;
-    return 0;
+    if (ea->row != eb->row) {
+        return (ea->row < eb->row) ? -1 : 1;
+    }
+    if (ea->col != eb->col) {
+        return (ea->col < eb->col) ? -1 : 1;
+    }
+    return (ea->orig_idx > eb->orig_idx) - (ea->orig_idx < eb->orig_idx);
 }
 
 
 static int lmmc_coo_cmp_col_row(const void* a, const void* b) {
     const lmmc_coo_sort_entry_t* ea = (const lmmc_coo_sort_entry_t*)a;
     const lmmc_coo_sort_entry_t* eb = (const lmmc_coo_sort_entry_t*)b;
-    if (ea->col != eb->col) return (ea->col < eb->col) ? -1 : 1;
-    if (ea->row != eb->row) return (ea->row < eb->row) ? -1 : 1;
-    return 0;
+    if (ea->col != eb->col) {
+        return (ea->col < eb->col) ? -1 : 1;
+    }
+    if (ea->row != eb->row) {
+        return (ea->row < eb->row) ? -1 : 1;
+    }
+    return (ea->orig_idx > eb->orig_idx) - (ea->orig_idx < eb->orig_idx);
+}
+
+static void lmmc_coo_compressed_offsets(
+    const lmmc_coo_sort_entry_t* entries, size_t nnz, size_t outer_size,
+    int column_major, size_t* row_ptr)
+{
+    size_t prev_row = entries[0].row;
+    size_t prev_col = entries[0].col;
+    memset(row_ptr, 0, (outer_size + 1) * sizeof(size_t));
+    row_ptr[(column_major ? prev_col : prev_row) + 1]++;
+    for (size_t i = 1; i < nnz; ++i) {
+        if (entries[i].row != prev_row || entries[i].col != prev_col) {
+            row_ptr[(column_major ? entries[i].col : entries[i].row) + 1]++;
+            prev_row = entries[i].row;
+            prev_col = entries[i].col;
+        }
+    }
+    for (size_t i = 0; i < outer_size; ++i) {
+        row_ptr[i + 1] += row_ptr[i];
+    }
+}
+
+static void lmmc_coo_compressed_values(
+    const lmmc_sparse_coo_t* coo, const lmmc_coo_sort_entry_t* entries,
+    int column_major, lmmc_sparse_mat_t* out,
+    lmmc_real_t* sum, lmmc_real_t* tmp)
+{
+    size_t index = 0;
+    size_t cur_row = entries[0].row;
+    size_t cur_col = entries[0].col;
+    LMMC_REAL_SET(sum, &coo->values[entries[0].orig_idx]);
+    for (size_t i = 1; i < coo->nnz; ++i) {
+        if (entries[i].row == cur_row && entries[i].col == cur_col) {
+            LMMC_REAL_ADD(tmp, sum, &coo->values[entries[i].orig_idx]);
+            LMMC_REAL_SET(sum, tmp);
+        } else {
+            out->col_idx[index] = column_major ? cur_row : cur_col;
+            LMMC_REAL_SET(&out->values[index], sum);
+            index++;
+            cur_row = entries[i].row;
+            cur_col = entries[i].col;
+            LMMC_REAL_SET(sum, &coo->values[entries[i].orig_idx]);
+        }
+    }
+    out->col_idx[index] = column_major ? cur_row : cur_col;
+    LMMC_REAL_SET(&out->values[index], sum);
+}
+
+
+static lmmc_status_t lmmc_sparse_coo_validate(const lmmc_sparse_coo_t* coo) {
+    if (coo == NULL || coo->rows == 0 || coo->cols == 0 ||
+        coo->nnz > coo->capacity ||
+        (coo->nnz > 0 && (coo->row_idx == NULL || coo->col_idx == NULL || coo->values == NULL))) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    for (size_t i = 0; i < coo->nnz; ++i) {
+        if (coo->row_idx[i] >= coo->rows || coo->col_idx[i] >= coo->cols) {
+            return LMMC_STATUS_INVALID_ARGUMENT;
+        }
+    }
+    return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_sparse_coo_to_csr(
@@ -264,7 +355,7 @@ lmmc_status_t lmmc_sparse_coo_to_csr(
     size_t i;
     lmmc_status_t st;
 
-    if (coo == NULL || out_csr == NULL) {
+    if (out_csr == NULL || lmmc_sparse_coo_validate(coo) != LMMC_STATUS_OK) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -274,8 +365,7 @@ lmmc_status_t lmmc_sparse_coo_to_csr(
     }
 
 
-    entries = (lmmc_coo_sort_entry_t*)lmmc_alloc_array(
-        coo->nnz, sizeof(lmmc_coo_sort_entry_t));
+    entries = (lmmc_coo_sort_entry_t*)lmmc_memory_alloc_array(coo->nnz, sizeof(lmmc_coo_sort_entry_t));
     if (entries == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
@@ -300,71 +390,24 @@ lmmc_status_t lmmc_sparse_coo_to_csr(
 
     st = lmmc_sparse_create_csr(coo->rows, coo->cols, unique_nnz, out_csr);
     if (st != LMMC_STATUS_OK) {
-        lmmc_free(entries);
+        lmmc_memory_free(entries);
         return st;
     }
 
 
     {
-        size_t csr_idx = 0;
         lmmc_real_t sum; LMMC_REAL_INIT(&sum);
         lmmc_real_t tmp; LMMC_REAL_INIT(&tmp);
 
 
-        memset(out_csr->row_ptr, 0, (coo->rows + 1) * sizeof(size_t));
-
-
-        {
-            size_t prev_row = entries[0].row;
-            size_t prev_col = entries[0].col;
-            out_csr->row_ptr[prev_row + 1]++;
-            for (i = 1; i < coo->nnz; ++i) {
-                if (entries[i].row != prev_row || entries[i].col != prev_col) {
-                    out_csr->row_ptr[entries[i].row + 1]++;
-                    prev_row = entries[i].row;
-                    prev_col = entries[i].col;
-                }
-            }
-        }
-
-
-        for (i = 0; i < coo->rows; ++i) {
-            out_csr->row_ptr[i + 1] += out_csr->row_ptr[i];
-        }
-
-
-        LMMC_REAL_SET(&sum, &coo->values[entries[0].orig_idx]);
-        {
-            size_t cur_row = entries[0].row;
-            size_t cur_col = entries[0].col;
-
-            for (i = 1; i < coo->nnz; ++i) {
-                if (entries[i].row == cur_row && entries[i].col == cur_col) {
-
-                    LMMC_REAL_ADD(&tmp, &sum, &coo->values[entries[i].orig_idx]);
-                    LMMC_REAL_SET(&sum, &tmp);
-                } else {
-
-                    out_csr->col_idx[csr_idx] = cur_col;
-                    LMMC_REAL_SET(&out_csr->values[csr_idx], &sum);
-                    csr_idx++;
-
-
-                    cur_row = entries[i].row;
-                    cur_col = entries[i].col;
-                    LMMC_REAL_SET(&sum, &coo->values[entries[i].orig_idx]);
-                }
-            }
-
-            out_csr->col_idx[csr_idx] = cur_col;
-            LMMC_REAL_SET(&out_csr->values[csr_idx], &sum);
-        }
+        lmmc_coo_compressed_offsets(entries, coo->nnz, coo->rows, 0, out_csr->row_ptr);
+        lmmc_coo_compressed_values(coo, entries, 0, out_csr, &sum, &tmp);
 
         LMMC_REAL_CLEAR(&sum);
         LMMC_REAL_CLEAR(&tmp);
     }
 
-    lmmc_free(entries);
+    lmmc_memory_free(entries);
     return LMMC_STATUS_OK;
 }
 
@@ -377,7 +420,7 @@ lmmc_status_t lmmc_sparse_coo_to_csc(
     size_t i;
     lmmc_status_t st;
 
-    if (coo == NULL || out_csc == NULL) {
+    if (out_csc == NULL || lmmc_sparse_coo_validate(coo) != LMMC_STATUS_OK) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
@@ -387,8 +430,7 @@ lmmc_status_t lmmc_sparse_coo_to_csc(
     }
 
 
-    entries = (lmmc_coo_sort_entry_t*)lmmc_alloc_array(
-        coo->nnz, sizeof(lmmc_coo_sort_entry_t));
+    entries = (lmmc_coo_sort_entry_t*)lmmc_memory_alloc_array(coo->nnz, sizeof(lmmc_coo_sort_entry_t));
     if (entries == NULL) {
         return LMMC_STATUS_ALLOCATION_FAILED;
     }
@@ -413,69 +455,23 @@ lmmc_status_t lmmc_sparse_coo_to_csc(
 
     st = lmmc_sparse_create_csc(coo->rows, coo->cols, unique_nnz, out_csc);
     if (st != LMMC_STATUS_OK) {
-        lmmc_free(entries);
+        lmmc_memory_free(entries);
         return st;
     }
 
 
     {
-        size_t csc_idx = 0;
         lmmc_real_t sum; LMMC_REAL_INIT(&sum);
         lmmc_real_t tmp; LMMC_REAL_INIT(&tmp);
 
-        LMMC_REAL_SET(&sum, &coo->values[entries[0].orig_idx]);
-        size_t cur_row = entries[0].row;
-        size_t cur_col = entries[0].col;
-
-        for (i = 1; i < coo->nnz; ++i) {
-            if (entries[i].row == cur_row && entries[i].col == cur_col) {
-
-                LMMC_REAL_ADD(&tmp, &sum, &coo->values[entries[i].orig_idx]);
-                LMMC_REAL_SET(&sum, &tmp);
-            } else {
-
-                out_csc->col_idx[csc_idx] = cur_row;
-                LMMC_REAL_SET(&out_csc->values[csc_idx], &sum);
-                csc_idx++;
-
-
-                cur_row = entries[i].row;
-                cur_col = entries[i].col;
-                LMMC_REAL_SET(&sum, &coo->values[entries[i].orig_idx]);
-            }
-        }
-
-        out_csc->col_idx[csc_idx] = cur_row;
-        LMMC_REAL_SET(&out_csc->values[csc_idx], &sum);
-
-
-        memset(out_csc->row_ptr, 0, (coo->cols + 1) * sizeof(size_t));
-
-
-        {
-            size_t prev_row = entries[0].row;
-            size_t prev_col = entries[0].col;
-
-            out_csc->row_ptr[entries[0].col + 1]++;
-            for (i = 1; i < coo->nnz; ++i) {
-                if (entries[i].row != prev_row || entries[i].col != prev_col) {
-                    out_csc->row_ptr[entries[i].col + 1]++;
-                    prev_row = entries[i].row;
-                    prev_col = entries[i].col;
-                }
-            }
-
-
-            for (i = 0; i < coo->cols; ++i) {
-                out_csc->row_ptr[i + 1] += out_csc->row_ptr[i];
-            }
-        }
+        lmmc_coo_compressed_values(coo, entries, 1, out_csc, &sum, &tmp);
+        lmmc_coo_compressed_offsets(entries, coo->nnz, coo->cols, 1, out_csc->row_ptr);
 
         LMMC_REAL_CLEAR(&sum);
         LMMC_REAL_CLEAR(&tmp);
     }
 
-    lmmc_free(entries);
+    lmmc_memory_free(entries);
     return LMMC_STATUS_OK;
 }
 
@@ -487,10 +483,14 @@ void lmmc_sparse_coo_destroy(lmmc_sparse_coo_t* coo) {
         for (size_t k = 0; k < coo->capacity; ++k) {
             LMMC_REAL_CLEAR(&coo->values[k]);
         }
-        lmmc_free(coo->values);
+        lmmc_memory_free(coo->values);
     }
-    if (coo->row_idx != NULL) lmmc_free(coo->row_idx);
-    if (coo->col_idx != NULL) lmmc_free(coo->col_idx);
+    if (coo->row_idx != NULL) {
+        lmmc_memory_free(coo->row_idx);
+    }
+    if (coo->col_idx != NULL) {
+        lmmc_memory_free(coo->col_idx);
+    }
     coo->rows = 0;
     coo->cols = 0;
     coo->nnz = 0;

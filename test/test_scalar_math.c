@@ -3,6 +3,10 @@
  * @brief Property-based and unit tests for scalar math wrappers
  *        (inverse trig, hyperbolic, power/rounding).
  */
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
+#include <cmocka.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -13,26 +17,25 @@
 
 #define PBT_ITERATIONS 100
 
-static int test_failures = 0;
-static int test_count = 0;
+static int setup(void **state) {
+    (void)state;
+    assert_int_equal(lmmc_init(), LMMC_STATUS_OK);
+    srand(12345);
+    return 0;
+}
 
-#define REPORT(name, result) do { \
-    test_count++; \
-    if (result) { \
-        printf("  FAIL: %s\n", name); \
-        test_failures++; \
-    } else { \
-        printf("  PASS: %s\n", name); \
-    } \
-} while (0)
+static int teardown(void **state) {
+    (void)state;
+    assert_int_equal(lmmc_deinit(), LMMC_STATUS_OK);
+    return 0;
+}
 
-static double rand_double(double lo, double hi)
-{
+static double rand_double(double lo, double hi) {
     return ((double)rand() / RAND_MAX) * (hi - lo) + lo;
 }
 
-static int test_property18_inverse_trig_roundtrip(void)
-{
+static void test_property18_inverse_trig_roundtrip(void **state) {
+    (void)state;
     int i;
     double eps = 1e-10;
 
@@ -45,34 +48,27 @@ static int test_property18_inverse_trig_roundtrip(void)
         /* asin round-trip: sin(asin(x)) ~ x */
         st = lmmc_asin(x, &asin_x);
         if (st != LMMC_STATUS_OK) {
-            printf("    asin(%g) failed at iteration %d, status=%d\n", x, i, (int)st);
-            return 1;
+            fail_msg("    asin(%g) failed at iteration %d, status=%d\n", x, i, (int)st);
         }
         sin_result = sin(asin_x);
         if (!lmmc_test_nearly_equal(sin_result, x, eps)) {
-            printf("    sin(asin(%g)) = %g, expected %g at iter %d\n",
-                   x, sin_result, x, i);
-            return 1;
+            fail_msg("    sin(asin(%g)) = %g, expected %g at iter %d\n", x, sin_result, x, i);
         }
 
         /* acos round-trip: cos(acos(x)) ~ x */
         st = lmmc_acos(x, &acos_x);
         if (st != LMMC_STATUS_OK) {
-            printf("    acos(%g) failed at iteration %d, status=%d\n", x, i, (int)st);
-            return 1;
+            fail_msg("    acos(%g) failed at iteration %d, status=%d\n", x, i, (int)st);
         }
         cos_result = cos(acos_x);
         if (!lmmc_test_nearly_equal(cos_result, x, eps)) {
-            printf("    cos(acos(%g)) = %g, expected %g at iter %d\n",
-                   x, cos_result, x, i);
-            return 1;
+            fail_msg("    cos(acos(%g)) = %g, expected %g at iter %d\n", x, cos_result, x, i);
         }
     }
-    return 0;
 }
 
-static int test_property19_hyperbolic_roundtrips(void)
-{
+static void test_property19_hyperbolic_roundtrips(void **state) {
+    (void)state;
     int i;
     double eps = 1e-10;
 
@@ -84,20 +80,16 @@ static int test_property19_hyperbolic_roundtrips(void)
 
         st = lmmc_asinh(x, &asinh_x);
         if (st != LMMC_STATUS_OK) {
-            printf("    asinh(%g) failed at iteration %d, status=%d\n", x, i, (int)st);
-            return 1;
+            fail_msg("    asinh(%g) failed at iteration %d, status=%d\n", x, i, (int)st);
         }
 
         st = lmmc_sinh(asinh_x, &sinh_result);
         if (st != LMMC_STATUS_OK) {
-            printf("    sinh(%g) failed at iteration %d, status=%d\n", asinh_x, i, (int)st);
-            return 1;
+            fail_msg("    sinh(%g) failed at iteration %d, status=%d\n", asinh_x, i, (int)st);
         }
 
         if (!lmmc_test_nearly_equal(sinh_result, x, eps)) {
-            printf("    sinh(asinh(%g)) = %g, expected %g at iter %d\n",
-                   x, sinh_result, x, i);
-            return 1;
+            fail_msg("    sinh(asinh(%g)) = %g, expected %g at iter %d\n", x, sinh_result, x, i);
         }
 
         /* cosh(acosh(x)) ~ x for x in [1, 10] */
@@ -107,28 +99,23 @@ static int test_property19_hyperbolic_roundtrips(void)
 
             st = lmmc_acosh(y, &acosh_y);
             if (st != LMMC_STATUS_OK) {
-                printf("    acosh(%g) failed at iteration %d, status=%d\n", y, i, (int)st);
-                return 1;
+                fail_msg("    acosh(%g) failed at iteration %d, status=%d\n", y, i, (int)st);
             }
 
             st = lmmc_cosh(acosh_y, &cosh_result);
             if (st != LMMC_STATUS_OK) {
-                printf("    cosh(%g) failed at iteration %d, status=%d\n", acosh_y, i, (int)st);
-                return 1;
+                fail_msg("    cosh(%g) failed at iteration %d, status=%d\n", acosh_y, i, (int)st);
             }
 
             if (!lmmc_test_nearly_equal(cosh_result, y, eps)) {
-                printf("    cosh(acosh(%g)) = %g, expected %g at iter %d\n",
-                       y, cosh_result, y, i);
-                return 1;
+                fail_msg("    cosh(acosh(%g)) = %g, expected %g at iter %d\n", y, cosh_result, y, i);
             }
         }
     }
-    return 0;
 }
 
-static int test_property20_floor_ceil_invariants(void)
-{
+static void test_property20_floor_ceil_invariants(void **state) {
+    (void)state;
     int i;
 
     for (i = 0; i < PBT_ITERATIONS; i++) {
@@ -138,379 +125,356 @@ static int test_property20_floor_ceil_invariants(void)
 
         st = lmmc_floor(x, &f);
         if (st != LMMC_STATUS_OK) {
-            printf("    floor(%g) failed at iteration %d, status=%d\n", x, i, (int)st);
-            return 1;
+            fail_msg("    floor(%g) failed at iteration %d, status=%d\n", x, i, (int)st);
         }
 
         st = lmmc_ceil(x, &c);
         if (st != LMMC_STATUS_OK) {
-            printf("    ceil(%g) failed at iteration %d, status=%d\n", x, i, (int)st);
-            return 1;
+            fail_msg("    ceil(%g) failed at iteration %d, status=%d\n", x, i, (int)st);
         }
 
         /* floor(x) <= x */
-        if (f > x) {
-            printf("    floor(%g) = %g > x at iter %d\n", x, f, i);
-            return 1;
+        if (!(f <= x)) {
+            fail_msg("    floor(%g) = %g > x at iter %d\n", x, f, i);
         }
 
         /* ceil(x) >= x */
-        if (c < x) {
-            printf("    ceil(%g) = %g < x at iter %d\n", x, c, i);
-            return 1;
+        if (!(c >= x)) {
+            fail_msg("    ceil(%g) = %g < x at iter %d\n", x, c, i);
         }
 
         /* ceil(x) - floor(x) <= 1 */
-        if ((c - f) > 1.0 + 1e-15) {
-            printf("    ceil(%g) - floor(%g) = %g > 1 at iter %d\n",
-                   x, x, c - f, i);
-            return 1;
+        if (!((c - f) <= 1.0 + 1e-15)) {
+            fail_msg("    ceil(%g) - floor(%g) = %g > 1 at iter %d\n", x, x, c - f, i);
         }
     }
-    return 0;
 }
 
 /* ---- Unit Tests ---- */
 
 /* Domain errors */
-static int test_unit_domain_errors(void)
-{
-    lmmc_real_t out;
+static void test_inverse_trig_domain(void **state) {
+    (void)state;
     lmmc_status_t st;
-
+    lmmc_real_t out;
     /* asin(2.0) -> OUT_OF_RANGE */
     st = lmmc_asin(2.0, &out);
     if (st != LMMC_STATUS_OUT_OF_RANGE) {
-        printf("    asin(2.0) expected OUT_OF_RANGE, got %d\n", (int)st);
-        return 1;
+        fail_msg("    asin(2.0) expected OUT_OF_RANGE, got %d\n", (int)st);
     }
 
     /* asin(-2.0) -> OUT_OF_RANGE */
     st = lmmc_asin(-2.0, &out);
     if (st != LMMC_STATUS_OUT_OF_RANGE) {
-        printf("    asin(-2.0) expected OUT_OF_RANGE, got %d\n", (int)st);
-        return 1;
+        fail_msg("    asin(-2.0) expected OUT_OF_RANGE, got %d\n", (int)st);
     }
 
     /* acos(2.0) -> OUT_OF_RANGE */
     st = lmmc_acos(2.0, &out);
     if (st != LMMC_STATUS_OUT_OF_RANGE) {
-        printf("    acos(2.0) expected OUT_OF_RANGE, got %d\n", (int)st);
-        return 1;
+        fail_msg("    acos(2.0) expected OUT_OF_RANGE, got %d\n", (int)st);
     }
+}
 
+static void test_inverse_hyperbolic_domain(void **state) {
+    (void)state;
+    lmmc_status_t st;
+    lmmc_real_t out;
     /* acosh(0.5) -> OUT_OF_RANGE */
     st = lmmc_acosh(0.5, &out);
     if (st != LMMC_STATUS_OUT_OF_RANGE) {
-        printf("    acosh(0.5) expected OUT_OF_RANGE, got %d\n", (int)st);
-        return 1;
+        fail_msg("    acosh(0.5) expected OUT_OF_RANGE, got %d\n", (int)st);
     }
 
     /* atanh(1.0) -> OUT_OF_RANGE */
     st = lmmc_atanh(1.0, &out);
     if (st != LMMC_STATUS_OUT_OF_RANGE) {
-        printf("    atanh(1.0) expected OUT_OF_RANGE, got %d\n", (int)st);
-        return 1;
+        fail_msg("    atanh(1.0) expected OUT_OF_RANGE, got %d\n", (int)st);
     }
 
     /* atanh(-1.0) -> OUT_OF_RANGE */
     st = lmmc_atanh(-1.0, &out);
     if (st != LMMC_STATUS_OUT_OF_RANGE) {
-        printf("    atanh(-1.0) expected OUT_OF_RANGE, got %d\n", (int)st);
-        return 1;
+        fail_msg("    atanh(-1.0) expected OUT_OF_RANGE, got %d\n", (int)st);
     }
+}
 
+static void test_power_domain_and_range(void **state) {
+    (void)state;
+    lmmc_status_t st;
+    lmmc_real_t out;
     /* pow(-2.0, 0.5) -> OUT_OF_RANGE (negative base, non-integer exponent) */
     st = lmmc_pow(-2.0, 0.5, &out);
     if (st != LMMC_STATUS_OUT_OF_RANGE) {
-        printf("    pow(-2.0, 0.5) expected OUT_OF_RANGE, got %d\n", (int)st);
-        return 1;
+        fail_msg("    pow(-2.0, 0.5) expected OUT_OF_RANGE, got %d\n", (int)st);
     }
 
     out = 123.0;
     st = lmmc_pow(0.0, -1.0, &out);
     if (st != LMMC_STATUS_OUT_OF_RANGE || out != 123.0) {
-        printf("    pow(0,-1) must report a pole without writing output\n");
-        return 1;
+        fail_msg("    pow(0,-1) must report a pole without writing output\n");
     }
 
     out = 123.0;
     st = lmmc_pow(DBL_MAX, 2.0, &out);
     if (st != LMMC_STATUS_NUMERICAL_FAILURE || out != 123.0) {
-        printf("    overflowing pow must report numerical failure\n");
-        return 1;
+        fail_msg("    overflowing pow must report numerical failure\n");
     }
+}
 
+static void test_scalar_nonfinite_errors(void **state) {
+    (void)state;
+    lmmc_status_t st;
+    lmmc_real_t out;
     out = 123.0;
     st = lmmc_sinh(DBL_MAX, &out);
     if (st != LMMC_STATUS_NUMERICAL_FAILURE || out != 123.0) {
-        printf("    overflowing sinh must report numerical failure\n");
-        return 1;
+        fail_msg("    overflowing sinh must report numerical failure\n");
     }
 
     out = 123.0;
     st = lmmc_asin(NAN, &out);
     if (st != LMMC_STATUS_INVALID_ARGUMENT || out != 123.0) {
-        printf("    asin must reject NaN without writing output\n");
-        return 1;
+        fail_msg("    asin must reject NaN without writing output\n");
     }
-
-    return 0;
 }
 
 /* Boundary values */
-static int test_unit_boundary_values(void)
-{
-    lmmc_real_t out;
+static void test_inverse_trig_boundaries(void **state) {
+    (void)state;
     lmmc_status_t st;
-    double eps = 1e-12;
-    double pi_half = LMMC_CONST_PI / 2.0;
-
+    lmmc_real_t out;
+    const double eps = 1e-12;
+    const double pi_half = LMMC_CONST_PI / 2.0;
     /* asin(0) = 0 */
     st = lmmc_asin(0.0, &out);
     if (st != LMMC_STATUS_OK) {
-        printf("    asin(0) failed, status=%d\n", (int)st);
-        return 1;
+        fail_msg("    asin(0) failed, status=%d\n", (int)st);
     }
     if (!lmmc_test_nearly_equal(out, 0.0, eps)) {
-        printf("    asin(0) = %g, expected 0\n", out);
-        return 1;
+        fail_msg("    asin(0) = %g, expected 0\n", out);
     }
 
     /* acos(1) = 0 */
     st = lmmc_acos(1.0, &out);
     if (st != LMMC_STATUS_OK) {
-        printf("    acos(1) failed, status=%d\n", (int)st);
-        return 1;
+        fail_msg("    acos(1) failed, status=%d\n", (int)st);
     }
     if (!lmmc_test_nearly_equal(out, 0.0, eps)) {
-        printf("    acos(1) = %g, expected 0\n", out);
-        return 1;
+        fail_msg("    acos(1) = %g, expected 0\n", out);
     }
 
     /* asin(1) = pi/2 */
     st = lmmc_asin(1.0, &out);
     if (st != LMMC_STATUS_OK) {
-        printf("    asin(1) failed, status=%d\n", (int)st);
-        return 1;
+        fail_msg("    asin(1) failed, status=%d\n", (int)st);
     }
     if (!lmmc_test_nearly_equal(out, pi_half, eps)) {
-        printf("    asin(1) = %g, expected %g\n", out, pi_half);
-        return 1;
+        fail_msg("    asin(1) = %g, expected %g\n", out, pi_half);
     }
 
     /* asin(-1) = -pi/2 */
     st = lmmc_asin(-1.0, &out);
     if (st != LMMC_STATUS_OK) {
-        printf("    asin(-1) failed, status=%d\n", (int)st);
-        return 1;
+        fail_msg("    asin(-1) failed, status=%d\n", (int)st);
     }
     if (!lmmc_test_nearly_equal(out, -pi_half, eps)) {
-        printf("    asin(-1) = %g, expected %g\n", out, -pi_half);
-        return 1;
+        fail_msg("    asin(-1) = %g, expected %g\n", out, -pi_half);
     }
+}
 
+static void test_inverse_hyperbolic_boundaries(void **state) {
+    (void)state;
+    lmmc_status_t st;
+    lmmc_real_t out;
+    const double eps = 1e-12;
     /* acosh(1) = 0 */
     st = lmmc_acosh(1.0, &out);
     if (st != LMMC_STATUS_OK) {
-        printf("    acosh(1) failed, status=%d\n", (int)st);
-        return 1;
+        fail_msg("    acosh(1) failed, status=%d\n", (int)st);
     }
     if (!lmmc_test_nearly_equal(out, 0.0, eps)) {
-        printf("    acosh(1) = %g, expected 0\n", out);
-        return 1;
+        fail_msg("    acosh(1) = %g, expected 0\n", out);
     }
 
     /* atanh(0) = 0 */
     st = lmmc_atanh(0.0, &out);
     if (st != LMMC_STATUS_OK) {
-        printf("    atanh(0) failed, status=%d\n", (int)st);
-        return 1;
+        fail_msg("    atanh(0) failed, status=%d\n", (int)st);
     }
     if (!lmmc_test_nearly_equal(out, 0.0, eps)) {
-        printf("    atanh(0) = %g, expected 0\n", out);
-        return 1;
+        fail_msg("    atanh(0) = %g, expected 0\n", out);
     }
+}
 
+static void test_rounding_boundaries(void **state) {
+    (void)state;
+    lmmc_status_t st;
+    lmmc_real_t out;
+    const double eps = 1e-12;
     /* floor(2.7) = 2.0 */
     st = lmmc_floor(2.7, &out);
     if (st != LMMC_STATUS_OK) {
-        printf("    floor(2.7) failed, status=%d\n", (int)st);
-        return 1;
+        fail_msg("    floor(2.7) failed, status=%d\n", (int)st);
     }
     if (!lmmc_test_nearly_equal(out, 2.0, eps)) {
-        printf("    floor(2.7) = %g, expected 2.0\n", out);
-        return 1;
+        fail_msg("    floor(2.7) = %g, expected 2.0\n", out);
     }
 
     /* ceil(2.3) = 3.0 */
     st = lmmc_ceil(2.3, &out);
     if (st != LMMC_STATUS_OK) {
-        printf("    ceil(2.3) failed, status=%d\n", (int)st);
-        return 1;
+        fail_msg("    ceil(2.3) failed, status=%d\n", (int)st);
     }
     if (!lmmc_test_nearly_equal(out, 3.0, eps)) {
-        printf("    ceil(2.3) = %g, expected 3.0\n", out);
-        return 1;
+        fail_msg("    ceil(2.3) = %g, expected 3.0\n", out);
     }
+}
 
+static void test_power_sign(void **state) {
+    (void)state;
+    lmmc_status_t st;
+    lmmc_real_t out;
+    const double eps = 1e-12;
     /* pow(2.0, 3.0) = 8.0 */
     st = lmmc_pow(2.0, 3.0, &out);
     if (st != LMMC_STATUS_OK) {
-        printf("    pow(2,3) failed, status=%d\n", (int)st);
-        return 1;
+        fail_msg("    pow(2,3) failed, status=%d\n", (int)st);
     }
     if (!lmmc_test_nearly_equal(out, 8.0, eps)) {
-        printf("    pow(2,3) = %g, expected 8.0\n", out);
-        return 1;
+        fail_msg("    pow(2,3) = %g, expected 8.0\n", out);
     }
 
     /* pow(-2.0, 3.0) = -8.0 (negative base, integer exponent is OK) */
     st = lmmc_pow(-2.0, 3.0, &out);
     if (st != LMMC_STATUS_OK) {
-        printf("    pow(-2,3) failed, status=%d\n", (int)st);
-        return 1;
+        fail_msg("    pow(-2,3) failed, status=%d\n", (int)st);
     }
     if (!lmmc_test_nearly_equal(out, -8.0, eps)) {
-        printf("    pow(-2,3) = %g, expected -8.0\n", out);
-        return 1;
+        fail_msg("    pow(-2,3) = %g, expected -8.0\n", out);
     }
-
-    return 0;
 }
 
 /* NULL pointer checks */
-static int test_unit_null_pointer(void)
-{
+static void test_inverse_trig_null_outputs(void **state) {
+    (void)state;
     lmmc_status_t st;
-
     /* asin with NULL out */
     st = lmmc_asin(0.5, NULL);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("    asin(0.5, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
-        return 1;
+        fail_msg("    asin(0.5, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
     }
 
     /* acos with NULL out */
     st = lmmc_acos(0.5, NULL);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("    acos(0.5, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
-        return 1;
+        fail_msg("    acos(0.5, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
     }
 
     /* atan with NULL out */
     st = lmmc_atan(0.5, NULL);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("    atan(0.5, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
-        return 1;
+        fail_msg("    atan(0.5, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
     }
+}
 
+static void test_hyperbolic_null_outputs(void **state) {
+    (void)state;
+    lmmc_status_t st;
     /* sinh with NULL out */
     st = lmmc_sinh(1.0, NULL);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("    sinh(1.0, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
-        return 1;
+        fail_msg("    sinh(1.0, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
     }
 
     /* cosh with NULL out */
     st = lmmc_cosh(1.0, NULL);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("    cosh(1.0, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
-        return 1;
+        fail_msg("    cosh(1.0, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
     }
 
     /* tanh with NULL out */
     st = lmmc_tanh(1.0, NULL);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("    tanh(1.0, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
-        return 1;
+        fail_msg("    tanh(1.0, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
     }
+}
 
+static void test_inverse_hyperbolic_null_outputs(void **state) {
+    (void)state;
+    lmmc_status_t st;
     /* asinh with NULL out */
     st = lmmc_asinh(1.0, NULL);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("    asinh(1.0, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
-        return 1;
+        fail_msg("    asinh(1.0, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
     }
 
     /* acosh with NULL out */
     st = lmmc_acosh(2.0, NULL);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("    acosh(2.0, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
-        return 1;
+        fail_msg("    acosh(2.0, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
     }
 
     /* atanh with NULL out */
     st = lmmc_atanh(0.5, NULL);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("    atanh(0.5, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
-        return 1;
+        fail_msg("    atanh(0.5, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
     }
+}
 
+static void test_power_rounding_null_outputs(void **state) {
+    (void)state;
+    lmmc_status_t st;
     /* pow with NULL out */
     st = lmmc_pow(2.0, 3.0, NULL);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("    pow(2,3,NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
-        return 1;
+        fail_msg("    pow(2,3,NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
     }
 
     /* ceil with NULL out */
     st = lmmc_ceil(1.5, NULL);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("    ceil(1.5, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
-        return 1;
+        fail_msg("    ceil(1.5, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
     }
 
     /* floor with NULL out */
     st = lmmc_floor(1.5, NULL);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("    floor(1.5, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
-        return 1;
+        fail_msg("    floor(1.5, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
     }
 
     /* round with NULL out */
     st = lmmc_round(1.5, NULL);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("    round(1.5, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
-        return 1;
+        fail_msg("    round(1.5, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
     }
 
     /* trunc with NULL out */
     st = lmmc_trunc(1.5, NULL);
     if (st != LMMC_STATUS_INVALID_ARGUMENT) {
-        printf("    trunc(1.5, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
-        return 1;
+        fail_msg("    trunc(1.5, NULL) expected INVALID_ARGUMENT, got %d\n", (int)st);
     }
-
-    return 0;
 }
 
 /* ---- Main ---- */
 
-int main(void)
-{
-    srand(12345);
-    if (lmmc_init() != LMMC_STATUS_OK) return 1;
-
-    printf("=== Scalar Math Property Tests ===\n");
-    REPORT("Property 18: Inverse trigonometric round-trip",
-           test_property18_inverse_trig_roundtrip());
-    REPORT("Property 19: Hyperbolic function round-trips",
-           test_property19_hyperbolic_roundtrips());
-    REPORT("Property 20: Floor and ceil invariants",
-           test_property20_floor_ceil_invariants());
-
-    printf("\n=== Scalar Math Unit Tests ===\n");
-    REPORT("Unit: Domain errors",
-           test_unit_domain_errors());
-    REPORT("Unit: Boundary values",
-           test_unit_boundary_values());
-    REPORT("Unit: NULL pointer checks",
-           test_unit_null_pointer());
-
-    printf("\n=== Results: %d/%d passed ===\n",
-           test_count - test_failures, test_count);
-
-    if (lmmc_deinit() != LMMC_STATUS_OK) return 1;
-    return test_failures > 0 ? 1 : 0;
+int main(void) {
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_property18_inverse_trig_roundtrip, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_property19_hyperbolic_roundtrips, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_property20_floor_ceil_invariants, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_inverse_trig_domain, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_inverse_hyperbolic_domain, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_power_domain_and_range, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_scalar_nonfinite_errors, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_inverse_trig_boundaries, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_inverse_hyperbolic_boundaries, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_rounding_boundaries, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_power_sign, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_inverse_trig_null_outputs, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_hyperbolic_null_outputs, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_inverse_hyperbolic_null_outputs, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_power_rounding_null_outputs, setup, teardown),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

@@ -43,53 +43,49 @@ lmmc_status_t lmmc_precond_create_none(size_t size, lmmc_precond_t* out_precond)
 /**
  * @brief 由稀疏矩阵的对角线创建 Jacobi 预处理子：M = diag(A)。
  *
- * 提取 A 的对角线元素并取倒数存储。若某对角元为零或过小（<1e-15），
- * 返回 SINGULAR_MATRIX。
+ * 存储 A 对角线的倒数；对角元为零或过小（<1e-15）时返回 SINGULAR_MATRIX。
  *
- * @param[in]  a          输入稀疏矩阵（CSR 格式，不被修改）。
+ * @param[in]  a          输入稀疏矩阵，满足 sparse_types.h 的规范 CSR 契约，保持不变。
  * @param[out] out_precond 输出预处理子句柄。
  *
  * @return
- * - ::LMMC_STATUS_OK — 成功。
- * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL 或结构非法。
- * - ::LMMC_STATUS_DIMENSION_MISMATCH — 矩阵非方阵。
- * - ::LMMC_STATUS_SINGULAR_MATRIX — 对角线存在零元素。
- * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ * - ::LMMC_STATUS_OK - 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT - 指针为 NULL 或结构非法。
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH - 矩阵非方阵。
+ * - ::LMMC_STATUS_SINGULAR_MATRIX - 对角线存在零元素。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED - 内存分配失败。
  *
- * @par 副作用
- * - 分配堆内存存储对角线倒数。调用方需配对调用 ::lmmc_precond_destroy 释放。
+ * @note 为对角线倒数分配堆内存，调用方须用 ::lmmc_precond_destroy 释放。
  */
 lmmc_status_t lmmc_precond_create_jacobi(const lmmc_sparse_mat_t* a, lmmc_precond_t* out_precond);
 
 /**
  * @brief 创建 ILU(0) 预处理子（零填充不完全 LU 分解）。
  *
- * 填充模式与输入矩阵 A 完全一致（不产生新的非零位置）。
- * 内部复制 A 的结构并就地执行 IKJ 版本的 ILU 分解。
+ * 复制 A 的结构后就地执行 IKJ 形式的 ILU 分解，保持原非零位置。
  *
- * @param[in]  a          输入稀疏矩阵（CSR 格式，不被修改）。
+ * @param[in]  a          输入稀疏矩阵，满足 sparse_types.h 的规范 CSR 契约，保持不变。
  * @param[out] out_precond 输出预处理子句柄。
  *
  * @return
- * - ::LMMC_STATUS_OK — 成功。
- * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL 或结构非法。
- * - ::LMMC_STATUS_DIMENSION_MISMATCH — 矩阵非方阵。
- * - ::LMMC_STATUS_SINGULAR_MATRIX — 对角线为零或缺失。
- * - ::LMMC_STATUS_NUMERICAL_FAILURE — 分解过程中出现 NaN/Inf。
- * - ::LMMC_STATUS_ALLOCATION_FAILED — 内存分配失败。
+ * - ::LMMC_STATUS_OK - 成功。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT - 指针为 NULL 或结构非法。
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH - 矩阵非方阵。
+ * - ::LMMC_STATUS_SINGULAR_MATRIX - 对角线为零或缺失。
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE - 分解过程中出现 NaN/Inf。
+ * - ::LMMC_STATUS_ALLOCATION_FAILED - 内存分配失败。
  *
- * @par 副作用
- * - 分配堆内存。调用方需配对调用 ::lmmc_precond_destroy 释放。
+ * @note 分配堆内存，调用方须用 ::lmmc_precond_destroy 释放。
  */
 lmmc_status_t lmmc_precond_create_ilu0(const lmmc_sparse_mat_t* a, lmmc_precond_t* out_precond);
 
 /**
  * @brief 创建 ILUT 预处理子。
  *
- * @param[in]  a                输入稀疏矩阵。
- * @param[in]  drop_tol         小于此阈值的填充被丢弃（绝对值比较）。
+ * @param[in]  a                输入稀疏矩阵，满足段内索引严格递增的规范 CSR 契约。
+ * @param[in]  drop_tol         填充项绝对值的丢弃阈值，小于该值的填充被丢弃。
  * @param[in]  max_fill_per_row 每行最多保留的非零元个数。
- * @param[out] out_precond      返回的预处理子句柄。
+ * @param[out] out_precond      输出预处理子句柄。
  */
 lmmc_status_t lmmc_precond_create_ilut(
     const lmmc_sparse_mat_t* a,

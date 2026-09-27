@@ -1,6 +1,6 @@
 /**
  * @file eigen_internal.c
- * @brief 特征值 / SVD 模块内部共享的 Householder 与 Givens 辅助函数。
+ * @brief 特征值 / SVD 模块内部共享的缩放、Householder 与 Givens 辅助函数。
  */
 
 #include <math.h>
@@ -12,6 +12,27 @@
 #include "lmmc/dense.h"
 #include "lmmc/eigen.h"
 #include "lmmc/linear_algebra.h"
+
+lmmc_status_t lmmc_eigen_matrix_scale(const lmmc_mat_t* a,
+                                      lmmc_real_t* scale)
+{
+    *scale = 0.0;
+    for (size_t i = 0; i < a->rows; ++i) {
+        for (size_t j = 0; j < a->cols; ++j) {
+            lmmc_real_t magnitude = fabs(MAT_ELEM(a, i, j));
+            if (!isfinite(magnitude)) {
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
+            if (magnitude > *scale) {
+                *scale = magnitude;
+            }
+        }
+    }
+    if (*scale == 0.0) {
+        *scale = 1.0;
+    }
+    return LMMC_STATUS_OK;
+}
 
 void householder_make(lmmc_real_t *x, size_t len, lmmc_real_t *tau_out,
                       lmmc_real_t *beta_out) {

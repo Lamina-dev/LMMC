@@ -10,86 +10,97 @@
 #include "lmmc/lmmc.h"
 #include "test_common.h"
 
-#define EPS_TIGHT  1e-12
+#define EPS_TIGHT 1e-12
 #define EPS_NORMAL 1e-10
-#define EPS_LOOSE  1e-4
+#define EPS_LOOSE 1e-4
 
-static int test_failures = 0;
+typedef struct {
+    lmmc_interp_cspline_t *interp_cspline_spline;
+    lmmc_interp_pchip_t *interp_pchip_p;
+    lmmc_interp_akima_t *interp_akima_a;
+    lmmc_interp_cspline_t *interp_cspline_s;
+    lmmc_interp_lagrange_t *interp_lagrange_l;
+} test_fixture_t;
 
-#define CHECK(cond, msg, ...) do { \
-    if (!(cond)) { \
-        printf("  FAIL: " msg "\n", ##__VA_ARGS__); \
-        test_failures++; \
-        return 1; \
-    } \
-} while (0)
+static int setup(void **state) {
+    test_fixture_t *fixture = calloc(1, sizeof(*fixture));
+    assert_non_null(fixture);
+    *state = fixture;
+    return 0;
+}
 
-/* ======== Boundary Condition Tests ======== */
+static int teardown(void **state) {
+    test_fixture_t *fixture = *state;
+    lmmc_interp_lagrange_destroy(fixture->interp_lagrange_l);
+    lmmc_interp_cspline_destroy(fixture->interp_cspline_s);
+    lmmc_interp_akima_destroy(fixture->interp_akima_a);
+    lmmc_interp_pchip_destroy(fixture->interp_pchip_p);
+    lmmc_interp_cspline_destroy(fixture->interp_cspline_spline);
+    free(fixture);
+    return 0;
+}
 
-static int test_cspline_clamped_linear(void)
-{
+static void test_cspline_clamped_linear(void **state) {
+    test_fixture_t *fixture = *state;
     /* A linear function with clamped BC matching the true derivative
      * should reproduce the function exactly. */
     const size_t n = 5;
     lmmc_real_t xs[] = {0.0, 1.0, 2.0, 3.0, 4.0};
     lmmc_real_t ys[] = {1.0, 3.0, 5.0, 7.0, 9.0}; /* y = 2x + 1 */
-    lmmc_interp_cspline_t* spline = NULL;
+
     lmmc_status_t st;
     size_t i;
 
     st = lmmc_interp_cspline_create_ex(xs, ys, n,
-        LMMC_SPLINE_CLAMPED, 2.0, 2.0, &spline);
-    CHECK(st == LMMC_STATUS_OK, "clamped cspline create should succeed");
+                                       LMMC_SPLINE_CLAMPED, 2.0, 2.0, &fixture->interp_cspline_spline);
+    assert_true(st == LMMC_STATUS_OK);
 
     for (i = 0; i < 20; i++) {
         lmmc_real_t x = (lmmc_real_t)i * 4.0 / 19.0;
         lmmc_real_t result, expected = 2.0 * x + 1.0;
-        st = lmmc_interp_cspline_eval(spline, x, &result);
-        CHECK(st == LMMC_STATUS_OK, "eval should succeed");
-        CHECK(fabs(result - expected) < EPS_TIGHT,
-              "clamped linear at x=%.3f: got %.12f, expected %.12f",
-              x, result, expected);
+        st = lmmc_interp_cspline_eval(fixture->interp_cspline_spline, x, &result);
+        assert_true(st == LMMC_STATUS_OK);
+        assert_true(fabs(result - expected) < EPS_TIGHT);
     }
-    lmmc_interp_cspline_destroy(spline);
-    return 0;
+    lmmc_interp_cspline_destroy(fixture->interp_cspline_spline);
+    fixture->interp_cspline_spline = NULL;
 }
 
-static int test_cspline_not_a_knot_quadratic(void)
-{
+static void test_cspline_not_a_knot_quadratic(void **state) {
+    test_fixture_t *fixture = *state;
     /* A quadratic function with not-a-knot BC should be reproduced exactly
      * (cubic spline can represent quadratics exactly). */
     const size_t n = 5;
     lmmc_real_t xs[] = {0.0, 1.0, 2.0, 3.0, 4.0};
     lmmc_real_t ys[5];
-    lmmc_interp_cspline_t* spline = NULL;
+
     lmmc_status_t st;
     size_t i;
 
-    for (i = 0; i < n; i++) ys[i] = xs[i] * xs[i]; /* y = x^2 */
+    for (i = 0; i < n; i++)
+        ys[i] = xs[i] * xs[i]; /* y = x^2 */
 
     st = lmmc_interp_cspline_create_ex(xs, ys, n,
-        LMMC_SPLINE_NOT_A_KNOT, 0.0, 0.0, &spline);
-    CHECK(st == LMMC_STATUS_OK, "not-a-knot cspline create should succeed");
+                                       LMMC_SPLINE_NOT_A_KNOT, 0.0, 0.0, &fixture->interp_cspline_spline);
+    assert_true(st == LMMC_STATUS_OK);
 
     for (i = 0; i < 20; i++) {
         lmmc_real_t x = (lmmc_real_t)i * 4.0 / 19.0;
         lmmc_real_t result, expected = x * x;
-        st = lmmc_interp_cspline_eval(spline, x, &result);
-        CHECK(st == LMMC_STATUS_OK, "eval should succeed");
-        CHECK(fabs(result - expected) < EPS_NORMAL,
-              "not-a-knot quadratic at x=%.3f: got %.12f, expected %.12f, err=%.2e",
-              x, result, expected, fabs(result - expected));
+        st = lmmc_interp_cspline_eval(fixture->interp_cspline_spline, x, &result);
+        assert_true(st == LMMC_STATUS_OK);
+        assert_true(fabs(result - expected) < EPS_NORMAL);
     }
-    lmmc_interp_cspline_destroy(spline);
-    return 0;
+    lmmc_interp_cspline_destroy(fixture->interp_cspline_spline);
+    fixture->interp_cspline_spline = NULL;
 }
 
-static int test_cspline_periodic_sin(void)
-{
+static void test_cspline_periodic_sin(void **state) {
+    test_fixture_t *fixture = *state;
     /* sin(x) on [0, 2*pi] is periodic with matching endpoints. */
     const size_t n = 21;
     lmmc_real_t xs[21], ys[21];
-    lmmc_interp_cspline_t* spline = NULL;
+
     lmmc_status_t st;
     size_t i;
 
@@ -101,186 +112,166 @@ static int test_cspline_periodic_sin(void)
     ys[n - 1] = ys[0];
 
     st = lmmc_interp_cspline_create_ex(xs, ys, n,
-        LMMC_SPLINE_PERIODIC, 0.0, 0.0, &spline);
-    CHECK(st == LMMC_STATUS_OK, "periodic cspline create should succeed");
+                                       LMMC_SPLINE_PERIODIC, 0.0, 0.0, &fixture->interp_cspline_spline);
+    assert_true(st == LMMC_STATUS_OK);
 
     for (i = 0; i < 50; i++) {
         lmmc_real_t x = (lmmc_real_t)(i + 1) * 2.0 * LMMC_CONST_PI / 51.0;
         lmmc_real_t result, expected = sin(x);
-        st = lmmc_interp_cspline_eval(spline, x, &result);
-        CHECK(st == LMMC_STATUS_OK, "eval should succeed");
-        CHECK(fabs(result - expected) < EPS_LOOSE,
-              "periodic sin at x=%.3f: got %.8f, expected %.8f, err=%.2e",
-              x, result, expected, fabs(result - expected));
+        st = lmmc_interp_cspline_eval(fixture->interp_cspline_spline, x, &result);
+        assert_true(st == LMMC_STATUS_OK);
+        assert_true(fabs(result - expected) < EPS_LOOSE);
     }
-    lmmc_interp_cspline_destroy(spline);
-    return 0;
+    lmmc_interp_cspline_destroy(fixture->interp_cspline_spline);
+    fixture->interp_cspline_spline = NULL;
 }
 
-static int test_cspline_periodic_reject_mismatch(void)
-{
+static void test_cspline_periodic_reject_mismatch(void **state) {
+    test_fixture_t *fixture = *state;
     /* Periodic BC should reject if endpoints differ by > 1e-12 */
     lmmc_real_t xs[] = {0.0, 1.0, 2.0, 3.0};
     lmmc_real_t ys[] = {1.0, 2.0, 3.0, 1.5}; /* ys[0] != ys[3] */
-    lmmc_interp_cspline_t* spline = NULL;
+
     lmmc_status_t st;
 
     st = lmmc_interp_cspline_create_ex(xs, ys, 4,
-        LMMC_SPLINE_PERIODIC, 0.0, 0.0, &spline);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
-          "periodic with mismatched endpoints should fail, got %d", (int)st);
-    return 0;
+                                       LMMC_SPLINE_PERIODIC, 0.0, 0.0, &fixture->interp_cspline_spline);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 }
 
-/* ======== PCHIP Tests ======== */
-
-static int test_pchip_monotone_increasing(void)
-{
+static void test_pchip_monotone_increasing(void **state) {
+    test_fixture_t *fixture = *state;
     /* PCHIP should preserve monotonicity of monotone data. */
     const size_t n = 6;
     lmmc_real_t xs[] = {0.0, 1.0, 2.0, 3.0, 4.0, 5.0};
     lmmc_real_t ys[] = {0.0, 0.5, 1.0, 2.0, 4.0, 8.0}; /* strictly increasing */
-    lmmc_interp_pchip_t* p = NULL;
+
     lmmc_status_t st;
     size_t i;
     lmmc_real_t prev_y;
 
-    st = lmmc_interp_pchip_create(xs, ys, n, &p);
-    CHECK(st == LMMC_STATUS_OK, "pchip create should succeed");
+    st = lmmc_interp_pchip_create(xs, ys, n, &fixture->interp_pchip_p);
+    assert_true(st == LMMC_STATUS_OK);
 
     /* Evaluate at many points and check monotonicity */
-    st = lmmc_interp_pchip_eval(p, 0.0, &prev_y);
-    CHECK(st == LMMC_STATUS_OK, "eval at 0 should succeed");
+    st = lmmc_interp_pchip_eval(fixture->interp_pchip_p, 0.0, &prev_y);
+    assert_true(st == LMMC_STATUS_OK);
 
     for (i = 1; i <= 100; i++) {
         lmmc_real_t x = (lmmc_real_t)i * 5.0 / 100.0;
         lmmc_real_t y;
-        st = lmmc_interp_pchip_eval(p, x, &y);
-        CHECK(st == LMMC_STATUS_OK, "eval at x=%.3f should succeed", x);
-        CHECK(y >= prev_y - 1e-15,
-              "pchip monotonicity violated at x=%.3f: y=%.10f < prev=%.10f",
-              x, y, prev_y);
+        st = lmmc_interp_pchip_eval(fixture->interp_pchip_p, x, &y);
+        assert_true(st == LMMC_STATUS_OK);
+        assert_true(y >= prev_y - 1e-15);
         prev_y = y;
     }
-    lmmc_interp_pchip_destroy(p);
-    return 0;
+    lmmc_interp_pchip_destroy(fixture->interp_pchip_p);
+    fixture->interp_pchip_p = NULL;
 }
 
-static int test_pchip_exact_at_nodes(void)
-{
+static void test_pchip_exact_at_nodes(void **state) {
+    test_fixture_t *fixture = *state;
     const size_t n = 5;
     lmmc_real_t xs[] = {0.0, 1.0, 3.0, 5.0, 7.0};
     lmmc_real_t ys[] = {1.0, 2.5, 0.5, 3.0, 2.0};
-    lmmc_interp_pchip_t* p = NULL;
+
     lmmc_status_t st;
     size_t i;
 
-    st = lmmc_interp_pchip_create(xs, ys, n, &p);
-    CHECK(st == LMMC_STATUS_OK, "pchip create should succeed");
+    st = lmmc_interp_pchip_create(xs, ys, n, &fixture->interp_pchip_p);
+    assert_true(st == LMMC_STATUS_OK);
 
     for (i = 0; i < n; i++) {
         lmmc_real_t result;
-        st = lmmc_interp_pchip_eval(p, xs[i], &result);
-        CHECK(st == LMMC_STATUS_OK, "eval at node %zu should succeed", i);
-        CHECK(fabs(result - ys[i]) < EPS_TIGHT,
-              "pchip at node x=%.1f: got %.12f, expected %.12f",
-              xs[i], result, ys[i]);
+        st = lmmc_interp_pchip_eval(fixture->interp_pchip_p, xs[i], &result);
+        assert_true(st == LMMC_STATUS_OK);
+        assert_true(fabs(result - ys[i]) < EPS_TIGHT);
     }
-    lmmc_interp_pchip_destroy(p);
-    return 0;
+    lmmc_interp_pchip_destroy(fixture->interp_pchip_p);
+    fixture->interp_pchip_p = NULL;
 }
 
-static int test_pchip_two_points(void)
-{
+static void test_pchip_two_points(void **state) {
+    test_fixture_t *fixture = *state;
     lmmc_real_t xs[] = {0.0, 1.0};
     lmmc_real_t ys[] = {2.0, 5.0};
-    lmmc_interp_pchip_t* p = NULL;
+
     lmmc_status_t st;
     lmmc_real_t result;
 
-    st = lmmc_interp_pchip_create(xs, ys, 2, &p);
-    CHECK(st == LMMC_STATUS_OK, "pchip with 2 points should succeed");
+    st = lmmc_interp_pchip_create(xs, ys, 2, &fixture->interp_pchip_p);
+    assert_true(st == LMMC_STATUS_OK);
 
-    st = lmmc_interp_pchip_eval(p, 0.5, &result);
-    CHECK(st == LMMC_STATUS_OK, "eval should succeed");
-    CHECK(fabs(result - 3.5) < EPS_TIGHT,
-          "pchip linear at 0.5: got %.12f, expected 3.5", result);
+    st = lmmc_interp_pchip_eval(fixture->interp_pchip_p, 0.5, &result);
+    assert_true(st == LMMC_STATUS_OK);
+    assert_true(fabs(result - 3.5) < EPS_TIGHT);
 
-    lmmc_interp_pchip_destroy(p);
-    return 0;
+    lmmc_interp_pchip_destroy(fixture->interp_pchip_p);
+    fixture->interp_pchip_p = NULL;
 }
 
-/* ======== Akima Tests ======== */
-
-static int test_akima_exact_at_nodes(void)
-{
+static void test_akima_exact_at_nodes(void **state) {
+    test_fixture_t *fixture = *state;
     const size_t n = 7;
     lmmc_real_t xs[] = {0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
     lmmc_real_t ys[] = {1.0, 2.0, 1.5, 3.0, 2.5, 4.0, 3.5};
-    lmmc_interp_akima_t* a = NULL;
+
     lmmc_status_t st;
     size_t i;
 
-    st = lmmc_interp_akima_create(xs, ys, n, &a);
-    CHECK(st == LMMC_STATUS_OK, "akima create should succeed");
+    st = lmmc_interp_akima_create(xs, ys, n, &fixture->interp_akima_a);
+    assert_true(st == LMMC_STATUS_OK);
 
     for (i = 0; i < n; i++) {
         lmmc_real_t result;
-        st = lmmc_interp_akima_eval(a, xs[i], &result);
-        CHECK(st == LMMC_STATUS_OK, "eval at node %zu should succeed", i);
-        CHECK(fabs(result - ys[i]) < EPS_TIGHT,
-              "akima at node x=%.1f: got %.12f, expected %.12f",
-              xs[i], result, ys[i]);
+        st = lmmc_interp_akima_eval(fixture->interp_akima_a, xs[i], &result);
+        assert_true(st == LMMC_STATUS_OK);
+        assert_true(fabs(result - ys[i]) < EPS_TIGHT);
     }
-    lmmc_interp_akima_destroy(a);
-    return 0;
+    lmmc_interp_akima_destroy(fixture->interp_akima_a);
+    fixture->interp_akima_a = NULL;
 }
 
-static int test_akima_linear_exact(void)
-{
+static void test_akima_linear_exact(void **state) {
+    test_fixture_t *fixture = *state;
     /* Akima should reproduce a linear function exactly. */
     const size_t n = 6;
     lmmc_real_t xs[] = {0.0, 1.0, 2.0, 3.0, 4.0, 5.0};
     lmmc_real_t ys[6];
-    lmmc_interp_akima_t* a = NULL;
+
     lmmc_status_t st;
     size_t i;
 
-    for (i = 0; i < n; i++) ys[i] = 2.0 * xs[i] + 1.0;
+    for (i = 0; i < n; i++)
+        ys[i] = 2.0 * xs[i] + 1.0;
 
-    st = lmmc_interp_akima_create(xs, ys, n, &a);
-    CHECK(st == LMMC_STATUS_OK, "akima create should succeed");
+    st = lmmc_interp_akima_create(xs, ys, n, &fixture->interp_akima_a);
+    assert_true(st == LMMC_STATUS_OK);
 
     for (i = 0; i < 20; i++) {
         lmmc_real_t x = (lmmc_real_t)i * 5.0 / 19.0;
         lmmc_real_t result, expected = 2.0 * x + 1.0;
-        st = lmmc_interp_akima_eval(a, x, &result);
-        CHECK(st == LMMC_STATUS_OK, "eval should succeed");
-        CHECK(fabs(result - expected) < EPS_NORMAL,
-              "akima linear at x=%.3f: got %.12f, expected %.12f, err=%.2e",
-              x, result, expected, fabs(result - expected));
+        st = lmmc_interp_akima_eval(fixture->interp_akima_a, x, &result);
+        assert_true(st == LMMC_STATUS_OK);
+        assert_true(fabs(result - expected) < EPS_NORMAL);
     }
-    lmmc_interp_akima_destroy(a);
-    return 0;
+    lmmc_interp_akima_destroy(fixture->interp_akima_a);
+    fixture->interp_akima_a = NULL;
 }
 
-static int test_akima_too_few_points(void)
-{
+static void test_akima_too_few_points(void **state) {
+    test_fixture_t *fixture = *state;
     lmmc_real_t xs[] = {0.0, 1.0, 2.0, 3.0};
     lmmc_real_t ys[] = {0.0, 1.0, 2.0, 3.0};
-    lmmc_interp_akima_t* a = NULL;
+
     lmmc_status_t st;
 
-    st = lmmc_interp_akima_create(xs, ys, 4, &a);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
-          "akima with 4 points should fail, got %d", (int)st);
-    return 0;
+    st = lmmc_interp_akima_create(xs, ys, 4, &fixture->interp_akima_a);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 }
 
-/* ======== 2D Interpolation Tests ======== */
-
-static int test_bilinear_exact_plane(void)
-{
+static void test_bilinear_exact_plane(void **state) {
+    (void)state;
     /* Bilinear should reproduce a bilinear function z = ax + by + c exactly. */
     const size_t nx = 3, ny = 4;
     lmmc_real_t xs[] = {0.0, 2.0, 5.0};
@@ -301,17 +292,14 @@ static int test_bilinear_exact_plane(void)
             lmmc_real_t qy = (lmmc_real_t)j * 4.0 / 9.0;
             lmmc_real_t result, expected = 3.0 * qx + 2.0 * qy + 1.0;
             st = lmmc_interp_bilinear(xs, nx, ys, ny, zs, qx, qy, &result);
-            CHECK(st == LMMC_STATUS_OK, "bilinear eval should succeed");
-            CHECK(fabs(result - expected) < EPS_NORMAL,
-                  "bilinear at (%.2f,%.2f): got %.8f, expected %.8f, err=%.2e",
-                  qx, qy, result, expected, fabs(result - expected));
+            assert_true(st == LMMC_STATUS_OK);
+            assert_true(fabs(result - expected) < EPS_NORMAL);
         }
     }
-    return 0;
 }
 
-static int test_bilinear_out_of_range(void)
-{
+static void test_bilinear_out_of_range(void **state) {
+    (void)state;
     lmmc_real_t xs[] = {0.0, 1.0};
     lmmc_real_t ys[] = {0.0, 1.0};
     lmmc_real_t zs[] = {1.0, 2.0, 3.0, 4.0};
@@ -319,16 +307,14 @@ static int test_bilinear_out_of_range(void)
     lmmc_status_t st;
 
     st = lmmc_interp_bilinear(xs, 2, ys, 2, zs, -0.1, 0.5, &result);
-    CHECK(st == LMMC_STATUS_OUT_OF_RANGE, "bilinear out of range x should fail");
+    assert_true(st == LMMC_STATUS_OUT_OF_RANGE);
 
     st = lmmc_interp_bilinear(xs, 2, ys, 2, zs, 0.5, 1.1, &result);
-    CHECK(st == LMMC_STATUS_OUT_OF_RANGE, "bilinear out of range y should fail");
-    return 0;
+    assert_true(st == LMMC_STATUS_OUT_OF_RANGE);
 }
 
-static int test_bicubic_quadratic(void)
-{
-    /* Bicubic should reproduce a quadratic function reasonably well. */
+static void test_bicubic_quadratic(void **state) {
+    (void)state;
     const size_t nx = 5, ny = 5;
     lmmc_real_t xs[] = {0.0, 1.0, 2.0, 3.0, 4.0};
     lmmc_real_t ys[] = {0.0, 1.0, 2.0, 3.0, 4.0};
@@ -348,18 +334,14 @@ static int test_bicubic_quadratic(void)
             lmmc_real_t qy = 1.0 + (lmmc_real_t)j * 2.0 / 8.0;
             lmmc_real_t result, expected = qx * qx + qy * qy;
             st = lmmc_interp_bicubic(xs, nx, ys, ny, zs, qx, qy, &result);
-            CHECK(st == LMMC_STATUS_OK, "bicubic eval should succeed");
-            /* Catmull-Rom is exact for quadratics on uniform grids */
-            CHECK(fabs(result - expected) < 0.5,
-                  "bicubic at (%.2f,%.2f): got %.6f, expected %.6f, err=%.2e",
-                  qx, qy, result, expected, fabs(result - expected));
+            assert_true(st == LMMC_STATUS_OK);
+            assert_true(fabs(result - expected) < EPS_NORMAL);
         }
     }
-    return 0;
 }
 
-static int test_bicubic_too_few_points(void)
-{
+static void test_bicubic_too_few_points(void **state) {
+    (void)state;
     lmmc_real_t xs[] = {0.0, 1.0, 2.0};
     lmmc_real_t ys[] = {0.0, 1.0, 2.0, 3.0};
     lmmc_real_t zs[12] = {0};
@@ -367,76 +349,56 @@ static int test_bicubic_too_few_points(void)
     lmmc_status_t st;
 
     st = lmmc_interp_bicubic(xs, 3, ys, 4, zs, 1.0, 1.0, &result);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
-          "bicubic with nx=3 should fail, got %d", (int)st);
-    return 0;
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 }
 
-/* ======== Validation Tests ======== */
-
-static int test_non_increasing_abscissae_rejected(void)
-{
+static void test_non_increasing_abscissae_rejected(void **state) {
+    test_fixture_t *fixture = *state;
     lmmc_real_t xs[] = {0.0, 2.0, 1.0, 3.0, 4.0};
     lmmc_real_t ys[] = {0.0, 1.0, 2.0, 3.0, 4.0};
-    lmmc_interp_pchip_t* p = NULL;
-    lmmc_interp_akima_t* a = NULL;
-    lmmc_interp_cspline_t* s = NULL;
+
     lmmc_status_t st;
 
-    st = lmmc_interp_pchip_create(xs, ys, 5, &p);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
-          "pchip with non-increasing xs should fail");
+    st = lmmc_interp_pchip_create(xs, ys, 5, &fixture->interp_pchip_p);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 
-    st = lmmc_interp_akima_create(xs, ys, 5, &a);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
-          "akima with non-increasing xs should fail");
+    st = lmmc_interp_akima_create(xs, ys, 5, &fixture->interp_akima_a);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 
     st = lmmc_interp_cspline_create_ex(xs, ys, 5,
-        LMMC_SPLINE_NATURAL, 0.0, 0.0, &s);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
-          "cspline_ex with non-increasing xs should fail");
-    return 0;
+                                       LMMC_SPLINE_NATURAL, 0.0, 0.0, &fixture->interp_cspline_s);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 }
 
-static int test_invalid_and_nonfinite_inputs_rejected(void)
-{
+static void test_invalid_and_nonfinite_inputs_rejected(void **state) {
+    test_fixture_t *fixture = *state;
     lmmc_real_t xs[] = {0.0, 1.0, 2.0, 3.0, 4.0};
     lmmc_real_t ys[] = {0.0, 1.0, 4.0, 9.0, 16.0};
     lmmc_real_t xs_nan[] = {0.0, 1.0, NAN, 3.0, 4.0};
     lmmc_real_t ys_nan[] = {0.0, 1.0, NAN, 9.0, 16.0};
-    lmmc_interp_pchip_t* p = NULL;
-    lmmc_interp_akima_t* a = NULL;
-    lmmc_interp_cspline_t* s = NULL;
-    lmmc_interp_lagrange_t* l = NULL;
+
     lmmc_status_t st;
 
     st = lmmc_interp_cspline_create_ex(
-        xs, ys, 5, (lmmc_spline_bc_t)99, 0.0, 0.0, &s);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
-          "unknown spline boundary condition should fail");
+        xs, ys, 5, (lmmc_spline_bc_t)99, 0.0, 0.0, &fixture->interp_cspline_s);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 
     st = lmmc_interp_cspline_create_ex(
-        xs, ys, 5, LMMC_SPLINE_CLAMPED, NAN, 0.0, &s);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
-          "nonfinite clamped derivative should fail");
+        xs, ys, 5, LMMC_SPLINE_CLAMPED, NAN, 0.0, &fixture->interp_cspline_s);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 
-    st = lmmc_interp_pchip_create(xs_nan, ys, 5, &p);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
-          "PCHIP should reject NaN abscissae");
+    st = lmmc_interp_pchip_create(xs_nan, ys, 5, &fixture->interp_pchip_p);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 
-    st = lmmc_interp_akima_create(xs, ys_nan, 5, &a);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
-          "Akima should reject NaN ordinates");
+    st = lmmc_interp_akima_create(xs, ys_nan, 5, &fixture->interp_akima_a);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 
-    st = lmmc_interp_lagrange_create(xs_nan, ys, 5, &l);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
-          "Lagrange should reject NaN abscissae");
-
-    return 0;
+    st = lmmc_interp_lagrange_create(xs_nan, ys, 5, &fixture->interp_lagrange_l);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 }
 
-static int test_nonfinite_evaluation_inputs_rejected(void)
-{
+static void test_nonfinite_evaluation_inputs_rejected(void **state) {
+    test_fixture_t *fixture = *state;
     lmmc_real_t xs[] = {0.0, 1.0, 2.0, 3.0, 4.0};
     lmmc_real_t ys[] = {0.0, 1.0, 4.0, 9.0, 16.0};
     lmmc_real_t grid[] = {
@@ -444,117 +406,110 @@ static int test_nonfinite_evaluation_inputs_rejected(void)
         1.0, 2.0, 3.0, 4.0, 5.0,
         2.0, 3.0, 4.0, 5.0, 6.0,
         3.0, 4.0, 5.0, 6.0, 7.0,
-        4.0, 5.0, 6.0, 7.0, 8.0
-    };
-    lmmc_interp_pchip_t* p = NULL;
-    lmmc_interp_akima_t* a = NULL;
-    lmmc_interp_cspline_t* s = NULL;
-    lmmc_interp_lagrange_t* l = NULL;
+        4.0, 5.0, 6.0, 7.0, 8.0};
+
     lmmc_real_t result = 42.0;
     lmmc_status_t st;
 
-    CHECK(lmmc_interp_cspline_create(xs, ys, 5, &s) == LMMC_STATUS_OK,
-          "cspline setup should succeed");
-    CHECK(lmmc_interp_pchip_create(xs, ys, 5, &p) == LMMC_STATUS_OK,
-          "PCHIP setup should succeed");
-    CHECK(lmmc_interp_akima_create(xs, ys, 5, &a) == LMMC_STATUS_OK,
-          "Akima setup should succeed");
-    CHECK(lmmc_interp_lagrange_create(xs, ys, 5, &l) == LMMC_STATUS_OK,
-          "Lagrange setup should succeed");
+    assert_true(lmmc_interp_cspline_create(xs, ys, 5, &fixture->interp_cspline_s) == LMMC_STATUS_OK);
+    assert_true(lmmc_interp_pchip_create(xs, ys, 5, &fixture->interp_pchip_p) == LMMC_STATUS_OK);
+    assert_true(lmmc_interp_akima_create(xs, ys, 5, &fixture->interp_akima_a) == LMMC_STATUS_OK);
+    assert_true(lmmc_interp_lagrange_create(xs, ys, 5, &fixture->interp_lagrange_l) == LMMC_STATUS_OK);
 
-    st = lmmc_interp_cspline_eval(s, NAN, &result);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT, "cspline should reject NaN query");
-    st = lmmc_interp_pchip_eval(p, NAN, &result);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT, "PCHIP should reject NaN query");
-    st = lmmc_interp_akima_eval(a, NAN, &result);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT, "Akima should reject NaN query");
-    st = lmmc_interp_lagrange_eval(l, NAN, &result);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT, "Lagrange should reject NaN query");
+    st = lmmc_interp_cspline_eval(fixture->interp_cspline_s, NAN, &result);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
+    st = lmmc_interp_pchip_eval(fixture->interp_pchip_p, NAN, &result);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
+    st = lmmc_interp_akima_eval(fixture->interp_akima_a, NAN, &result);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
+    st = lmmc_interp_lagrange_eval(fixture->interp_lagrange_l, NAN, &result);
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
     st = lmmc_interp_bilinear(xs, 5, xs, 5, grid, NAN, 1.0, &result);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT, "bilinear should reject NaN query");
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 
     grid[12] = NAN;
     st = lmmc_interp_bicubic(xs, 5, xs, 5, grid, 1.0, 1.0, &result);
-    CHECK(st == LMMC_STATUS_INVALID_ARGUMENT,
-          "bicubic should reject nonfinite grid data");
+    assert_true(st == LMMC_STATUS_INVALID_ARGUMENT);
 
-    lmmc_interp_cspline_destroy(s);
-    lmmc_interp_pchip_destroy(p);
-    lmmc_interp_akima_destroy(a);
-    lmmc_interp_lagrange_destroy(l);
-    return 0;
+    lmmc_interp_cspline_destroy(fixture->interp_cspline_s);
+    fixture->interp_cspline_s = NULL;
+    lmmc_interp_pchip_destroy(fixture->interp_pchip_p);
+    fixture->interp_pchip_p = NULL;
+    lmmc_interp_akima_destroy(fixture->interp_akima_a);
+    fixture->interp_akima_a = NULL;
+    lmmc_interp_lagrange_destroy(fixture->interp_lagrange_l);
+    fixture->interp_lagrange_l = NULL;
 }
 
-static int test_nonfinite_coefficients_rejected(void)
-{
+static void test_nonfinite_coefficients_rejected(void **state) {
+    test_fixture_t *fixture = *state;
     lmmc_real_t xs_extreme[] = {-DBL_MAX, -1.0, 0.0, 1.0, DBL_MAX};
     lmmc_real_t xs_regular[] = {0.0, 1.0, 2.0, 3.0, 4.0};
     lmmc_real_t ys_regular[] = {0.0, 1.0, 4.0, 9.0, 16.0};
     lmmc_real_t ys_extreme[] = {-DBL_MAX, DBL_MAX, 0.0, 1.0, 2.0};
-    lmmc_interp_cspline_t* s = NULL;
-    lmmc_interp_pchip_t* p = NULL;
-    lmmc_interp_akima_t* a = NULL;
-    lmmc_interp_lagrange_t* l = NULL;
 
-    CHECK(lmmc_interp_cspline_create(xs_regular, ys_extreme, 5, &s) ==
-              LMMC_STATUS_NUMERICAL_FAILURE,
-          "cspline should reject nonfinite derived coefficients");
-    CHECK(s == NULL, "failed cspline creation should leave a null handle");
+    assert_true(lmmc_interp_cspline_create(xs_regular, ys_extreme, 5, &fixture->interp_cspline_s) ==
+                LMMC_STATUS_NUMERICAL_FAILURE);
+    assert_true(fixture->interp_cspline_s == NULL);
 
-    CHECK(lmmc_interp_pchip_create(xs_regular, ys_extreme, 5, &p) ==
-              LMMC_STATUS_NUMERICAL_FAILURE,
-          "PCHIP should reject nonfinite derived coefficients");
-    CHECK(p == NULL, "failed PCHIP creation should leave a null handle");
+    assert_true(lmmc_interp_pchip_create(xs_regular, ys_extreme, 5, &fixture->interp_pchip_p) ==
+                LMMC_STATUS_NUMERICAL_FAILURE);
+    assert_true(fixture->interp_pchip_p == NULL);
 
-    CHECK(lmmc_interp_akima_create(xs_regular, ys_extreme, 5, &a) ==
-              LMMC_STATUS_NUMERICAL_FAILURE,
-          "Akima should reject nonfinite derived coefficients");
-    CHECK(a == NULL, "failed Akima creation should leave a null handle");
+    assert_true(lmmc_interp_akima_create(xs_regular, ys_extreme, 5, &fixture->interp_akima_a) ==
+                LMMC_STATUS_NUMERICAL_FAILURE);
+    assert_true(fixture->interp_akima_a == NULL);
 
-    CHECK(lmmc_interp_lagrange_create(xs_extreme, ys_regular, 5, &l) ==
-              LMMC_STATUS_NUMERICAL_FAILURE,
-          "Lagrange should reject nonfinite barycentric weights");
-    CHECK(l == NULL, "failed Lagrange creation should leave a null handle");
-    return 0;
+    assert_true(lmmc_interp_lagrange_create(xs_extreme, ys_regular, 5, &fixture->interp_lagrange_l) ==
+                LMMC_STATUS_NUMERICAL_FAILURE);
+    assert_true(fixture->interp_lagrange_l == NULL);
 }
 
-/* ======== Main ======== */
+static void test_not_a_knot_small_nonuniform(void **state) {
+    test_fixture_t *fixture = *state;
+    const lmmc_real_t xs[] = {-1.0, 0.25, 2.0, 5.0};
+    lmmc_real_t ys[4];
+    size_t n, i;
+    for (n = 3; n <= 4; ++n) {
 
-int main(void)
-{
-    int failed = 0;
-    int total = 0;
+        for (i = 0; i < n; ++i) {
+            ys[i] = n == 3 ? xs[i] * xs[i] : xs[i] * xs[i] * xs[i];
+        }
+        assert_true(lmmc_interp_cspline_create_ex(xs, ys, n,
+                                                  LMMC_SPLINE_NOT_A_KNOT, 0.0, 0.0, &fixture->interp_cspline_spline) == LMMC_STATUS_OK);
+        for (i = 0; i <= 20; ++i) {
+            lmmc_real_t query = xs[0] + (xs[n - 1] - xs[0]) * (lmmc_real_t)i / 20.0;
+            lmmc_real_t expected = n == 3 ? query * query : query * query * query;
+            lmmc_real_t result;
+            assert_true(lmmc_interp_cspline_eval(fixture->interp_cspline_spline, query, &result) == LMMC_STATUS_OK);
+            assert_true(isfinite(result) && fabs(result - expected) <= EPS_NORMAL);
+        }
+        lmmc_interp_cspline_destroy(fixture->interp_cspline_spline);
+        fixture->interp_cspline_spline = NULL;
+    }
+}
 
-    printf("=== Interpolation Advanced Tests ===\n\n");
-
-#define RUN_TEST(fn) do { \
-    total++; \
-    printf("%-45s ", #fn "..."); \
-    if (fn() == 0) printf("PASS\n"); \
-    else { printf("\n"); failed++; } \
-} while (0)
-
-    RUN_TEST(test_cspline_clamped_linear);
-    RUN_TEST(test_cspline_not_a_knot_quadratic);
-    RUN_TEST(test_cspline_periodic_sin);
-    RUN_TEST(test_cspline_periodic_reject_mismatch);
-    RUN_TEST(test_pchip_monotone_increasing);
-    RUN_TEST(test_pchip_exact_at_nodes);
-    RUN_TEST(test_pchip_two_points);
-    RUN_TEST(test_akima_exact_at_nodes);
-    RUN_TEST(test_akima_linear_exact);
-    RUN_TEST(test_akima_too_few_points);
-    RUN_TEST(test_bilinear_exact_plane);
-    RUN_TEST(test_bilinear_out_of_range);
-    RUN_TEST(test_bicubic_quadratic);
-    RUN_TEST(test_bicubic_too_few_points);
-    RUN_TEST(test_non_increasing_abscissae_rejected);
-    RUN_TEST(test_invalid_and_nonfinite_inputs_rejected);
-    RUN_TEST(test_nonfinite_evaluation_inputs_rejected);
-    RUN_TEST(test_nonfinite_coefficients_rejected);
-
-#undef RUN_TEST
-
-    printf("\n=== Results: %d/%d tests passed ===\n", total - failed, total);
-    return (failed > 0) ? 1 : 0;
+int main(void) {
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test_setup_teardown(test_cspline_clamped_linear, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_cspline_not_a_knot_quadratic, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_cspline_periodic_sin, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_cspline_periodic_reject_mismatch, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_pchip_monotone_increasing, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_pchip_exact_at_nodes, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_pchip_two_points, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_akima_exact_at_nodes, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_akima_linear_exact, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_akima_too_few_points, setup, teardown),
+        cmocka_unit_test(test_bilinear_exact_plane),
+        cmocka_unit_test(test_bilinear_out_of_range),
+        cmocka_unit_test(test_bicubic_quadratic),
+        cmocka_unit_test(test_bicubic_too_few_points),
+        cmocka_unit_test_setup_teardown(test_non_increasing_abscissae_rejected, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_invalid_and_nonfinite_inputs_rejected, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_nonfinite_evaluation_inputs_rejected, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_nonfinite_coefficients_rejected, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_not_a_knot_small_nonuniform, setup, teardown),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }
