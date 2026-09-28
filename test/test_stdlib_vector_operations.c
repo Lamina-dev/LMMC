@@ -181,6 +181,19 @@ static void test_division(void **state) {
     assert_true(close_real(fixture->cross_result.data[2], 4));
 }
 
+static void test_division_by_subnormal_scalar(void **state) {
+    (void)state;
+    const lmmc_real_t tiny = DBL_MIN / 16.0;
+    lmmc_real_t values[] = {tiny, -tiny};
+    lmmc_vec_t input = {2, values, 0};
+    lmmc_vec_t result = {0};
+
+    assert_int_equal(lmmc_std_linalg_vec_div_scalar(&input, tiny, &result), LMMC_STATUS_OK);
+    assert_int_equal(result.size, 2);
+    assert_true(result.data[0] == 1.0 && result.data[1] == -1.0);
+    lmmc_vec_destroy(&result);
+}
+
 static void test_powers(void **state) {
     struct test_fixture *fixture = *state;
     lmmc_real_t vec_pow_values[] = {2, 3, 4};
@@ -499,6 +512,7 @@ int main(void) {
         cmocka_unit_test_setup_teardown(test_subtraction, setup, teardown),
         cmocka_unit_test_setup_teardown(test_multiplication, setup, teardown),
         cmocka_unit_test_setup_teardown(test_division, setup, teardown),
+        cmocka_unit_test(test_division_by_subnormal_scalar),
         cmocka_unit_test_setup_teardown(test_powers, setup, teardown),
         cmocka_unit_test_setup_teardown(test_comparison, setup, teardown),
         cmocka_unit_test_setup_teardown(test_products_scaling_norm_invalid_arguments, setup, teardown),

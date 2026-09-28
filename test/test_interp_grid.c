@@ -70,6 +70,17 @@ static void test_bicubic_reproduction(void **state) {
     check_surface_reproduction(cubic_surface);
 }
 
+static void test_bilinear_extreme_span(void **state) {
+    (void)state;
+    const lmmc_real_t xs[] = {-DBL_MAX, DBL_MAX};
+    const lmmc_real_t ys[] = {0.0, 1.0};
+    const lmmc_real_t zs[] = {0.0, 0.0, 2.0, 2.0};
+    lmmc_real_t result = 42.0;
+    assert_int_equal(lmmc_interp_bilinear(xs, 2, ys, 2, zs, 0.0, 0.5, &result),
+                     LMMC_STATUS_OK);
+    assert_true(fabs(result - 1.0) <= 1e-12);
+}
+
 static void test_exact_nodes_at_extreme_spacing(void **state) {
     (void)state;
     const lmmc_real_t large[] = {0.0, 1e150, 2e150, 3e150};
@@ -145,18 +156,21 @@ static void test_invalid_queries_and_values(void **state) {
     assert_true(result == 42.0);
 }
 
-static void test_denominator_failure_preserves_output(void **state) {
+static void test_extreme_bicubic_spacings(void **state) {
     (void)state;
     const lmmc_real_t regular[] = {0.0, 1.0, 2.0, 4.0};
     const lmmc_real_t extreme[] = {-DBL_MAX, -1.0, 1.0, DBL_MAX};
     const lmmc_real_t tiny[] = {0.0, DBL_MIN, 2.0 * DBL_MIN, 3.0 * DBL_MIN};
-    lmmc_real_t zs[16] = {0}, result = 42.0;
-    assert_true(lmmc_interp_bicubic(extreme, 4, regular, 4, zs, 0.0, 1.5, &result) ==
-                LMMC_STATUS_NUMERICAL_FAILURE);
-    assert_true(result == 42.0);
-    assert_true(lmmc_interp_bicubic(tiny, 4, regular, 4, zs, 1.5 * DBL_MIN, 1.5, &result) ==
-                LMMC_STATUS_NUMERICAL_FAILURE);
-    assert_true(result == 42.0);
+    lmmc_real_t zs[16], result = 42.0;
+    size_t i;
+    for (i = 0; i < 16; ++i) zs[i] = 7.0;
+    assert_int_equal(lmmc_interp_bicubic(extreme, 4, regular, 4, zs, 0.0, 1.5, &result),
+                     LMMC_STATUS_OK);
+    assert_true(fabs(result - 7.0) <= 1e-12);
+    result = 42.0;
+    assert_int_equal(lmmc_interp_bicubic(tiny, 4, regular, 4, zs, 1.5 * DBL_MIN, 1.5, &result),
+                     LMMC_STATUS_OK);
+    assert_true(fabs(result - 7.0) <= 1e-12);
 }
 
 static void test_output_alias_and_overflow(void **state) {
@@ -183,10 +197,11 @@ int main(void) {
         cmocka_unit_test(test_affine_reproduction),
         cmocka_unit_test(test_bicubic_reproduction),
         cmocka_unit_test(test_exact_nodes_at_extreme_spacing),
+        cmocka_unit_test(test_bilinear_extreme_span),
         cmocka_unit_test(test_boundary_stencil_locality),
         cmocka_unit_test(test_invalid_axes_preserve_output),
         cmocka_unit_test(test_invalid_queries_and_values),
-        cmocka_unit_test(test_denominator_failure_preserves_output),
+        cmocka_unit_test(test_extreme_bicubic_spacings),
         cmocka_unit_test(test_output_alias_and_overflow),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);

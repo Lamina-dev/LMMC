@@ -76,6 +76,12 @@ lmmc_status_t lmmc_dist_t_pdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out) {
         return store_density_from_log(
             -0.5 * x * x - LMMC_LOG_SQRT_2PI, out);
     }
+    if (df / 2.0 == 0.0) {
+        /* B(df/2, 1/2) ~ 2/df as df tends to zero. */
+        log_density = 0.5 * log(df) - log(2.0) -
+            0.5 * student_t_log_kernel(x, df);
+        return store_density_from_log(log_density, out);
+    }
 
     {
         double log_beta;
@@ -95,6 +101,10 @@ lmmc_status_t lmmc_dist_t_cdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out) {
     if (student_t_uses_normal_limit(df)) {
         return store_probability_result(
             0.5 * erfc(-x / sqrt(2.0)), out);
+    }
+    if (df / 2.0 == 0.0) {
+        *out = 0.5;
+        return LMMC_STATUS_OK;
     }
 
     t_val = student_t_beta_argument(x, df);
@@ -125,6 +135,12 @@ lmmc_status_t lmmc_dist_chi2_pdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out
         *out = 0.0; return LMMC_STATUS_OK;
     }
 
+    if (df / 2.0 == 0.0) {
+        /* Gamma(df/2) ~ 2/df as df tends to zero. */
+        return store_density_from_log(
+            log(df) - log(x) - log(2.0) - x / 2.0, out);
+    }
+
     k2 = df / 2.0;
     if (k2 >= 16.0) {
         return lmmc_dist_gamma_pdf(x, k2, 2.0, out);
@@ -139,6 +155,8 @@ lmmc_status_t lmmc_dist_chi2_cdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out
     if (!out) { return LMMC_STATUS_INVALID_ARGUMENT; }
     if (!isfinite(x) || !valid_positive(df)) { return LMMC_STATUS_INVALID_ARGUMENT; }
     if (x <= 0.0) { *out = 0.0; return LMMC_STATUS_OK; }
+    /* For a = df/2 below the smallest double, P(a, x/2) rounds to one. */
+    if (df / 2.0 == 0.0) { *out = 1.0; return LMMC_STATUS_OK; }
 
     return lmmc_dist_gamma_cdf(x, df / 2.0, 2.0, out);
 }
@@ -215,6 +233,12 @@ lmmc_status_t lmmc_dist_f_cdf(lmmc_real_t x, lmmc_real_t df1, lmmc_real_t df2,
     if (!out) { return LMMC_STATUS_INVALID_ARGUMENT; }
     if (!isfinite(x) || !valid_positive(df1) || !valid_positive(df2)) { return LMMC_STATUS_INVALID_ARGUMENT; }
     if (x <= 0.0) { *out = 0.0; return LMMC_STATUS_OK; }
+
+    if (df1 / 2.0 == 0.0) {
+        /* Beta(df1/2, df2/2) concentrates df2/(df1+df2) at zero. */
+        *out = df2 / (df1 + df2);
+        return LMMC_STATUS_OK;
+    }
 
     scale = df2 / df1;
     if (x > scale) {

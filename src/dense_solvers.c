@@ -3,6 +3,7 @@
  * @brief 稠密矩阵求解器实现（行列式、逆、三角求解、右除、秩、幂）。
  */
 
+#include <float.h>
 #include <math.h>
 #include <string.h>
 #include "memory_bridge.h"
@@ -77,18 +78,41 @@ static void lmmc_det_lu(lmmc_real_t* lu, size_t n, lmmc_real_t* out_det) {
 }
 
 static void lmmc_det_two(const lmmc_mat_t* a, lmmc_real_t* out_det) {
-        lmmc_real_t ad; LMMC_REAL_INIT(&ad);
-        lmmc_real_t bc; LMMC_REAL_INIT(&bc);
-        lmmc_real_t result; LMMC_REAL_INIT(&result);
+    const double x = a->data[0];
+    const double y = a->data[1];
+    const double z = a->data[a->stride];
+    const double w = a->data[a->stride + 1];
+    const double p = x * w;
+    const double q = y * z;
 
-        LMMC_REAL_MUL(&ad, &a->data[0 * a->stride + 0], &a->data[1 * a->stride + 1]);
-        LMMC_REAL_MUL(&bc, &a->data[0 * a->stride + 1], &a->data[1 * a->stride + 0]);
-        LMMC_REAL_SUB(&result, &ad, &bc);
-        LMMC_REAL_SET(out_det, &result);
+    if (!isfinite(x) || !isfinite(y) || !isfinite(z) || !isfinite(w)) {
+        *out_det = p - q;
+        return;
+    }
+    if (isfinite(p) && isfinite(q) &&
+        fabs(p) >= DBL_MIN && fabs(q) >= DBL_MIN) {
+        const double det = fma(x, w, -q) - fma(y, z, -q);
+        if (isfinite(det) && fabs(det) >= DBL_MIN) {
+            *out_det = det;
+            return;
+        }
+    }
 
-        LMMC_REAL_CLEAR(&ad);
-        LMMC_REAL_CLEAR(&bc);
-        LMMC_REAL_CLEAR(&result);
+    int ex, ey, ez, ew;
+    const double mx = frexp(x, &ex);
+    const double my = frexp(y, &ey);
+    const double mz = frexp(z, &ez);
+    const double mw = frexp(w, &ew);
+    const double mp = mx * mw;
+    const double mq = my * mz;
+    const int ep = ex + ew;
+    const int eq = ey + ez;
+    const int scale = mp == 0.0 ? eq : mq == 0.0 ? ep : ep > eq ? ep : eq;
+    const double sum = scalbn(mp, ep - scale) - scalbn(mq, eq - scale);
+    const double residual = scalbn(fma(mx, mw, -mp), ep - scale) -
+                            scalbn(fma(my, mz, -mq), eq - scale);
+    /* Align before subtraction so overflowing products can cancel. */
+    *out_det = scalbn(sum + residual, scale);
 }
 
 lmmc_status_t lmmc_mat_det(const lmmc_mat_t* a, lmmc_real_t* out_det) {

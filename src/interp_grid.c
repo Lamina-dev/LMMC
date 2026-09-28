@@ -24,8 +24,8 @@ lmmc_status_t lmmc_interp_bilinear(
     if (ix >= nx - 1) ix = nx - 2;
     if (iy >= ny - 1) iy = ny - 2;
 
-    tx = (qx - xs[ix]) / (xs[ix + 1] - xs[ix]);
-    ty = (qy - ys[iy]) / (ys[iy + 1] - ys[iy]);
+    tx = interp_interval_fraction(xs[ix], xs[ix + 1], qx);
+    ty = interp_interval_fraction(ys[iy], ys[iy + 1], qy);
     z00 = zs[ix * ny + iy];
     z01 = zs[ix * ny + (iy + 1)];
     z10 = zs[(ix + 1) * ny + iy];
@@ -60,29 +60,34 @@ static lmmc_status_t interp_grid_basis(const lmmc_real_t* nodes, lmmc_real_t q,
                                       lmmc_real_t* basis)
 {
     size_t i, j;
-    lmmc_real_t denominator = 0.0;
+    lmmc_real_t denominator = 0.0, largest = -INFINITY;
+    lmmc_real_t log_terms[4];
+    lmmc_status_t status;
     for (i = 0; i < 4; ++i) {
         if (q == nodes[i]) {
             for (j = 0; j < 4; ++j) basis[j] = i == j ? 1.0 : 0.0;
             return LMMC_STATUS_OK;
         }
     }
-    lmmc_status_t status = interp_barycentric_weights(nodes, 4, basis);
+    status = interp_barycentric_weights(nodes, 4, basis);
     if (status != LMMC_STATUS_OK) {
         return status;
     }
     for (i = 0; i < 4; ++i) {
-        const lmmc_real_t difference = q - nodes[i];
-        if (!isfinite(difference)) {
-            return LMMC_STATUS_NUMERICAL_FAILURE;
-        }
-        basis[i] /= difference;
-        denominator += basis[i];
-        if (!isfinite(basis[i]) || !isfinite(denominator)) {
-            return LMMC_STATUS_NUMERICAL_FAILURE;
-        }
+        lmmc_real_t difference = q - nodes[i];
+        lmmc_real_t log_distance = isfinite(difference) ?
+            log(fabs(difference)) :
+            log(fabs(q / 2.0 - nodes[i] / 2.0)) + log(2.0);
+        log_terms[i] = log(fabs(basis[i])) - log_distance;
+        if (log_terms[i] > largest) largest = log_terms[i];
     }
-    if (denominator == 0.0) {
+    for (i = 0; i < 4; ++i) {
+        lmmc_real_t difference = q - nodes[i];
+        basis[i] = copysign(exp(log_terms[i] - largest), basis[i]) *
+            (difference < 0.0 ? -1.0 : 1.0);
+        denominator += basis[i];
+    }
+    if (denominator == 0.0 || !isfinite(denominator)) {
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }
     for (i = 0; i < 4; ++i) basis[i] /= denominator;

@@ -213,25 +213,37 @@ static void test_lagrange_non_uniform_spacing(void **state) {
     fixture->interp_lagrange_lag = NULL;
 }
 
-static void test_lagrange_weight_failure_precedence(void **state) {
+static void test_lagrange_weight_range(void **state) {
     test_fixture_t *fixture = *state;
-    const struct {
-        lmmc_real_t xs[5];
-        size_t n;
-        lmmc_status_t status;
-    } cases[] = {
-        {{0.0, DBL_MAX, -DBL_MAX, 0.0}, 4, LMMC_STATUS_INVALID_ARGUMENT},
-        {{0.0, DBL_MAX, -DBL_MAX, 1.0, 1.0}, 5, LMMC_STATUS_NUMERICAL_FAILURE},
-        {{0.0, DBL_MIN, 2.0 * DBL_MIN, 0.0}, 4, LMMC_STATUS_INVALID_ARGUMENT},
-        {{0.0, DBL_MIN, 2.0 * DBL_MIN}, 3, LMMC_STATUS_NUMERICAL_FAILURE}
-    };
+    const lmmc_real_t repeated[] = {0.0, DBL_MAX, -DBL_MAX, 1.0, 1.0};
+    const lmmc_real_t unrepresentable[] = {-DBL_MAX, -1.0, 0.0, 1.0, DBL_MAX};
+    const lmmc_real_t tiny[] = {0.0, DBL_MIN, 2.0 * DBL_MIN};
     const lmmc_real_t ys[5] = {0};
-    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
-        assert_int_equal(lmmc_interp_lagrange_create(
-            cases[i].xs, ys, cases[i].n, &fixture->interp_lagrange_lag),
-            cases[i].status);
-        assert_null(fixture->interp_lagrange_lag);
-    }
+    lmmc_real_t result = 42.0;
+
+    assert_int_equal(lmmc_interp_lagrange_create(
+        repeated, ys, 5, &fixture->interp_lagrange_lag), LMMC_STATUS_INVALID_ARGUMENT);
+    assert_null(fixture->interp_lagrange_lag);
+    assert_int_equal(lmmc_interp_lagrange_create(
+        unrepresentable, ys, 5, &fixture->interp_lagrange_lag), LMMC_STATUS_NUMERICAL_FAILURE);
+    assert_null(fixture->interp_lagrange_lag);
+    assert_int_equal(lmmc_interp_lagrange_create(
+        tiny, ys, 3, &fixture->interp_lagrange_lag), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_interp_lagrange_eval(
+        fixture->interp_lagrange_lag, DBL_MIN / 2.0, &result), LMMC_STATUS_OK);
+    assert_true(result == 0.0);
+}
+
+static void test_lagrange_large_constant(void **state) {
+    test_fixture_t *fixture = *state;
+    const lmmc_real_t xs[] = {0.0, 1.0};
+    const lmmc_real_t ys[] = {DBL_MAX, DBL_MAX};
+    lmmc_real_t result = 42.0;
+    assert_int_equal(lmmc_interp_lagrange_create(
+        xs, ys, 2, &fixture->interp_lagrange_lag), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_interp_lagrange_eval(
+        fixture->interp_lagrange_lag, 0.5, &result), LMMC_STATUS_OK);
+    assert_true(result == DBL_MAX);
 }
 
 int main(void) {
@@ -246,7 +258,8 @@ int main(void) {
         cmocka_unit_test_setup_teardown(test_lagrange_eval_null_out, setup, teardown),
         cmocka_unit_test(test_lagrange_destroy_null),
         cmocka_unit_test_setup_teardown(test_lagrange_non_uniform_spacing, setup, teardown),
-        cmocka_unit_test_setup_teardown(test_lagrange_weight_failure_precedence, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_lagrange_weight_range, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_lagrange_large_constant, setup, teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

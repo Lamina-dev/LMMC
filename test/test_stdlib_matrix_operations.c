@@ -1,3 +1,4 @@
+#include <float.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <setjmp.h>
@@ -259,6 +260,19 @@ static void test_division(void **state) {
     lmmc_mat_destroy(&fixture->mat);
 }
 
+static void test_division_by_subnormal_scalar(void **state) {
+    (void)state;
+    const lmmc_real_t tiny = DBL_MIN / 16.0;
+    lmmc_real_t values[] = {tiny, 0.0, -tiny, 0.0};
+    lmmc_mat_t input = {2, 1, 2, values, 0};
+    lmmc_mat_t result = {0};
+
+    assert_true(lmmc_std_linalg_mat_div_scalar(&input, tiny, &result) == LMMC_STATUS_OK);
+    assert_true(result.rows == 2 && result.cols == 1);
+    assert_true(result.data[0] == 1.0 && result.data[result.stride] == -1.0);
+    lmmc_mat_destroy(&result);
+}
+
 static void test_elementwise_powers(void **state) {
     struct test_fixture *fixture = *state;
     lmmc_real_t matrix_values[] = {1, 2, 3, 4};
@@ -464,6 +478,7 @@ int main(void) {
         cmocka_unit_test_setup_teardown(test_subtraction, setup, teardown),
         cmocka_unit_test_setup_teardown(test_multiplication, setup, teardown),
         cmocka_unit_test_setup_teardown(test_division, setup, teardown),
+        cmocka_unit_test(test_division_by_subnormal_scalar),
         cmocka_unit_test_setup_teardown(test_elementwise_powers, setup, teardown),
         cmocka_unit_test_setup_teardown(test_integer_powers, setup, teardown),
         cmocka_unit_test_setup_teardown(test_comparison, setup, teardown),

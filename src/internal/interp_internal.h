@@ -4,6 +4,8 @@
 #include "lmmc/interp.h"
 
 size_t interp_find_interval(const lmmc_real_t* xs, size_t n, lmmc_real_t query_x);
+lmmc_real_t interp_interval_fraction(lmmc_real_t left, lmmc_real_t right,
+                                     lmmc_real_t query);
 int interp_check_strictly_increasing(const lmmc_real_t* xs, size_t n);
 int interp_check_finite_values(const lmmc_real_t* values, size_t n);
 int interp_check_samples(const lmmc_real_t* xs, const lmmc_real_t* ys,

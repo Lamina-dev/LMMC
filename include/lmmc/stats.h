@@ -233,6 +233,7 @@ lmmc_status_t lmmc_dist_normal_quantile(lmmc_real_t p, lmmc_real_t mu, lmmc_real
  * 对数核按 `|x|/sqrt(df)` 的大小选取等价形式，避免直接计算 `x*x`。
  * 当自由度大到 t 分布与标准正态分布的差异低于双精度分辨率时，直接
  * 使用正态极限，避免两个巨大 `lgamma` 值相减。
+ * 极小正自由度使半自由度下溢时，密度仍按正自由度的极限计算。
  */
 lmmc_status_t lmmc_dist_t_pdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out);
 /**
@@ -241,6 +242,7 @@ lmmc_status_t lmmc_dist_t_pdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out);
  * 不完全 Beta 参数通过尺度比构造；参数本身下溢时在对数域计算其
  * 小参数渐近值，使可表示的重尾概率不因 `x*x` 溢出而被截断为零。
  * 超大自由度使用标准正态极限。
+ * 极小正自由度使半自由度下溢时，有限自变量的概率舍入到 0.5。
  */
 lmmc_status_t lmmc_dist_t_cdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out);
 /**
@@ -257,6 +259,7 @@ lmmc_status_t lmmc_dist_t_quantile(lmmc_real_t p, lmmc_real_t df, lmmc_real_t* o
  *
  * 大自由度通过形状 `df / 2`、尺度 2 的稳定 Gamma PDF 求值，避免
  * 多个巨大对数 Gamma 项抵消。
+ * 极小正自由度使 `df / 2` 下溢时，通过 Gamma 的零形状极限计算正自变量的密度。
  */
 lmmc_status_t lmmc_dist_chi2_pdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out);
 /**
@@ -264,6 +267,7 @@ lmmc_status_t lmmc_dist_chi2_pdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out
  *
  * 通过形状 `df / 2`、尺度 2 的 Gamma CDF 求值，共享其极小下尾
  * 对数域路径，避免先计算 `x / 2` 导致下溢。
+ * 极小正自由度使半自由度下溢时，有限正自变量的概率舍入到 1。
  */
 lmmc_status_t lmmc_dist_chi2_cdf(lmmc_real_t x, lmmc_real_t df, lmmc_real_t* out);
 /** @brief χ² 分布分位数函数。 */
@@ -278,7 +282,12 @@ lmmc_status_t lmmc_dist_chi2_quantile(lmmc_real_t p, lmmc_real_t df, lmmc_real_t
  * 避免中心区域的 log-gamma 灾难性抵消。
  */
 lmmc_status_t lmmc_dist_f_pdf(lmmc_real_t x, lmmc_real_t df1, lmmc_real_t df2, lmmc_real_t* out);
-/** @brief F 分布累积分布函数。 */
+/**
+ * @brief F 分布累积分布函数。
+ *
+ * 极小正分子自由度使半自由度下溢时，有限正自变量的概率按
+ * `df2 / (df1 + df2)` 的极限计算。
+ */
 lmmc_status_t lmmc_dist_f_cdf(lmmc_real_t x, lmmc_real_t df1, lmmc_real_t df2, lmmc_real_t* out);
 /** @brief F 分布分位数函数。 */
 lmmc_status_t lmmc_dist_f_quantile(lmmc_real_t p, lmmc_real_t df1, lmmc_real_t df2, lmmc_real_t* out);

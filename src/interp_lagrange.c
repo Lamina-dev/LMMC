@@ -66,7 +66,8 @@ lmmc_status_t lmmc_interp_lagrange_eval(
     lmmc_real_t query_x, lmmc_real_t* out_y)
 {
     size_t j;
-    lmmc_real_t numer, denom, diff, term, result;
+    lmmc_real_t numer = 0.0, denom = 0.0, largest = -INFINITY;
+    lmmc_real_t value_scale = 0.0, result;
     if (!lagrange || !out_y || !isfinite(query_x)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
@@ -76,17 +77,32 @@ lmmc_status_t lmmc_interp_lagrange_eval(
             *out_y = lagrange->ys[j];
             return LMMC_STATUS_OK;
         }
+        if (fabs(lagrange->ys[j]) > value_scale) {
+            value_scale = fabs(lagrange->ys[j]);
+        }
     }
 
-    numer = 0.0;
-    denom = 0.0;
     for (j = 0; j < lagrange->n; j++) {
-        diff = query_x - lagrange->xs[j];
-        term = lagrange->weights[j] / diff;
-        numer += term * lagrange->ys[j];
+        lmmc_real_t diff = query_x - lagrange->xs[j];
+        lmmc_real_t log_distance = isfinite(diff) ? log(fabs(diff)) :
+            log(fabs(query_x / 2.0 - lagrange->xs[j] / 2.0)) + log(2.0);
+        lmmc_real_t log_term = log(fabs(lagrange->weights[j])) - log_distance;
+        lmmc_real_t term;
+        if (log_term > largest) {
+            lmmc_real_t factor = exp(largest - log_term);
+            numer *= factor;
+            denom *= factor;
+            largest = log_term;
+        }
+        term = copysign(exp(log_term - largest), lagrange->weights[j]) *
+            (diff < 0.0 ? -1.0 : 1.0);
+        numer += term * (value_scale == 0.0 ? 0.0 : lagrange->ys[j] / value_scale);
         denom += term;
     }
-    result = numer / denom;
+    if (denom == 0.0 || !isfinite(denom)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    result = (numer / denom) * value_scale;
     if (!isfinite(result)) {
         return LMMC_STATUS_NUMERICAL_FAILURE;
     }

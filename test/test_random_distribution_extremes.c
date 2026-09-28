@@ -157,12 +157,51 @@ static void test_beta_invalid_atomicity(void **state) {
     }
 }
 
+static void test_chi_squared_subnormal_df(void **state) {
+    struct test_fixture *fixture = *state;
+    double value;
+
+    assert_int_equal(lmmc_rng_create(&fixture->rng), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(fixture->rng, 123), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_chi_squared(fixture->rng, DBL_TRUE_MIN, &value),
+                     LMMC_STATUS_OK);
+    assert_true(isfinite(value) && value == 0.0);
+
+    assert_int_equal(lmmc_rng_chi_squared(fixture->rng, 2.0 * DBL_TRUE_MIN, &value),
+                     LMMC_STATUS_OK);
+    assert_true(isfinite(value) && value == 0.0);
+}
+
+static void test_tiny_df_ratio_failures(void **state) {
+    struct test_fixture *fixture = *state;
+    double value = 42.0;
+
+    assert_int_equal(lmmc_rng_create(&fixture->rng), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_seed(fixture->rng, 456), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_rng_student_t(fixture->rng, DBL_TRUE_MIN, &value),
+                     LMMC_STATUS_NUMERICAL_FAILURE);
+    assert_true(value == 42.0);
+
+    assert_int_equal(lmmc_rng_f(fixture->rng, DBL_TRUE_MIN, 5.0, &value),
+                     LMMC_STATUS_OK);
+    assert_true(isfinite(value) && value == 0.0);
+    value = 42.0;
+    assert_int_equal(lmmc_rng_f(fixture->rng, 5.0, DBL_TRUE_MIN, &value),
+                     LMMC_STATUS_NUMERICAL_FAILURE);
+    assert_true(value == 42.0);
+    assert_int_equal(lmmc_rng_f(fixture->rng, DBL_TRUE_MIN, DBL_TRUE_MIN, &value),
+                     LMMC_STATUS_NUMERICAL_FAILURE);
+    assert_true(value == 42.0);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_large_binomial_moments, setup, teardown),
         cmocka_unit_test_setup_teardown(test_binomial_goodness_of_fit, setup, teardown),
         cmocka_unit_test_setup_teardown(test_beta_extreme_support, setup, teardown),
         cmocka_unit_test_setup_teardown(test_beta_invalid_atomicity, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_chi_squared_subnormal_df, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_tiny_df_ratio_failures, setup, teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

@@ -206,27 +206,6 @@ static void test_max_property(void **state) {
     }
 }
 
-static void test_min_property(void **state) {
-    (void)state;
-    int i;
-
-    assert_true(lmmc_min(0.0, 0.0) == 0.0);
-    assert_true(lmmc_min(-1.0, 1.0) == -1.0);
-    assert_true(lmmc_min(1.0, -1.0) == -1.0);
-    assert_true(lmmc_min(-5.0, -3.0) == -5.0);
-
-    for (i = 0; i < NUM_ITERATIONS; i++) {
-        lmmc_real_t a = rand_double(1e10);
-        lmmc_real_t b = rand_double(1e10);
-        lmmc_real_t m = lmmc_min(a, b);
-
-        assert_true(m <= a);
-        assert_true(m <= b);
-
-        assert_true(m == a || m == b);
-    }
-}
-
 static void test_clamp_property(void **state) {
     (void)state;
     int i;
@@ -331,7 +310,6 @@ int main(void) {
         cmocka_unit_test(test_safe_add_normal),
         cmocka_unit_test(test_abs_property),
         cmocka_unit_test(test_max_property),
-        cmocka_unit_test(test_min_property),
         cmocka_unit_test(test_clamp_property),
         cmocka_unit_test(test_swap_property),
         cmocka_unit_test(test_is_finite_property),

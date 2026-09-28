@@ -199,6 +199,29 @@ static void test_mat_det_known(void **state) {
     }
 }
 
+static void test_mat_det_cancelled_overflow(void **state) {
+    (void)state;
+    lmmc_real_t values[] = {1e200, 1e200, 1e200, 1e200};
+    lmmc_mat_t matrix = {2, 2, 2, values, 0};
+    lmmc_real_t det = 42.0;
+
+    assert_int_equal(lmmc_mat_det(&matrix, &det), LMMC_STATUS_OK);
+    assert_true(det == 0.0);
+}
+
+static void test_mat_det_finite_after_overflow(void **state) {
+    (void)state;
+    const lmmc_real_t large = 1e160;
+    const lmmc_real_t next = nextafter(large, INFINITY);
+    lmmc_real_t values[] = {large, large, large, next};
+    lmmc_mat_t matrix = {2, 2, 2, values, 0};
+    lmmc_real_t det = 42.0;
+    const lmmc_real_t expected = large * (next - large);
+
+    assert_int_equal(lmmc_mat_det(&matrix, &det), LMMC_STATUS_OK);
+    assert_true(isfinite(det) && fabs(det / expected - 1.0) < 1e-12);
+}
+
 static int setup(void **state) {
     struct test_fixture *fixture = calloc(1, sizeof(*fixture));
     *state = fixture;
@@ -232,6 +255,8 @@ int main(void) {
         cmocka_unit_test_setup_teardown(test_vec_iamax_known, setup, teardown),
         cmocka_unit_test_setup_teardown(test_mat_trace_known, setup, teardown),
         cmocka_unit_test_setup_teardown(test_mat_det_known, setup, teardown),
+        cmocka_unit_test(test_mat_det_cancelled_overflow),
+        cmocka_unit_test(test_mat_det_finite_after_overflow),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

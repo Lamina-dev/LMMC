@@ -91,10 +91,31 @@ static void test_t_extreme_tails(void **state) {
     }
 }
 
+static void test_t_subnormal_degrees(void **state) {
+    (void)state;
+    lmmc_real_t val = 42.0;
+    const lmmc_real_t expected_density = sqrt(DBL_TRUE_MIN) / 2.0;
+
+    assert_int_equal(lmmc_dist_t_pdf(0.0, DBL_TRUE_MIN, &val),
+                     LMMC_STATUS_OK);
+    assert_true(val > 0.0 && fabs(val / expected_density - 1.0) < 1e-12);
+    assert_int_equal(lmmc_dist_t_pdf(sqrt(DBL_TRUE_MIN), DBL_TRUE_MIN, &val),
+                     LMMC_STATUS_OK);
+    assert_true(val > 0.0 &&
+                fabs(val / (expected_density / sqrt(2.0)) - 1.0) < 1e-12);
+    assert_int_equal(lmmc_dist_t_cdf(1.0, DBL_TRUE_MIN, &val),
+                     LMMC_STATUS_OK);
+    assert_true(val == 0.5);
+    assert_int_equal(lmmc_dist_t_cdf(-1.0, DBL_TRUE_MIN, &val),
+                     LMMC_STATUS_OK);
+    assert_true(val == 0.5);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_t_dist, setup, teardown),
         cmocka_unit_test_setup_teardown(test_t_extreme_tails, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_t_subnormal_degrees, setup, teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

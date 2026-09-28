@@ -58,6 +58,22 @@ static void test_chi2_dist(void **state) {
     }
 }
 
+static void test_chi2_subnormal_degrees(void **state) {
+    (void)state;
+    lmmc_real_t val = 42.0;
+
+    assert_int_equal(lmmc_dist_chi2_cdf(1.0, DBL_TRUE_MIN, &val),
+                     LMMC_STATUS_OK);
+    assert_true(val == 1.0);
+
+    assert_int_equal(lmmc_dist_chi2_pdf(DBL_TRUE_MIN, DBL_TRUE_MIN, &val),
+                     LMMC_STATUS_OK);
+    assert_true(fabs(val - 0.5) < 1e-12);
+    assert_int_equal(lmmc_dist_chi2_pdf(2.0 * DBL_TRUE_MIN, DBL_TRUE_MIN, &val),
+                     LMMC_STATUS_OK);
+    assert_true(fabs(val - 0.25) < 1e-12);
+}
+
 static void test_f_dist(void **state) {
     (void)state;
     lmmc_real_t val;
@@ -106,10 +122,28 @@ static void test_f_dist(void **state) {
                 1.1859038610805410002e-12);
 }
 
+static void test_f_subnormal_degrees(void **state) {
+    (void)state;
+    lmmc_real_t val = 42.0;
+
+    assert_int_equal(lmmc_dist_f_cdf(1.0, DBL_TRUE_MIN, 1.0, &val),
+                     LMMC_STATUS_OK);
+    assert_true(val == 1.0);
+    assert_int_equal(lmmc_dist_f_cdf(1.0, DBL_TRUE_MIN, DBL_TRUE_MIN, &val),
+                     LMMC_STATUS_OK);
+    assert_true(fabs(val - 0.5) < 1e-12);
+    assert_int_equal(lmmc_dist_f_cdf(1.0, DBL_TRUE_MIN,
+                                     2.0 * DBL_TRUE_MIN, &val),
+                     LMMC_STATUS_OK);
+    assert_true(fabs(val - 2.0 / 3.0) < 1e-12);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_chi2_dist, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_chi2_subnormal_degrees, setup, teardown),
         cmocka_unit_test_setup_teardown(test_f_dist, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_f_subnormal_degrees, setup, teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

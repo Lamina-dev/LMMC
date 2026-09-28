@@ -219,8 +219,9 @@ lmmc_status_t lmmc_rng_beta(
  *
  * @param[in]  rng  已初始化的 RNG。
  * @param[in]  df   自由度（> 0）。
- * @param[out] out  输出样本值。
- * @return LMMC_STATUS_OK 成功。
+ * @param[out] out  有限且非负的样本，仅成功时写入；极小正自由度可舍入为零。
+ * @return LMMC_STATUS_OK 成功；无效参数返回 LMMC_STATUS_INVALID_ARGUMENT；
+ *         其余采样失败返回相应数值状态。
  */
 lmmc_status_t lmmc_rng_chi_squared(
     lmmc_rng_t* rng,
@@ -233,8 +234,9 @@ lmmc_status_t lmmc_rng_chi_squared(
  *
  * @param[in]  rng  已初始化的 RNG。
  * @param[in]  df   自由度（> 0）。
- * @param[out] out  输出样本值。
- * @return LMMC_STATUS_OK 成功。
+ * @param[out] out  有限样本，仅成功时写入。
+ * @return LMMC_STATUS_OK 成功；无效参数返回 LMMC_STATUS_INVALID_ARGUMENT；
+ *         样本分母下溢或结果不可表示时返回 LMMC_STATUS_NUMERICAL_FAILURE。
  */
 lmmc_status_t lmmc_rng_student_t(
     lmmc_rng_t* rng,
@@ -248,8 +250,9 @@ lmmc_status_t lmmc_rng_student_t(
  * @param[in]  rng  已初始化的 RNG。
  * @param[in]  df1  分子自由度（> 0）。
  * @param[in]  df2  分母自由度（> 0）。
- * @param[out] out  输出样本值。
- * @return LMMC_STATUS_OK 成功。
+ * @param[out] out  有限且非负的样本，仅成功时写入。
+ * @return LMMC_STATUS_OK 成功；无效参数返回 LMMC_STATUS_INVALID_ARGUMENT；
+ *         样本分母下溢或结果不可表示时返回 LMMC_STATUS_NUMERICAL_FAILURE。
  */
 lmmc_status_t lmmc_rng_f(
     lmmc_rng_t* rng,

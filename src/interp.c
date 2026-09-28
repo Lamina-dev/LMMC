@@ -49,24 +49,33 @@ lmmc_status_t interp_barycentric_weights(const lmmc_real_t* nodes, size_t n,
                                         lmmc_real_t* weights)
 {
     size_t i, j;
+    lmmc_real_t largest = -INFINITY;
     for (j = 0; j < n; j++) {
-        lmmc_real_t prod = 1.0;
+        lmmc_real_t log_weight = 0.0;
         for (i = 0; i < n; i++) {
             if (i != j) {
-                const lmmc_real_t difference = nodes[j] - nodes[i];
+                lmmc_real_t difference = nodes[j] - nodes[i];
                 if (difference == 0.0) {
                     return LMMC_STATUS_INVALID_ARGUMENT;
                 }
-                prod *= difference;
+                if (!isfinite(difference)) {
+                    log_weight -= log(fabs(nodes[j] / 2.0 - nodes[i] / 2.0)) + log(2.0);
+                } else {
+                    log_weight -= log(fabs(difference));
+                }
             }
         }
-        if (!isfinite(prod) || prod == 0.0) {
+        weights[j] = log_weight;
+        if (log_weight > largest) largest = log_weight;
+    }
+    for (j = 0; j < n; j++) {
+        weights[j] = exp(weights[j] - largest);
+        if (weights[j] == 0.0 || !isfinite(weights[j])) {
             return LMMC_STATUS_NUMERICAL_FAILURE;
         }
-        weights[j] = 1.0 / prod;
-    }
-    if (!interp_check_finite_values(weights, n)) {
-        return LMMC_STATUS_NUMERICAL_FAILURE;
+        for (i = 0; i < n; i++) {
+            if (nodes[j] < nodes[i]) weights[j] = -weights[j];
+        }
     }
     return LMMC_STATUS_OK;
 }
@@ -113,9 +122,9 @@ lmmc_status_t interp_check_grid(const interp_grid_t* grid, size_t minimum,
     return LMMC_STATUS_OK;
 }
 
-static lmmc_real_t interp_interval_fraction(lmmc_real_t left,
-                                           lmmc_real_t right,
-                                           lmmc_real_t query)
+lmmc_real_t interp_interval_fraction(lmmc_real_t left,
+                                     lmmc_real_t right,
+                                     lmmc_real_t query)
 {
     const lmmc_real_t span = right - left;
     lmmc_real_t scale, scaled_left, scaled_right;

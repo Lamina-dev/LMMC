@@ -307,12 +307,6 @@ static inline lmmc_real_t lmmc_max(lmmc_real_t a, lmmc_real_t b)
     return (a >= b) ? a : b;
 }
 
-/** @internal @brief 取较小值. */
-static inline lmmc_real_t lmmc_min(lmmc_real_t a, lmmc_real_t b)
-{
-    return (a <= b) ? a : b;
-}
-
 /** @internal @brief 将 @c x 截断到 [lo, hi] 区间. */
 static inline lmmc_real_t lmmc_clamp(lmmc_real_t x, lmmc_real_t lo, lmmc_real_t hi)
 {

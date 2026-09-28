@@ -155,8 +155,22 @@ lmmc_status_t lmmc_std_linalg_vec_div_scalar(const lmmc_vec_t* x,
                                              lmmc_real_t scalar,
                                              lmmc_vec_t* out)
 {
+    lmmc_status_t status;
     if (scalar == (lmmc_real_t)0) { return LMMC_STATUS_NUMERICAL_FAILURE; }
-    return lmmc_std_linalg_vec_scale(x, (lmmc_real_t)1 / scalar, out);
+    if (!out) { return LMMC_STATUS_INVALID_ARGUMENT; }
+    if (!lmmc_std_real_is_finite(scalar)) { return LMMC_STATUS_NUMERICAL_FAILURE; }
+    status = lmmc_std_require_finite_vec(x);
+    if (status != LMMC_STATUS_OK) { return status; }
+    status = lmmc_vec_create(x->size, out);
+    if (status != LMMC_STATUS_OK) { return status; }
+    for (size_t i = 0; i < out->size; ++i) {
+        out->data[i] = x->data[i] / scalar;
+    }
+    status = lmmc_std_require_finite_vec(out);
+    if (status != LMMC_STATUS_OK) {
+        lmmc_vec_destroy(out);
+    }
+    return status;
 }
 
 lmmc_status_t lmmc_std_linalg_scalar_div_vec(lmmc_real_t scalar,
@@ -438,8 +452,25 @@ lmmc_status_t lmmc_std_linalg_mat_div_scalar(const lmmc_mat_t* a,
                                              lmmc_real_t scalar,
                                              lmmc_mat_t* out)
 {
+    lmmc_status_t status;
     if (scalar == (lmmc_real_t)0) { return LMMC_STATUS_NUMERICAL_FAILURE; }
-    return lmmc_std_linalg_mat_scale(a, (lmmc_real_t)1 / scalar, out);
+    if (!out) { return LMMC_STATUS_INVALID_ARGUMENT; }
+    if (!lmmc_std_real_is_finite(scalar)) { return LMMC_STATUS_NUMERICAL_FAILURE; }
+    status = lmmc_std_require_finite_mat(a);
+    if (status != LMMC_STATUS_OK) { return status; }
+    status = lmmc_mat_create(a->rows, a->cols, out);
+    if (status != LMMC_STATUS_OK) { return status; }
+    for (size_t i = 0; i < out->rows; ++i) {
+        for (size_t j = 0; j < out->cols; ++j) {
+            out->data[i * out->stride + j] =
+                a->data[i * a->stride + j] / scalar;
+        }
+    }
+    status = lmmc_std_require_finite_mat(out);
+    if (status != LMMC_STATUS_OK) {
+        lmmc_mat_destroy(out);
+    }
+    return status;
 }
 
 lmmc_status_t lmmc_std_linalg_scalar_div_mat(lmmc_real_t scalar,

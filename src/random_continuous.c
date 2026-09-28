@@ -156,6 +156,21 @@ lmmc_status_t lmmc_rng_chi_squared(
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
 
+    if (df / 2.0 == 0.0) {
+        lmmc_real_t g;
+        lmmc_status_t st = lmmc_rng_gamma(rng, 1.0, 2.0, &g);
+        double u;
+        if (st != LMMC_STATUS_OK) {
+            return st;
+        }
+        do {
+            u = u64_to_double01(xoshiro256ss_next(rng->state));
+        } while (u == 0.0);
+        /* Keep the unrepresentable shape df/2 in the Gamma power exponent. */
+        *out = g * exp(2.0 * log(u) / df);
+        return LMMC_STATUS_OK;
+    }
+
     return lmmc_rng_gamma(rng, df / 2.0, 2.0, out);
 }
 
@@ -164,7 +179,7 @@ lmmc_status_t lmmc_rng_student_t(
     lmmc_real_t df,
     lmmc_real_t* out)
 {
-    lmmc_real_t z, chi2;
+    lmmc_real_t z, chi2, denom, value;
     lmmc_status_t st;
 
     if (rng == NULL || out == NULL) {
@@ -181,7 +196,15 @@ lmmc_status_t lmmc_rng_student_t(
         return st;
     }
 
-    *out = z / sqrt(chi2 / df);
+    denom = sqrt(chi2 / df);
+    if (denom == 0.0) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    value = z / denom;
+    if (!isfinite(value)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    *out = value;
     return LMMC_STATUS_OK;
 }
 
@@ -191,7 +214,7 @@ lmmc_status_t lmmc_rng_f(
     lmmc_real_t df2,
     lmmc_real_t* out)
 {
-    lmmc_real_t chi1, chi2;
+    lmmc_real_t chi1, chi2, denominator, value;
     lmmc_status_t st;
 
     if (rng == NULL || out == NULL) {
@@ -212,6 +235,14 @@ lmmc_status_t lmmc_rng_f(
         return st;
     }
 
-    *out = (chi1 / df1) / (chi2 / df2);
+    denominator = chi2 / df2;
+    if (denominator == 0.0) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    value = (chi1 / df1) / denominator;
+    if (!isfinite(value)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    *out = value;
     return LMMC_STATUS_OK;
 }
