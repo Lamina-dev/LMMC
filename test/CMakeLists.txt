@@ -1,6 +1,6 @@
 find_package(Threads REQUIRED)
 
-find_package(cmocka 1.1.7 CONFIG QUIET)
+find_package(cmocka 2.0.2 CONFIG QUIET)
 if(NOT TARGET cmocka AND TARGET cmocka::cmocka)
 	add_library(cmocka ALIAS cmocka::cmocka)
 endif()
@@ -8,7 +8,7 @@ if(NOT TARGET cmocka)
 	include(FetchContent)
 	FetchContent_Declare(cmocka
 		GIT_REPOSITORY https://gitlab.com/cmocka/cmocka.git
-		GIT_TAG a01cc69ee9536f90e57c61a198f2d1944d3d4313
+		GIT_TAG cmocka-2.0.2
 		SOURCE_SUBDIR development-only)
 	FetchContent_MakeAvailable(cmocka)
 	set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)

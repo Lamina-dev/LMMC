@@ -10,9 +10,9 @@ function(lmmc_quality_require_tools)
         ERROR_VARIABLE _error
         OUTPUT_STRIP_TRAILING_WHITESPACE
     )
-    if(NOT _status EQUAL 0 OR NOT _version STREQUAL "1.24.0;2.21.0")
+    if(NOT _status EQUAL 0 OR NOT _version STREQUAL "1.24.1;2.21.0")
         message(FATAL_ERROR
-            "Quality gates require lizard==1.24.0 and pygments==2.21.0 in ${Python3_EXECUTABLE}; "
+            "Quality gates require lizard==1.24.1 and pygments==2.21.0 in ${Python3_EXECUTABLE}; "
             "found '${_version}'. Install cmake/quality-requirements.txt with "
             "pip --require-hashes. ${_error}")
     endif()

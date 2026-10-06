@@ -14,10 +14,10 @@ jobs:
   source-quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - name: Export Git-visible sources including nested dependencies
@@ -67,7 +67,7 @@ jobs:
             asm: AUTO
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Configure
@@ -115,7 +115,7 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - uses: msys2/setup-msys2@v2
@@ -150,7 +150,7 @@ jobs:
     needs: source-quality
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Export Git-visible package sources
@@ -191,7 +191,7 @@ jobs:
     name: macos-${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Assert native architecture
@@ -238,7 +238,7 @@ jobs:
     name: Release LMMC static (PIC) + LMMP shared
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Configure Release static-PIC LMMC
@@ -261,7 +261,7 @@ jobs:
   sanitizers:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Configure
@@ -287,7 +287,7 @@ jobs:
   thread-sanitizer:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Configure
@@ -311,7 +311,7 @@ jobs:
   static-analysis:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install clang-tidy
@@ -332,11 +332,11 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install coverage tool
-        run: python3 -m pip install --user gcovr==7.2
+        run: python3 -m pip install --user gcovr==8.6
       - name: Configure
         run: >-
           cmake -S . -B build -G Ninja
@@ -364,7 +364,7 @@ jobs:
           --html-details build/coverage.html
       - name: Upload coverage artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: |

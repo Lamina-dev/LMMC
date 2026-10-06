@@ -18,7 +18,7 @@ import re
 import sys
 
 
-LIZARD_VERSION = "1.24.0"
+LIZARD_VERSION = "1.24.1"
 SOURCE_ROOTS = ("include", "src", "tests", "test", "examples", "example", "benchmarks")
 TEST_ROOTS = frozenset(("tests", "test", "examples", "example", "benchmarks"))
 EXCLUDED_DIRS = frozenset(("build", "dist", ".git"))
@@ -57,7 +57,7 @@ def load_lizard():
     try:
         installed = metadata.version("lizard")
     except metadata.PackageNotFoundError as error:
-        raise ValueError("lizard==1.24.0 is required; distribution is not installed") from error
+        raise ValueError(f"lizard=={LIZARD_VERSION} is required; distribution is not installed") from error
     if installed != LIZARD_VERSION:
         raise ValueError(f"lizard=={LIZARD_VERSION} is required; found {installed}")
     import lizard

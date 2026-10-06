@@ -26,10 +26,9 @@ Fresh product configurations leave testing disabled. Enable the C11 suite with
 `BUILD_TESTING=ON`. Tests use cmocka assertions, per-case setup/teardown, and its
 native group runner; CTest registers the executables under the `lmmc` label.
 
-CMake first looks for a cmocka package of version 1.1.7 or newer, then fetches
-the locked 1.1.7 commit `a01cc69ee9536f90e57c61a198f2d1944d3d4313` when
-needed. For offline development, set `FETCHCONTENT_SOURCE_DIR_CMOCKA` to that
-framework's local source directory.
+CMake first looks for a cmocka package of version 2.0.2 or newer, then fetches
+the locked 2.0.2 tag `cmocka-2.0.2` when needed. For offline development, set
+`FETCHCONTENT_SOURCE_DIR_CMOCKA` to that framework's local source directory.
 The framework is a private test-executable dependency. Installed libraries,
 headers, and CMake exports retain the LMMC/LMMP and standard-runtime boundary;
 package checks reject development-framework files and exported link dependencies.
