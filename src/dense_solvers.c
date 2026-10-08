@@ -77,6 +77,20 @@ static void lmmc_det_lu(lmmc_real_t* lu, size_t n, lmmc_real_t* out_det) {
     LMMC_REAL_CLEAR(&tmp_prod);
 }
 
+static int lmmc_det_fast(double x, double y, double z, double w,
+                          double p, double q, lmmc_real_t* out_det) {
+    if (!isfinite(p) || !isfinite(q) ||
+        fabs(p) < DBL_MIN || fabs(q) < DBL_MIN) {
+        return 0;
+    }
+    const double det = fma(x, w, -q) - fma(y, z, -q);
+    if (!isfinite(det) || fabs(det) < DBL_MIN) {
+        return 0;
+    }
+    *out_det = det;
+    return 1;
+}
+
 static void lmmc_det_two(const lmmc_mat_t* a, lmmc_real_t* out_det) {
     const double x = a->data[0];
     const double y = a->data[1];
@@ -89,15 +103,9 @@ static void lmmc_det_two(const lmmc_mat_t* a, lmmc_real_t* out_det) {
         *out_det = p - q;
         return;
     }
-    if (isfinite(p) && isfinite(q) &&
-        fabs(p) >= DBL_MIN && fabs(q) >= DBL_MIN) {
-        const double det = fma(x, w, -q) - fma(y, z, -q);
-        if (isfinite(det) && fabs(det) >= DBL_MIN) {
-            *out_det = det;
-            return;
-        }
+    if (lmmc_det_fast(x, y, z, w, p, q, out_det)) {
+        return;
     }
-
     int ex, ey, ez, ew;
     const double mx = frexp(x, &ex);
     const double my = frexp(y, &ey);
