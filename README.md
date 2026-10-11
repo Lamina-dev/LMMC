@@ -29,9 +29,13 @@ native group runner; CTest registers the executables under the `lmmc` label.
 CMake first looks for a cmocka package of version 2.0.2 or newer, then fetches
 the locked 2.0.2 tag `cmocka-2.0.2` when needed. For offline development, set
 `FETCHCONTENT_SOURCE_DIR_CMOCKA` to that framework's local source directory.
-The framework is a private test-executable dependency. Installed libraries,
-headers, and CMake exports retain the LMMC/LMMP and standard-runtime boundary;
-package checks reject development-framework files and exported link dependencies.
+Fetched cmocka is built shared for the test executables; a found package retains
+its own library type. The framework is a private test-executable dependency.
+Installed libraries, headers, and CMake exports retain the LMMC/LMMP and
+standard-runtime boundary; package checks reject development-framework files
+and exported link dependencies.
+With `LMMC_BUILD_SHARED=OFF`, tests link the static LMMC product library to
+exercise that package configuration.
 
 Use `ctest --test-dir build -L lmmc --output-on-failure` to run the suite.
 CTest's `--output-junit` option provides a machine-readable report.

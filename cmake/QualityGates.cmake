@@ -133,6 +133,11 @@ function(lmmc_add_quality_gates prefix root)
         if(_type STREQUAL "UTILITY" OR _type STREQUAL "INTERFACE_LIBRARY")
             continue()
         endif()
+        # 测试库另行编译私有符号，源码归属仍由生产目标记录。
+        get_target_property(_test_copy "${_target}" LMMC_QUALITY_TEST_COPY)
+        if(_test_copy)
+            continue()
+        endif()
         get_target_property(_source_dir "${_target}" SOURCE_DIR)
         file(RELATIVE_PATH _target_directory "${root}" "${_source_dir}")
         if(NOT _target_directory STREQUAL "" AND
