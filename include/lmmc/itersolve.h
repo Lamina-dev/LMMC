@@ -45,10 +45,14 @@ typedef lmmc_status_t (*lmmc_matvec_op_t)(
 
 /**
  * @brief 迭代求解器配置。
+ *
+ * abs_tol、rel_tol 必须有限且非负，max_iter 必须大于零；无效配置在调用算子
+ * 或修改 x 前返回 INVALID_ARGUMENT。MINRES / LSQR 也检查
+ * abs_tol + rel_tol * ||b||_2 有限，否则返回 NUMERICAL_FAILURE。
  */
 typedef struct {
     lmmc_real_t abs_tol;                              /**< 残差绝对容差。 */
-    lmmc_real_t rel_tol;                              /**< 残差相对容差（相对于初始残差）。 */
+    lmmc_real_t rel_tol;                              /**< 相对容差（残差判据相对于 ||b||_2）。 */
     size_t max_iter;                                  /**< 最大迭代步数。 */
     size_t restart;                                   /**< GMRES 重启长度（其它求解器忽略）。 */
     lmmc_diagnostic_sink_t diagnostics;               /**< 统一诊断出口。 */
@@ -164,6 +168,17 @@ lmmc_status_t lmmc_gmres_solve(
  *
  * 当 cfg->apply_op 非 NULL 时使用 matrix-free 模式（此时 a 必须为 NULL）。
  * 若同时提供 a 和 cfg->apply_op ，返回 LMMC_STATUS_INVALID_ARGUMENT 。
+ *
+ * precond 表示求解 M*z=r；仅接受 NULL / NONE 或有限严格正的 Jacobi。
+ * ILU0 / ILUT 返回 INVALID_ARGUMENT，非正 Jacobi 返回 NOT_POSITIVE_DEFINITE，
+ * 非有限内部数据返回 NUMERICAL_FAILURE，尺寸不符返回 DIMENSION_MISMATCH。
+ *
+ * 初始及每次完成 x 更新后计算真实残差 r=b-A*x，仅在
+ * ||r||_2 <= abs_tol + rel_tol * ||b||_2 时标记收敛。统计和诊断报告真实范数，
+ * num_iter 计完成的解更新次数；达到 max_iter 或基空间耗尽仍返回 OK，
+ * converged 为零。错误保留最近成功计算的残差统计，算子错误原样传播。
+ * 每步额外执行一次前向算子以检查真实残差。一次分配九个长度 n 的工作向量，
+ * 迭代中不分配；restart 被忽略。
  */
 lmmc_status_t lmmc_minres_solve(
     const lmmc_sparse_mat_t* a,
@@ -180,6 +195,18 @@ lmmc_status_t lmmc_minres_solve(
  * 基于 Golub-Kahan 双对角化。matrix-free 模式要求 cfg->apply_op 和
  * cfg->apply_transpose_op 同时非 NULL，并分别计算 A*x 和 A^T*x，共享
  * cfg->op_user_data；此时 a 必须为 NULL。显式矩阵模式要求两个回调均为 NULL。
+ *
+ * 初始及每次完成 x 更新后计算真实残差 r=b-A*x，统计和诊断均报告其 2-范数。
+ * 收敛条件为 ||r||_2 <= abs_tol + rel_tol * ||b||_2，或
+ * ||A^T*r||_2 <= rel_tol * anorm * ||r||_2，其中 anorm 为双对角化的
+ * Frobenius 范数估计。后者通过归一化残差计算以避免下溢，因此最小二乘
+ * 收敛时 final_residual_norm 可以非零；abs_tol 始终具有残差量纲。
+ *
+ * num_iter 计完成的解更新次数。达到 max_iter 或基空间耗尽且未满足停止式，
+ * 返回 OK / converged=0；非有限状态返回 NUMERICAL_FAILURE，算子错误原样
+ * 传播，错误统计保留最近成功计算的真残差。每步额外计算一次前向算子，
+ * 需要驻点检查时再计算一次转置算子。一次分配工作区，迭代中不分配；
+ * restart 被忽略。
  */
 lmmc_status_t lmmc_lsqr_solve(
     const lmmc_sparse_mat_t* a,

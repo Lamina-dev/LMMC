@@ -35,6 +35,9 @@ void lmmc_itersolve_finish(lmmc_itersolve_result_t* result,
 lmmc_status_t lmmc_itersolve_residual(const lmmc_sparse_mat_t* a,
     const lmmc_vec_t* b, const lmmc_vec_t* x, lmmc_vec_t* ax,
     lmmc_vec_t* r);
+lmmc_status_t lmmc_itersolve_true_residual(const lmmc_sparse_mat_t* a,
+    const lmmc_itersolve_config_t* cfg, const lmmc_vec_t* b,
+    const lmmc_vec_t* x, lmmc_vec_t* r, lmmc_real_t* norm);
 lmmc_status_t lmmc_itersolve_threshold(const lmmc_itersolve_config_t* cfg,
     const lmmc_vec_t* b, const lmmc_vec_t* r, lmmc_real_t* norm,
     lmmc_real_t* threshold);

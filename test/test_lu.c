@@ -8,6 +8,7 @@
 #include <cmocka.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <float.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"
 
@@ -153,11 +154,134 @@ static void test_lu_rhs_shape(void **state) {
 }
 
 
+static void test_lu_small_scalar(void **state) {
+    struct test_fixture *fixture = *state;
+    assert_int_equal(lmmc_mat_create(1, 1, &fixture->a), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(1, &fixture->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(1, &fixture->x), LMMC_STATUS_OK);
+    fixture->a.data[0] = 1e-16;
+    fixture->b.data[0] = 1e-16;
+    assert_int_equal(lmmc_lu_decompose_inplace(&fixture->a, fixture->piv, NULL), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_lu_solve(&fixture->a, fixture->piv, &fixture->b, &fixture->x), LMMC_STATUS_OK);
+    assert_true(lmmc_test_nearly_equal(fixture->x.data[0], 1.0, 1e-14));
+}
+
+static void test_lu_scaled_system(void **state) {
+    struct test_fixture *fixture = *state;
+    const double scales[] = {1e-16, 1.0, 1e16, 0x1p-100, 0x1p100};
+    const double values[] = {3.0, 1.0, 1.0, 2.0};
+    assert_int_equal(lmmc_mat_create(2, 2, &fixture->a), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(2, &fixture->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(2, &fixture->x), LMMC_STATUS_OK);
+    for (size_t k = 0; k < sizeof(scales) / sizeof(scales[0]); ++k) {
+        double scale = scales[k];
+        for (size_t i = 0; i < 4; ++i)
+            fixture->a.data[i] = scale * values[i];
+        fixture->b.data[0] = scale;
+        fixture->b.data[1] = -3.0 * scale;
+        assert_int_equal(lmmc_lu_decompose_inplace(&fixture->a, fixture->piv, NULL), LMMC_STATUS_OK);
+        assert_int_equal(lmmc_lu_solve(&fixture->a, fixture->piv, &fixture->b, &fixture->x), LMMC_STATUS_OK);
+        assert_true(lmmc_test_nearly_equal(fixture->x.data[0], 1.0, 1e-13));
+        assert_true(lmmc_test_nearly_equal(fixture->x.data[1], -2.0, 1e-13));
+        for (size_t i = 0; i < 2; ++i) {
+            double ax = scale * values[2 * i] * fixture->x.data[0] +
+                        scale * values[2 * i + 1] * fixture->x.data[1];
+            double bound = fabs(scale * values[2 * i] * fixture->x.data[0]) +
+                           fabs(scale * values[2 * i + 1] * fixture->x.data[1]) +
+                           fabs(fixture->b.data[i]);
+            assert_true(fabs(ax - fixture->b.data[i]) <= 1e-13 * bound);
+        }
+    }
+}
+
+static void test_lu_factorization_nonfinite(void **state) {
+    struct test_fixture *fixture = *state;
+    const double bad[] = {NAN, INFINITY, -INFINITY};
+    assert_int_equal(lmmc_mat_create(2, 2, &fixture->a), LMMC_STATUS_OK);
+    for (size_t k = 0; k < sizeof(bad) / sizeof(bad[0]); ++k) {
+        for (size_t i = 0; i < 4; ++i) {
+            fixture->a.data[0] = 2.0;
+            fixture->a.data[1] = 1.0;
+            fixture->a.data[2] = 1.0;
+            fixture->a.data[3] = 2.0;
+            fixture->a.data[i] = bad[k];
+            assert_int_equal(lmmc_lu_decompose_inplace(&fixture->a, fixture->piv, NULL),
+                             LMMC_STATUS_NUMERICAL_FAILURE);
+        }
+    }
+    fixture->a.data[0] = DBL_MAX;
+    fixture->a.data[1] = DBL_MAX;
+    fixture->a.data[2] = -DBL_MAX;
+    fixture->a.data[3] = DBL_MAX;
+    assert_int_equal(lmmc_lu_decompose_inplace(&fixture->a, fixture->piv, NULL),
+                     LMMC_STATUS_NUMERICAL_FAILURE);
+}
+
+static void test_lu_solve_nonfinite(void **state) {
+    struct test_fixture *fixture = *state;
+    const double bad[] = {NAN, INFINITY, -INFINITY};
+    assert_int_equal(lmmc_mat_create(2, 2, &fixture->a), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(2, &fixture->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(2, &fixture->x), LMMC_STATUS_OK);
+    fixture->piv[0] = 0;
+    fixture->piv[1] = 1;
+    for (size_t k = 0; k < sizeof(bad) / sizeof(bad[0]); ++k) {
+        for (size_t i = 0; i < 6; ++i) {
+            fixture->a.data[0] = 1.0;
+            fixture->a.data[1] = 0.0;
+            fixture->a.data[2] = 0.0;
+            fixture->a.data[3] = 1.0;
+            fixture->b.data[0] = 1.0;
+            fixture->b.data[1] = 1.0;
+            if (i < 4)
+                fixture->a.data[i] = bad[k];
+            else
+                fixture->b.data[i - 4] = bad[k];
+            assert_int_equal(lmmc_lu_solve(&fixture->a, fixture->piv, &fixture->b, &fixture->x),
+                             LMMC_STATUS_NUMERICAL_FAILURE);
+        }
+    }
+}
+
+static void test_lu_solve_overflow(void **state) {
+    struct test_fixture *fixture = *state;
+    const double factors[][4] = {
+        {1.0, 0.0, DBL_MAX, 1.0},
+        {1.0, 0.0, -DBL_MAX, 1.0},
+        {1.0, DBL_MAX, 0.0, 1.0},
+        {1.0, -DBL_MAX, 0.0, 1.0},
+        {0.5, 0.0, 0.0, 1.0}
+    };
+    const double rhs[][2] = {{2.0, 0.0}, {1.0, DBL_MAX}, {0.0, 2.0},
+                             {DBL_MAX, 1.0}, {DBL_MAX, 0.0}};
+    assert_int_equal(lmmc_mat_create(2, 2, &fixture->a), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(2, &fixture->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(2, &fixture->x), LMMC_STATUS_OK);
+    fixture->piv[0] = 0;
+    fixture->piv[1] = 1;
+    for (size_t k = 0; k < sizeof(factors) / sizeof(factors[0]); ++k) {
+        for (size_t i = 0; i < 4; ++i)
+            fixture->a.data[i] = factors[k][i];
+        for (size_t i = 0; i < 2; ++i)
+            fixture->b.data[i] = rhs[k][i];
+        assert_int_equal(lmmc_lu_solve(&fixture->a, fixture->piv, &fixture->b, &fixture->x),
+                         LMMC_STATUS_NUMERICAL_FAILURE);
+    }
+    fixture->a.data[0] = 0.0;
+    assert_int_equal(lmmc_lu_solve(&fixture->a, fixture->piv, &fixture->b, &fixture->x),
+                     LMMC_STATUS_SINGULAR_MATRIX);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_lu_solution, setup_solution, teardown),
         cmocka_unit_test_setup_teardown(test_lu_factorization_errors, setup_empty, teardown),
         cmocka_unit_test_setup_teardown(test_lu_rhs_shape, setup_rhs_shape, teardown),
+        cmocka_unit_test_setup_teardown(test_lu_small_scalar, setup_empty, teardown),
+        cmocka_unit_test_setup_teardown(test_lu_scaled_system, setup_empty, teardown),
+        cmocka_unit_test_setup_teardown(test_lu_factorization_nonfinite, setup_empty, teardown),
+        cmocka_unit_test_setup_teardown(test_lu_solve_nonfinite, setup_empty, teardown),
+        cmocka_unit_test_setup_teardown(test_lu_solve_overflow, setup_empty, teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

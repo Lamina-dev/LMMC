@@ -3,6 +3,7 @@
  * MINRES / LSQR 迭代求解器单元测试.
  */
 #include <math.h>
+#include <float.h>
 #include <stdlib.h>
 #include <string.h>
 #include "lmmc/lmmc.h"
@@ -12,6 +13,8 @@ typedef struct {
     lmmc_sparse_builder_t *builder;
     lmmc_sparse_mat_t A;
     lmmc_vec_t b, x, x_true, x_mfree, Ax, r, ATr;
+    lmmc_sparse_mat_t M;
+    lmmc_precond_t precond;
 } solver_fixture_t;
 
 static int setup(void **state) {
@@ -23,6 +26,8 @@ static int setup(void **state) {
 
 static int teardown(void **state) {
     solver_fixture_t *f = *state;
+    lmmc_precond_destroy(&f->precond);
+    lmmc_sparse_destroy(&f->M);
     lmmc_vec_destroy(&f->ATr);
     lmmc_vec_destroy(&f->r);
     lmmc_vec_destroy(&f->Ax);
@@ -341,6 +346,441 @@ static void test_error_both_a_and_apply_op(void **state) {
     assert_int_equal(transpose_op.transpose_calls, 0);
 }
 
+typedef struct {
+    size_t rows, cols;
+    double values[4];
+    size_t calls, fail_at;
+    lmmc_status_t failure;
+    double logged_norm;
+    size_t logged_iter;
+} small_operator_t;
+
+static lmmc_status_t small_forward(const lmmc_vec_t *x, lmmc_vec_t *y,
+                                   void *user_data) {
+    small_operator_t *op = user_data;
+    if (++op->calls == op->fail_at) {
+        return op->failure;
+    }
+    for (size_t i = 0; i < op->rows; ++i) {
+        y->data[i] = 0.0;
+        for (size_t j = 0; j < op->cols; ++j) {
+            y->data[i] += op->values[i * op->cols + j] * x->data[j];
+        }
+    }
+    return LMMC_STATUS_OK;
+}
+
+static lmmc_status_t small_transpose(const lmmc_vec_t *x, lmmc_vec_t *y,
+                                     void *user_data) {
+    small_operator_t *op = user_data;
+    if (++op->calls == op->fail_at) {
+        return op->failure;
+    }
+    for (size_t j = 0; j < op->cols; ++j) {
+        y->data[j] = 0.0;
+        for (size_t i = 0; i < op->rows; ++i) {
+            y->data[j] += op->values[i * op->cols + j] * x->data[i];
+        }
+    }
+    return LMMC_STATUS_OK;
+}
+
+static void residual_log(const lmmc_diagnostic_t *event, void *user_data) {
+    small_operator_t *op = user_data;
+    op->logged_norm = event->value_count == 1 ? event->values[0] : NAN;
+    op->logged_iter = event->iteration;
+}
+
+static void build_small(solver_fixture_t *f, const small_operator_t *op,
+                        lmmc_sparse_format_t format, lmmc_sparse_mat_t *out) {
+    assert_int_equal(lmmc_sparse_builder_create(op->rows, op->cols, 4, &f->builder), LMMC_STATUS_OK);
+    for (size_t i = 0; i < op->rows; ++i) {
+        for (size_t j = 0; j < op->cols; ++j) {
+            double value = op->values[i * op->cols + j];
+            if (value != 0.0) {
+                assert_int_equal(lmmc_sparse_builder_add(f->builder, i, j, value), LMMC_STATUS_OK);
+            }
+        }
+    }
+    assert_int_equal(lmmc_sparse_builder_build(f->builder, format, out), LMMC_STATUS_OK);
+    lmmc_sparse_builder_destroy(f->builder);
+    f->builder = NULL;
+}
+
+static void small_vectors(solver_fixture_t *f, size_t rows, size_t cols) {
+    assert_int_equal(lmmc_vec_create(rows, &f->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(cols, &f->x), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_fill(&f->x, 0.0), LMMC_STATUS_OK);
+}
+
+static void test_lsqr_last_update(void **state) {
+    solver_fixture_t *f = *state;
+    small_operator_t op = {.rows = 1, .cols = 1, .values = {1.0}};
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    small_vectors(f, 1, 1);
+    f->b.data[0] = 1.0;
+    assert_int_equal(lmmc_itersolve_default_config(1, &cfg), LMMC_STATUS_OK);
+    cfg.max_iter = 1;
+    cfg.diagnostics.callback = residual_log;
+    cfg.diagnostics.user_data = &op;
+    for (int mode = 0; mode < 3; ++mode) {
+        const lmmc_sparse_mat_t *a = NULL;
+        if (mode < 2) {
+            build_small(f, &op, mode == 0 ? LMMC_SPARSE_CSR : LMMC_SPARSE_CSC, &f->A);
+            a = &f->A;
+        } else {
+            cfg.apply_op = small_forward;
+            cfg.apply_transpose_op = small_transpose;
+            cfg.op_user_data = &op;
+        }
+        f->x.data[0] = 0.0;
+        assert_int_equal(lmmc_lsqr_solve(a, &f->b, &cfg, &f->x, &result), LMMC_STATUS_OK);
+        assert_true(result.converged);
+        assert_int_equal(result.num_iter, 1);
+        assert_double_equal(f->x.data[0], 1.0, 1e-14);
+        assert_double_equal(result.initial_residual_norm, 1.0, 1e-14);
+        assert_true(result.final_residual_norm <= 1e-14);
+        assert_double_equal(op.logged_norm, result.final_residual_norm, 1e-14);
+        assert_int_equal(op.logged_iter, 1);
+        lmmc_sparse_destroy(&f->A);
+    }
+}
+
+static void test_lsqr_inconsistent_stationary(void **state) {
+    solver_fixture_t *f = *state;
+    small_operator_t op = {.rows = 2, .cols = 1, .values = {1.0, 1.0}};
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    small_vectors(f, 2, 1);
+    f->b.data[0] = 1.0;
+    f->b.data[1] = 0.0;
+    assert_int_equal(lmmc_itersolve_default_config(1, &cfg), LMMC_STATUS_OK);
+    cfg.max_iter = 1;
+    for (int mode = 0; mode < 3; ++mode) {
+        const lmmc_sparse_mat_t *a = NULL;
+        if (mode < 2) {
+            build_small(f, &op, mode == 0 ? LMMC_SPARSE_CSR : LMMC_SPARSE_CSC, &f->A);
+            a = &f->A;
+        } else {
+            cfg.apply_op = small_forward;
+            cfg.apply_transpose_op = small_transpose;
+            cfg.op_user_data = &op;
+        }
+        f->x.data[0] = 0.0;
+        assert_int_equal(lmmc_lsqr_solve(a, &f->b, &cfg, &f->x, &result), LMMC_STATUS_OK);
+        assert_true(result.converged);
+        assert_int_equal(result.num_iter, 1);
+        assert_double_equal(f->x.data[0], 0.5, 1e-14);
+        assert_double_equal(result.final_residual_norm, sqrt(0.5), 1e-14);
+        lmmc_sparse_destroy(&f->A);
+    }
+}
+
+static void test_lsqr_initial_stationary(void **state) {
+    solver_fixture_t *f = *state;
+    small_operator_t op = {.rows = 2, .cols = 1, .values = {1.0, 0.0}};
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    small_vectors(f, 2, 1);
+    f->b.data[0] = 0.0;
+    f->b.data[1] = 1.0;
+    build_small(f, &op, LMMC_SPARSE_CSR, &f->A);
+    assert_int_equal(lmmc_itersolve_default_config(1, &cfg), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_lsqr_solve(&f->A, &f->b, &cfg, &f->x, &result), LMMC_STATUS_OK);
+    assert_true(result.converged);
+    assert_int_equal(result.num_iter, 0);
+    assert_double_equal(f->x.data[0], 0.0, 0.0);
+    assert_double_equal(result.final_residual_norm, 1.0, 1e-14);
+}
+
+static void test_lsqr_small_alpha(void **state) {
+    solver_fixture_t *f = *state;
+    small_operator_t op = {.rows = 1, .cols = 1, .values = {1e-32}};
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    small_vectors(f, 1, 1);
+    f->b.data[0] = 1.0;
+    build_small(f, &op, LMMC_SPARSE_CSR, &f->A);
+    assert_int_equal(lmmc_itersolve_default_config(1, &cfg), LMMC_STATUS_OK);
+    cfg.abs_tol = 0.0;
+    assert_int_equal(lmmc_lsqr_solve(&f->A, &f->b, &cfg, &f->x, &result), LMMC_STATUS_OK);
+    assert_true(result.converged);
+    assert_int_equal(result.num_iter, 1);
+    assert_double_equal(f->x.data[0] * 1e-32, 1.0, 1e-14);
+    assert_true(result.final_residual_norm <= cfg.rel_tol);
+}
+
+static void test_lsqr_scaled_stationarity(void **state) {
+    solver_fixture_t *f = *state;
+    small_operator_t op = {.rows = 2, .cols = 2, .values = {1e-200, 0.0, 0.0, 2e-200}};
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    small_vectors(f, 2, 2);
+    f->b.data[0] = f->b.data[1] = 1e-200;
+    assert_int_equal(lmmc_itersolve_default_config(2, &cfg), LMMC_STATUS_OK);
+    cfg.abs_tol = 0.0;
+    cfg.rel_tol = 1e-12;
+    for (int mode = 0; mode < 3; ++mode) {
+        const lmmc_sparse_mat_t *a = NULL;
+        if (mode < 2) {
+            build_small(f, &op, mode == 0 ? LMMC_SPARSE_CSR : LMMC_SPARSE_CSC, &f->A);
+            a = &f->A;
+        } else {
+            cfg.apply_op = small_forward;
+            cfg.apply_transpose_op = small_transpose;
+            cfg.op_user_data = &op;
+        }
+        assert_int_equal(lmmc_vec_fill(&f->x, 0.0), LMMC_STATUS_OK);
+        cfg.max_iter = 1;
+        assert_int_equal(lmmc_lsqr_solve(a, &f->b, &cfg, &f->x, &result), LMMC_STATUS_OK);
+        assert_false(result.converged);
+        assert_int_equal(result.num_iter, 1);
+        assert_double_equal(f->x.data[0], 5.0 / 17.0, 1e-14);
+        assert_double_equal(f->x.data[1], 10.0 / 17.0, 1e-14);
+        assert_double_equal(result.final_residual_norm / 1e-200, 3.0 / sqrt(17.0), 1e-14);
+        assert_int_equal(lmmc_vec_fill(&f->x, 0.0), LMMC_STATUS_OK);
+        cfg.max_iter = 10;
+        assert_int_equal(lmmc_lsqr_solve(a, &f->b, &cfg, &f->x, &result), LMMC_STATUS_OK);
+        assert_true(result.converged);
+        assert_true(result.num_iter >= 2);
+        assert_double_equal(f->x.data[0], 1.0, 1e-12);
+        assert_double_equal(f->x.data[1], 0.5, 1e-12);
+        lmmc_sparse_destroy(&f->A);
+    }
+}
+
+static void test_minres_scalar_preconditioned(void **state) {
+    solver_fixture_t *f = *state;
+    small_operator_t op = {.rows = 1, .cols = 1};
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    const double values[] = {2.0, 1e32};
+    small_vectors(f, 1, 1);
+    f->b.data[0] = 1.0;
+    assert_int_equal(lmmc_itersolve_default_config(1, &cfg), LMMC_STATUS_OK);
+    cfg.max_iter = 1;
+    for (size_t i = 0; i < 2; ++i) {
+        op.values[0] = values[i];
+        build_small(f, &op, LMMC_SPARSE_CSR, &f->A);
+        assert_int_equal(lmmc_precond_create_jacobi(&f->A, &f->precond), LMMC_STATUS_OK);
+        f->x.data[0] = 0.0;
+        assert_int_equal(lmmc_minres_solve(&f->A, &f->b, &f->precond, &cfg, &f->x, &result), LMMC_STATUS_OK);
+        assert_true(result.converged);
+        assert_int_equal(result.num_iter, 1);
+        assert_double_equal(result.initial_residual_norm, 1.0, 1e-14);
+        assert_double_equal(f->x.data[0] * values[i], 1.0, 1e-14);
+        assert_true(result.final_residual_norm <= 1e-14);
+        lmmc_precond_destroy(&f->precond);
+        lmmc_sparse_destroy(&f->A);
+    }
+}
+
+static void test_minres_spd_scales(void **state) {
+    solver_fixture_t *f = *state;
+    small_operator_t op = {.rows = 2, .cols = 2, .values = {0.0, 1.0, 1.0, 0.0}};
+    small_operator_t diagonal = {.rows = 2, .cols = 2};
+    const double scales[] = {1.0, 1e20, 1e-10};
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    small_vectors(f, 2, 2);
+    f->b.data[0] = 1.0;
+    f->b.data[1] = 2.0;
+    build_small(f, &op, LMMC_SPARSE_CSR, &f->A);
+    assert_int_equal(lmmc_itersolve_default_config(2, &cfg), LMMC_STATUS_OK);
+    cfg.abs_tol = 0.0;
+    cfg.rel_tol = 1e-12;
+    cfg.diagnostics.callback = residual_log;
+    cfg.diagnostics.user_data = &op;
+    for (size_t i = 0; i < 4; ++i) {
+        if (i != 0) {
+            diagonal.values[0] = diagonal.values[3] = scales[i - 1];
+            build_small(f, &diagonal, LMMC_SPARSE_CSR, &f->M);
+            assert_int_equal(lmmc_precond_create_jacobi(&f->M, &f->precond), LMMC_STATUS_OK);
+        }
+        assert_int_equal(lmmc_vec_fill(&f->x, 0.0), LMMC_STATUS_OK);
+        assert_int_equal(lmmc_minres_solve(&f->A, &f->b, i == 0 ? NULL : &f->precond, &cfg, &f->x, &result), LMMC_STATUS_OK);
+        assert_true(result.converged);
+        assert_double_equal(f->x.data[0], 2.0, 1e-11);
+        assert_double_equal(f->x.data[1], 1.0, 1e-11);
+        double norm = hypot(1.0 - f->x.data[1], 2.0 - f->x.data[0]);
+        assert_true(norm <= cfg.rel_tol * sqrt(5.0));
+        assert_double_equal(result.initial_residual_norm, sqrt(5.0), 1e-14);
+        assert_double_equal(result.final_residual_norm, norm, 1e-14);
+        assert_double_equal(op.logged_norm, norm, 1e-14);
+        assert_int_equal(op.logged_iter, result.num_iter);
+        lmmc_precond_destroy(&f->precond);
+        lmmc_sparse_destroy(&f->M);
+    }
+    cfg.max_iter = 1;
+    assert_int_equal(lmmc_vec_fill(&f->x, 0.0), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_minres_solve(&f->A, &f->b, NULL, &cfg, &f->x, &result), LMMC_STATUS_OK);
+    assert_false(result.converged);
+    assert_int_equal(result.num_iter, 1);
+    assert_double_equal(result.final_residual_norm, hypot(1.0 - f->x.data[1], 2.0 - f->x.data[0]), 1e-14);
+}
+
+static void test_minres_zero_operator(void **state) {
+    solver_fixture_t *f = *state;
+    small_operator_t op = {.rows = 1, .cols = 1};
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    small_vectors(f, 1, 1);
+    f->b.data[0] = 1.0;
+    build_small(f, &op, LMMC_SPARSE_CSR, &f->A);
+    assert_int_equal(lmmc_itersolve_default_config(1, &cfg), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_minres_solve(&f->A, &f->b, NULL, &cfg, &f->x, &result), LMMC_STATUS_OK);
+    assert_false(result.converged);
+    assert_int_equal(result.num_iter, 0);
+    assert_double_equal(result.final_residual_norm, 1.0, 1e-14);
+    assert_double_equal(f->x.data[0], 0.0, 0.0);
+}
+
+static void test_minres_precond_rejections(void **state) {
+    solver_fixture_t *f = *state;
+    small_operator_t op = {.rows = 1, .cols = 1, .values = {-2.0}};
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    small_vectors(f, 1, 1);
+    f->b.data[0] = 1.0;
+    f->x.data[0] = 3.0;
+    build_small(f, &op, LMMC_SPARSE_CSR, &f->A);
+    assert_int_equal(lmmc_itersolve_default_config(1, &cfg), LMMC_STATUS_OK);
+    cfg.apply_op = small_forward;
+    cfg.op_user_data = &op;
+    assert_int_equal(lmmc_precond_create_jacobi(&f->A, &f->precond), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_minres_solve(NULL, &f->b, &f->precond, &cfg, &f->x, &result), LMMC_STATUS_NOT_POSITIVE_DEFINITE);
+    assert_int_equal(op.calls, 0);
+    assert_double_equal(f->x.data[0], 3.0, 0.0);
+    lmmc_precond_destroy(&f->precond);
+    assert_int_equal(lmmc_precond_create_ilu0(&f->A, &f->precond), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_minres_solve(NULL, &f->b, &f->precond, &cfg, &f->x, &result), LMMC_STATUS_INVALID_ARGUMENT);
+    assert_int_equal(op.calls, 0);
+    lmmc_precond_destroy(&f->precond);
+    assert_int_equal(lmmc_precond_create_ilut(&f->A, 0.0, 1, &f->precond), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_minres_solve(NULL, &f->b, &f->precond, &cfg, &f->x, &result), LMMC_STATUS_INVALID_ARGUMENT);
+    assert_int_equal(op.calls, 0);
+    assert_double_equal(f->x.data[0], 3.0, 0.0);
+}
+
+static void test_iterative_invalid_config(void **state) {
+    solver_fixture_t *f = *state;
+    small_operator_t op = {.rows = 1, .cols = 1, .values = {2.0}};
+    const double invalid[] = {-1.0, NAN, INFINITY};
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    small_vectors(f, 1, 1);
+    f->b.data[0] = 2.0;
+    f->x.data[0] = 3.0;
+    build_small(f, &op, LMMC_SPARSE_CSR, &f->A);
+    for (int mode = 0; mode < 2; ++mode) {
+        for (size_t i = 0; i < 8; ++i) {
+            assert_int_equal(lmmc_itersolve_default_config(1, &cfg), LMMC_STATUS_OK);
+            if (i < 3) cfg.abs_tol = invalid[i];
+            else if (i < 6) cfg.rel_tol = invalid[i - 3];
+            else if (i == 6) cfg.max_iter = 0;
+            else cfg.abs_tol = cfg.rel_tol = DBL_MAX;
+            const lmmc_sparse_mat_t *a = &f->A;
+            if (mode != 0) {
+                a = NULL;
+                cfg.apply_op = small_forward;
+                cfg.apply_transpose_op = small_transpose;
+                cfg.op_user_data = &op;
+            }
+            lmmc_status_t expected = i == 7 ? LMMC_STATUS_NUMERICAL_FAILURE : LMMC_STATUS_INVALID_ARGUMENT;
+            assert_int_equal(lmmc_minres_solve(a, &f->b, NULL, &cfg, &f->x, &result), expected);
+            assert_int_equal(lmmc_lsqr_solve(a, &f->b, &cfg, &f->x, &result), expected);
+            assert_int_equal(op.calls, 0);
+            assert_double_equal(f->x.data[0], 3.0, 0.0);
+        }
+    }
+}
+
+static void test_iterative_callback_errors(void **state) {
+    solver_fixture_t *f = *state;
+    small_operator_t op = {.rows = 1, .cols = 1, .values = {2.0},
+        .failure = LMMC_STATUS_NOT_IMPLEMENTED};
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    small_vectors(f, 1, 1);
+    f->b.data[0] = 1.0;
+    assert_int_equal(lmmc_itersolve_default_config(1, &cfg), LMMC_STATUS_OK);
+    cfg.apply_op = small_forward;
+    cfg.apply_transpose_op = small_transpose;
+    cfg.op_user_data = &op;
+    for (int solver = 0; solver < 2; ++solver) {
+        for (size_t fail = 1; fail <= (solver == 0 ? 3 : 4); ++fail) {
+            op.calls = 0;
+            op.fail_at = fail;
+            f->x.data[0] = 0.0;
+            lmmc_status_t st = solver == 0 ?
+                lmmc_minres_solve(NULL, &f->b, NULL, &cfg, &f->x, &result) :
+                lmmc_lsqr_solve(NULL, &f->b, &cfg, &f->x, &result);
+            assert_int_equal(st, LMMC_STATUS_NOT_IMPLEMENTED);
+            assert_int_equal(op.calls, fail);
+            assert_false(result.converged);
+            if (fail > 1) {
+                assert_double_equal(result.initial_residual_norm, 1.0, 1e-14);
+                assert_double_equal(result.final_residual_norm, 1.0, 1e-14);
+            }
+        }
+    }
+    lmmc_vec_destroy(&f->b);
+    lmmc_vec_destroy(&f->x);
+    small_vectors(f, 2, 1);
+    op.rows = 2;
+    op.values[0] = op.values[1] = 1.0;
+    f->b.data[0] = 1.0;
+    f->b.data[1] = 0.0;
+    for (size_t fail = 1; fail <= 6; ++fail) {
+        op.calls = 0;
+        op.fail_at = fail;
+        f->x.data[0] = 0.0;
+        assert_int_equal(lmmc_lsqr_solve(NULL, &f->b, &cfg, &f->x, &result), LMMC_STATUS_NOT_IMPLEMENTED);
+        assert_int_equal(op.calls, fail);
+        assert_false(result.converged);
+        if (fail > 1) {
+            assert_double_equal(result.initial_residual_norm, 1.0, 1e-14);
+            assert_double_equal(result.final_residual_norm, fail == 6 ? sqrt(0.5) : 1.0, 1e-14);
+        }
+    }
+}
+
+static void test_iterative_numerical_failure(void **state) {
+    solver_fixture_t *f = *state;
+    small_operator_t op = {.rows = 1, .cols = 1};
+    lmmc_itersolve_config_t cfg = {0};
+    lmmc_itersolve_result_t result = {0};
+    const double invalid[] = {NAN, INFINITY, -INFINITY};
+    small_vectors(f, 1, 1);
+    f->b.data[0] = 1.0;
+    assert_int_equal(lmmc_itersolve_default_config(1, &cfg), LMMC_STATUS_OK);
+    cfg.apply_op = small_forward;
+    cfg.apply_transpose_op = small_transpose;
+    cfg.op_user_data = &op;
+    cfg.abs_tol = 0.0;
+    for (size_t i = 0; i < 3; ++i) {
+        op.values[0] = invalid[i];
+        assert_int_equal(lmmc_minres_solve(NULL, &f->b, NULL, &cfg, &f->x, &result), LMMC_STATUS_NUMERICAL_FAILURE);
+        assert_int_equal(lmmc_lsqr_solve(NULL, &f->b, &cfg, &f->x, &result), LMMC_STATUS_NUMERICAL_FAILURE);
+        assert_double_equal(f->x.data[0], 0.0, 0.0);
+    }
+    op.values[0] = -1.0;
+    f->b.data[0] = f->x.data[0] = DBL_MAX;
+    cfg.rel_tol = 0.0;
+    assert_int_equal(lmmc_minres_solve(NULL, &f->b, NULL, &cfg, &f->x, &result), LMMC_STATUS_NUMERICAL_FAILURE);
+    assert_int_equal(lmmc_lsqr_solve(NULL, &f->b, &cfg, &f->x, &result), LMMC_STATUS_NUMERICAL_FAILURE);
+    assert_double_equal(f->x.data[0], DBL_MAX, 0.0);
+    op.values[0] = 1.0;
+    f->b.data[0] = 1e-200;
+    f->x.data[0] = 0.0;
+    assert_int_equal(lmmc_minres_solve(NULL, &f->b, NULL, &cfg, &f->x, &result), LMMC_STATUS_NUMERICAL_FAILURE);
+    assert_false(result.converged);
+    assert_int_equal(result.num_iter, 0);
+    assert_double_equal(result.initial_residual_norm / 1e-200, 1.0, 1e-14);
+    assert_double_equal(result.final_residual_norm / 1e-200, 1.0, 1e-14);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test_setup_teardown(test_minres_positive_definite, setup, teardown),
@@ -350,6 +790,18 @@ int main(void) {
         cmocka_unit_test_setup_teardown(test_lsqr_matrix_free_requires_transpose_before_execution, setup, teardown),
         cmocka_unit_test_setup_teardown(test_matrix_free_agrees_with_sparse, setup, teardown),
         cmocka_unit_test_setup_teardown(test_error_both_a_and_apply_op, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_lsqr_last_update, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_lsqr_inconsistent_stationary, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_lsqr_initial_stationary, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_lsqr_small_alpha, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_lsqr_scaled_stationarity, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_minres_scalar_preconditioned, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_minres_spd_scales, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_minres_zero_operator, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_minres_precond_rejections, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_iterative_invalid_config, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_iterative_callback_errors, setup, teardown),
+        cmocka_unit_test_setup_teardown(test_iterative_numerical_failure, setup, teardown),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

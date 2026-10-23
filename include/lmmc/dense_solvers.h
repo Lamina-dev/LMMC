@@ -41,12 +41,17 @@ lmmc_status_t lmmc_mat_inv(const lmmc_mat_t* A, lmmc_mat_t* A_inv);
 /**
  * @brief 求解三角系统 @f$T x = b@f$。
  *
+ * 仅使用指定的三角部分；单位对角模式不读取存储的对角元，
+ * 非活动半边也不读取。有限非零对角元正常相除，不使用绝对奇异阈值。
+ *
  * @param[in]  T         上三角或下三角矩阵。
  * @param[in]  upper     非零表示上三角，零表示下三角。
  * @param[in]  diag_unit 非零时将对角线视为 1。
  * @param[in]  b         右端向量。
  * @param[out] x         解向量，须已创建且与 @p b 同长。
- * @return ::LMMC_STATUS_OK 表示成功；对角线为零返回 ::LMMC_STATUS_SINGULAR_MATRIX。
+ * @return ::LMMC_STATUS_OK 表示成功；非单位对角元为精确零时返回
+ * ::LMMC_STATUS_SINGULAR_MATRIX；实际使用的矩阵元素、右端或运算结果
+ * 非有限时返回 ::LMMC_STATUS_NUMERICAL_FAILURE。
  */
 lmmc_status_t lmmc_solve_triangular(const lmmc_mat_t* T, int upper, int diag_unit,
     const lmmc_vec_t* b, lmmc_vec_t* x);

@@ -252,25 +252,34 @@ static lmmc_status_t lmmc_triangular_row(const lmmc_mat_t* T,
     lmmc_real_t sum;
     lmmc_real_t tmp;
     lmmc_real_t diag_val;
-    lmmc_real_t abs_diag;
-    lmmc_real_t eps = 1e-15;
     size_t begin = upper ? i + 1 : 0;
     size_t end = upper ? T->rows : i;
     LMMC_REAL_SET(&sum, &b->data[i]);
+    if (!LMMC_REAL_IS_FINITE(&sum)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
     for (size_t j = begin; j < end; ++j) {
         LMMC_REAL_MUL(&tmp, &T->data[i * T->stride + j], &x->data[j]);
         LMMC_REAL_SUB(&sum, &sum, &tmp);
+        if (!LMMC_REAL_IS_FINITE(&tmp) || !LMMC_REAL_IS_FINITE(&sum)) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
     }
     if (diag_unit) {
         LMMC_REAL_SET(&x->data[i], &sum);
         return LMMC_STATUS_OK;
     }
     LMMC_REAL_SET(&diag_val, &T->data[i * T->stride + i]);
-    LMMC_REAL_ABS(&abs_diag, &diag_val);
-    if (LMMC_REAL_CMP(&abs_diag, &eps) <= 0) {
+    if (!LMMC_REAL_IS_FINITE(&diag_val)) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
+    if (diag_val == 0.0) {
         return LMMC_STATUS_SINGULAR_MATRIX;
     }
     LMMC_REAL_DIV(&x->data[i], &sum, &diag_val);
+    if (!LMMC_REAL_IS_FINITE(&x->data[i])) {
+        return LMMC_STATUS_NUMERICAL_FAILURE;
+    }
     return LMMC_STATUS_OK;
 }
 

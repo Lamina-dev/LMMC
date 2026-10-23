@@ -85,6 +85,14 @@ lmmc_status_t lmmc_itersolve_default_config(size_t problem_size, lmmc_itersolve_
     return LMMC_STATUS_OK;
 }
 
+static lmmc_status_t lmmc_itersolve_validate_config(const lmmc_itersolve_config_t* cfg) {
+    if (!isfinite(cfg->abs_tol) || !isfinite(cfg->rel_tol) ||
+        cfg->abs_tol < 0.0 || cfg->rel_tol < 0.0 || cfg->max_iter == 0) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    return LMMC_STATUS_OK;
+}
+
 static lmmc_status_t lmmc_itersolve_square_dimensions(const lmmc_sparse_mat_t* a,
     const lmmc_vec_t* b, const lmmc_vec_t* x) {
     if (lmmc_sparse_validate(a) != LMMC_STATUS_OK || b == NULL || x == NULL ||
@@ -123,9 +131,9 @@ lmmc_status_t lmmc_itersolve_validate(
         }
     }
 
-    if (!isfinite(out_cfg->abs_tol) || !isfinite(out_cfg->rel_tol) ||
-        out_cfg->abs_tol < 0.0 || out_cfg->rel_tol < 0.0 || out_cfg->max_iter == 0) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
+    st = lmmc_itersolve_validate_config(out_cfg);
+    if (st != LMMC_STATUS_OK) {
+        return st;
     }
 
     if (precond != NULL && precond->size != b->size) {
@@ -210,6 +218,29 @@ lmmc_status_t lmmc_itersolve_residual(const lmmc_sparse_mat_t* a,
     return LMMC_STATUS_OK;
 }
 
+lmmc_status_t lmmc_itersolve_true_residual(const lmmc_sparse_mat_t* a,
+    const lmmc_itersolve_config_t* cfg, const lmmc_vec_t* b,
+    const lmmc_vec_t* x, lmmc_vec_t* r, lmmc_real_t* norm) {
+    for (size_t i = 0; i < x->size; ++i) {
+        if (!isfinite(x->data[i])) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+    }
+    lmmc_status_t st = lmmc_itersolve_matvec(a, cfg, x, r);
+    if (st != LMMC_STATUS_OK) {
+        return st;
+    }
+    for (size_t i = 0; i < b->size; ++i) {
+        r->data[i] = b->data[i] - r->data[i];
+    }
+    lmmc_real_t value;
+    st = lmmc_vec_norm2_checked(r, &value);
+    if (st == LMMC_STATUS_OK) {
+        *norm = value;
+    }
+    return st;
+}
+
 lmmc_status_t lmmc_itersolve_threshold(const lmmc_itersolve_config_t* cfg,
     const lmmc_vec_t* b, const lmmc_vec_t* r, lmmc_real_t* norm,
     lmmc_real_t* threshold) {
@@ -248,7 +279,7 @@ lmmc_status_t lmmc_itersolve_dispatch_config(const lmmc_sparse_mat_t* a,
     if ((local->apply_op != NULL) == (a != NULL)) {
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
-    return LMMC_STATUS_OK;
+    return lmmc_itersolve_validate_config(local);
 }
 /** @brief 通过无矩阵算子或稀疏矩阵计算 y = A*x。 */
 lmmc_status_t lmmc_itersolve_matvec(
