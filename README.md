@@ -9,22 +9,31 @@ LMMC supports Windows, Linux, and macOS; its platform scope follows upstream LMM
 
 ```pwsh
 git submodule update --init --recursive
-cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_BUILD_TYPE=Release -DLMMC_BUILD_TESTS=ON -DLMMC_LMMP_ASM=AUTO
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake --preset strict-debug
+cmake --build --preset strict-debug
+ctest --preset strict-debug
 ```
 
+All standalone presets use Ninja and reuse `build`, with build/test parallelism
+of 2. After configuring, rebuild `lmmc` or a selected test target incrementally.
+Switch configurations serially in that directory; presets reset sanitizer and
+assembly options. When embedded in Lamina or LMCAS, use the parent's build tree
+to reuse the existing library objects.
+
 `LMMC_LMMP_ASM` accepts `AUTO`, `GENERIC`, `X64`, or `ARM64`. On supported operating systems, `AUTO` selects the supported GAS/LLVM-compatible `.S` backend for the target architecture and falls back to the generic C implementation when that architecture has no assembly backend.
+In a standalone MC build, this selector refreshes the bundled `LMMP_ASM` cache
+on each configuration. Embedded CAS builds take their selection from
+`LMCAS_LMMP_ASM`.
 On macOS, `AUTO` selects the ARM64 backend on native Apple Silicon. Native
 Intel builds use `GENERIC`; LMMP intentionally rejects the unsupported X64
 assembly selection on Darwin.
 
 ### Development tests
 
-Fresh product configurations leave testing disabled. Enable the C11 suite with
-`LMMC_BUILD_TESTS=ON`, as above, or opt into CTest development defaults with
-`BUILD_TESTING=ON`. Tests use cmocka assertions, per-case setup/teardown, and its
-native group runner; CTest registers the executables under the `lmmc` label.
+Product configurations default to testing disabled; `strict-debug` enables the
+C11 suite with strict warnings. Linux also provides `linux-asan-ubsan` and
+`linux-tsan`. Tests use cmocka assertions, per-case setup/teardown, and its native
+group runner; CTest registers the executables under the `lmmc` label.
 
 CMake first looks for a cmocka package of version 2.0.2 or newer, then fetches
 the locked 2.0.2 tag `cmocka-2.0.2` when needed. For offline development, set
@@ -69,9 +78,10 @@ A standalone build with bundled LMMP installs both libraries and their public
 headers:
 
 ```pwsh
-cmake --install build --prefix "$PWD/dist"
-cmake -S test/package_consumer -B build-consumer -G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/dist"
-cmake --build build-consumer
+cmake --preset package
+cmake --build --preset package
+cmake -S test/package_consumer -B build/package-consumer -G Ninja -DCMAKE_C_COMPILER=gcc -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$PWD/build/package-install"
+cmake --build build/package-consumer --parallel 2
 ```
 
 Consumers link `LMMC::lmmc` after `find_package(LMMC CONFIG REQUIRED)`; C11
@@ -145,3 +155,44 @@ Persistent LMMC objects use recoverable heap ownership and may be transferred
 between initialized threads. Concurrent mutation requires external
 synchronization. LMMP temporary algorithms retain their direct fail-fast
 allocation contract.
+
+### Linear solver contracts
+
+LSQR and MINRES report the true Euclidean residual `||b - Ax||₂` initially,
+after completed solution updates, and in diagnostics. Tolerances must be finite
+and nonnegative, `max_iter` must be positive, and the threshold
+`abs_tol + rel_tol * ||b||₂` must be finite. `num_iter` counts completed updates;
+normal basis exhaustion returns `OK` and leaves `converged` determined by the
+stopping criteria. Operator failures propagate their original status, with the
+latest successfully measured norm preserved in the result.
+
+LSQR additionally accepts scaled least-squares stationarity and can converge
+with a nonzero residual. Its normalized-residual transpose check preserves tiny
+scales. MINRES accepts identity or finite strictly positive Jacobi
+preconditioning and stops on the true residual threshold. Each update includes
+an extra forward application to measure that residual; LSQR stationarity also
+uses a transpose application. The host calls MINRES once and uses these
+library-provided statistics directly.
+
+LU, QR back substitution, and triangular solves use exact-zero active diagonals
+for singularity and report nonfinite used inputs or arithmetic results as
+numerical failure. Unit triangular solves ignore stored diagonal values and
+read only the active half. Numerical rank, SVD, Cholesky, and preconditioner
+construction keep their separate numerical policies.
+
+### Allocating standard-library outputs
+
+The 46 allocating linear-algebra adapters take fieldwise zero-initialized
+output descriptors, for example `lmmc_vec_t output = {0}`. Success commits an
+independent owner. Every failure preserves the original descriptor fields;
+existing owners, borrowed views, dirty-empty descriptors, and output/input
+descriptor aliases return `INVALID_ARGUMENT`. Destroy an owned result before
+reusing its descriptor. Scalar outputs and preallocated raw kernels retain
+their individual contracts, including raw SVD's existing result initialization
+convention.
+
+Eigen tables transfer their four owners, exposing real/imaginary eigenvalues
+as `n×1` matrices. SVD tables transfer U/Vt and construct diagonal S from sigma.
+Each component can be detached and destroyed independently. Lamina's bridge
+adopts contiguous MC owners and clears the source descriptors; language
+eigenvalues retain their `1×n` shape and stable eigenvector-column ordering.

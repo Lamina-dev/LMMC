@@ -324,10 +324,9 @@ elseif(EXISTS "${_lmmc_lmmp_root}/CMakeLists.txt")
     if(NOT DEFINED LMMP_BUILD_BENCHMARKS)
         set(LMMP_BUILD_BENCHMARKS OFF)
     endif()
-    if(NOT DEFINED CACHE{LMMP_ASM})
-        set(LMMP_ASM "${LMMC_LMMP_ASM}" CACHE STRING
-            "Assembly mode: GENERIC | X64 | ARM64 | AUTO")
-    endif()
+    # The MC selector controls its bundled LMMP configuration on every run.
+    set(LMMP_ASM "${LMMC_LMMP_ASM}" CACHE STRING
+        "Assembly mode: GENERIC | X64 | ARM64 | AUTO" FORCE)
     add_subdirectory("${_lmmc_lmmp_root}"
         "${CMAKE_CURRENT_BINARY_DIR}/lmmp" EXCLUDE_FROM_ALL)
     if(NOT TARGET liblmmp)
