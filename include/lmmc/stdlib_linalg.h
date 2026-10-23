@@ -9,6 +9,17 @@
 extern "C" {
 #endif
 
+/**
+ * Allocating vector, matrix, boolean, eig/SVD and table outputs must be
+ * initialized with every descriptor field zero (including all result members).
+ * An owner, borrowed view, partially empty descriptor or input/output alias is
+ * rejected with LMMC_STATUS_INVALID_ARGUMENT without changing the output.
+ * Success returns independent owning buffers; any failure preserves every
+ * original output field. Destroy successful outputs with their matching destroy
+ * function before reusing the descriptor. Scalar outputs and preallocated
+ * low-level kernels retain their own contracts.
+ */
+
 lmmc_status_t lmmc_std_linalg_shape(const lmmc_mat_t* a,
                                     size_t* out_rows,
                                     size_t* out_cols);

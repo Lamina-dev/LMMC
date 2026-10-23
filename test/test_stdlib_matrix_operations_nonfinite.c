@@ -95,10 +95,9 @@ static void test_addition_scaling_nonfinite_inputs(void **state) {
 static void test_scale_nonfinite_before_allocation(void **state) {
     (void)state;
     lmmc_real_t value[] = {NAN};
-    lmmc_real_t sentinel[] = {123, 456};
     lmmc_mat_t mat = {1, 1, 1, value, 0};
-    lmmc_mat_t rejected = {2, 1, 1, sentinel, 0};
-    lmmc_mat_t result = rejected;
+    lmmc_mat_t rejected = {0};
+    lmmc_mat_t result = {0};
     lmmc_status_t invalid_status;
     lmmc_status_t allocation_status;
 
@@ -110,11 +109,10 @@ static void test_scale_nonfinite_before_allocation(void **state) {
 
     assert_true(invalid_status == LMMC_STATUS_NUMERICAL_FAILURE);
     assert_true(allocation_status == LMMC_STATUS_ALLOCATION_FAILED);
-    assert_true(rejected.rows == 2 && rejected.cols == 1 && rejected.stride == 1);
-    assert_true(rejected.data == sentinel && !rejected.owns_data);
-    assert_true(result.rows == 2 && result.cols == 1 && result.stride == 1);
-    assert_true(result.data == sentinel && !result.owns_data);
-    assert_true(sentinel[0] == 123 && sentinel[1] == 456);
+    assert_true(rejected.rows == 0 && rejected.cols == 0 && rejected.stride == 0);
+    assert_true(rejected.data == NULL && !rejected.owns_data);
+    assert_true(result.rows == 0 && result.cols == 0 && result.stride == 0);
+    assert_true(result.data == NULL && !result.owns_data);
     assert_true(value[0] == 1);
     lmmc_mat_destroy(&result);
     lmmc_mat_destroy(&rejected);

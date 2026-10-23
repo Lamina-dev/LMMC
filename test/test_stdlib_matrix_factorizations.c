@@ -5,6 +5,62 @@
 
 #include "test_stdlib_common.h"
 
+static int table_outputs_survive_destroy(void)
+{
+    lmmc_real_t values[] = {3, 1, 1, 2};
+    lmmc_mat_t input = {2, 2, 2, values, 0};
+    lmmc_std_eig_table_t eig = {0};
+    lmmc_std_svd_table_t svd = {0};
+    int valid = 1;
+    lmmc_status_t status = lmmc_std_linalg_eig_table(&input, &eig);
+    valid &= status == LMMC_STATUS_OK;
+    if (status == LMMC_STATUS_OK) {
+        lmmc_mat_t real = eig.values_real;
+        eig.values_real = (lmmc_mat_t){0};
+        lmmc_std_eig_table_destroy(&eig);
+        if (real.rows == 2 && real.cols == 1 && real.stride == 1 &&
+            real.owns_data == 1 && real.data != NULL) {
+            valid &= close_real(real.data[0] + real.data[1], 5.0) &&
+                     close_real(real.data[0] * real.data[1], 5.0);
+        } else {
+            valid = 0;
+        }
+        lmmc_mat_destroy(&real);
+    }
+    lmmc_std_eig_table_destroy(&eig);
+    status = lmmc_std_linalg_svd_table(&input, &svd);
+    valid &= status == LMMC_STATUS_OK;
+    if (status == LMMC_STATUS_OK) {
+        lmmc_mat_t u = svd.U;
+        svd.U = (lmmc_mat_t){0};
+        lmmc_std_svd_table_destroy(&svd);
+        if (u.rows == 2 && u.cols == 2 && u.stride == 2 &&
+            u.owns_data == 1 && u.data != NULL) {
+            for (size_t lhs = 0; lhs < 2; ++lhs) {
+                for (size_t rhs = 0; rhs < 2; ++rhs) {
+                    double dot = 0.0;
+                    for (size_t row = 0; row < 2; ++row) {
+                        dot += u.data[row * u.stride + lhs] *
+                               u.data[row * u.stride + rhs];
+                    }
+                    valid &= close_real(dot, lhs == rhs ? 1.0 : 0.0);
+                }
+            }
+        } else {
+            valid = 0;
+        }
+        lmmc_mat_destroy(&u);
+    }
+    lmmc_std_svd_table_destroy(&svd);
+    return valid;
+}
+
+static void test_table_independent_destruction(void** state)
+{
+    (void)state;
+    assert_true(table_outputs_survive_destroy());
+}
+
 struct test_fixture {
     lmmc_mat_t mat;
     lmmc_mat_t result;
@@ -453,8 +509,6 @@ static void test_decompositions_nonfinite_inputs(void **state) {
     set_mat_values(&fixture->mat, matrix_values);
 
     fixture->mat.data[0] = NAN;
-    fixture->eig_table.values_real.rows = 123;
-    fixture->svd_table.U.rows = 123;
     assert_true(lmmc_std_linalg_eig(&fixture->mat, &fixture->eig_result) == LMMC_STATUS_NUMERICAL_FAILURE);
     assert_true(lmmc_std_linalg_svd(&fixture->mat, &fixture->svd_result) == LMMC_STATUS_NUMERICAL_FAILURE);
     assert_true(lmmc_std_linalg_eig_table(&fixture->mat, &fixture->eig_table) == LMMC_STATUS_NUMERICAL_FAILURE);
@@ -485,6 +539,7 @@ static void test_determinant_inverse_rank_rectangular_errors(void **state) {
 
 int main(void) {
     const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_table_independent_destruction),
         cmocka_unit_test_setup_teardown(test_determinant, setup, teardown),
         cmocka_unit_test_setup_teardown(test_inverse, setup, teardown),
         cmocka_unit_test_setup_teardown(test_rank, setup, teardown),

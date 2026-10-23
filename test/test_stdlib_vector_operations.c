@@ -78,9 +78,9 @@ static void test_addition_scaling(void **state) {
 
 static void test_scaling_failure_outputs(void **state) {
     (void)state;
-    lmmc_real_t values[] = {NAN}, sentinel[] = {123, 456};
+    lmmc_real_t values[] = {NAN};
     lmmc_vec_t vec = {1, values, 0};
-    lmmc_vec_t rejected = {2, sentinel, 0}, result = rejected;
+    lmmc_vec_t rejected = {0}, result = {0};
     lmmc_status_t invalid_status, allocation_status;
 
     lmmc_memory_fail_after_for_test(0);
@@ -91,16 +91,15 @@ static void test_scaling_failure_outputs(void **state) {
 
     assert_int_equal(invalid_status, LMMC_STATUS_NUMERICAL_FAILURE);
     assert_int_equal(allocation_status, LMMC_STATUS_ALLOCATION_FAILED);
-    assert_true(rejected.size == 2);
-    assert_true(rejected.data == sentinel && !rejected.owns_data);
-    assert_true(result.size == 2);
-    assert_true(result.data == sentinel && !result.owns_data);
+    assert_true(rejected.size == 0);
+    assert_true(rejected.data == NULL && !rejected.owns_data);
+    assert_true(result.size == 0);
+    assert_true(result.data == NULL && !result.owns_data);
 
     assert_int_equal(lmmc_std_linalg_vec_scale(&vec, 2, &result), LMMC_STATUS_NUMERICAL_FAILURE);
     assert_true(result.size == 0);
     assert_true(result.data == NULL && !result.owns_data);
     assert_true(values[0] == DBL_MAX);
-    assert_true(sentinel[0] == 123 && sentinel[1] == 456);
     lmmc_vec_destroy(&result);
 }
 
