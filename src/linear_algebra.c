@@ -40,7 +40,6 @@ lmmc_status_t lmmc_lu_decompose_inplace(lmmc_mat_t* a, size_t* pivots, size_t* o
     size_t n = 0;
     size_t k = 0;
     size_t swap_count = 0;
-    lmmc_real_t eps;
 
     if (a == NULL || pivots == NULL || a->data == NULL) {
         return LMMC_STATUS_INVALID_ARGUMENT;
@@ -49,20 +48,26 @@ lmmc_status_t lmmc_lu_decompose_inplace(lmmc_mat_t* a, size_t* pivots, size_t* o
         return LMMC_STATUS_DIMENSION_MISMATCH;
     }
 
-    LMMC_REAL_INIT(&eps);
-    LMMC_REAL_SET_D(&eps, 1e-15);
-
     n = a->rows;
     for (k = 0; k < n; ++k) {
         size_t i = 0;
         size_t p = k;
         lmmc_real_t maxv;
         LMMC_REAL_INIT(&maxv);
+        if (!LMMC_REAL_IS_FINITE(&a->data[k * a->stride + k])) {
+            LMMC_REAL_CLEAR(&maxv);
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
         lmmc_abs_to(&maxv, &a->data[k * a->stride + k]);
 
         for (i = k + 1; i < n; ++i) {
             lmmc_real_t v;
             LMMC_REAL_INIT(&v);
+            if (!LMMC_REAL_IS_FINITE(&a->data[i * a->stride + k])) {
+                LMMC_REAL_CLEAR(&v);
+                LMMC_REAL_CLEAR(&maxv);
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
             lmmc_abs_to(&v, &a->data[i * a->stride + k]);
             if (LMMC_REAL_CMP(&v, &maxv) > 0) {
                 LMMC_REAL_SET(&maxv, &v);
@@ -71,9 +76,8 @@ lmmc_status_t lmmc_lu_decompose_inplace(lmmc_mat_t* a, size_t* pivots, size_t* o
             LMMC_REAL_CLEAR(&v);
         }
 
-        if (LMMC_REAL_CMP(&maxv, &eps) <= 0) {
+        if (maxv == 0.0) {
             LMMC_REAL_CLEAR(&maxv);
-            LMMC_REAL_CLEAR(&eps);
             return LMMC_STATUS_SINGULAR_MATRIX;
         }
         LMMC_REAL_CLEAR(&maxv);
@@ -91,11 +95,21 @@ lmmc_status_t lmmc_lu_decompose_inplace(lmmc_mat_t* a, size_t* pivots, size_t* o
             for (i = k + 1; i < n; ++i) {
                 size_t j = 0;
                 LMMC_REAL_DIV(&a->data[i * a->stride + k], &a->data[i * a->stride + k], &akk);
+                if (!LMMC_REAL_IS_FINITE(&a->data[i * a->stride + k])) {
+                    LMMC_REAL_CLEAR(&akk);
+                    return LMMC_STATUS_NUMERICAL_FAILURE;
+                }
                 for (j = k + 1; j < n; ++j) {
                     lmmc_real_t tmp;
                     LMMC_REAL_INIT(&tmp);
                     LMMC_REAL_MUL(&tmp, &a->data[i * a->stride + k], &a->data[k * a->stride + j]);
                     LMMC_REAL_SUB(&a->data[i * a->stride + j], &a->data[i * a->stride + j], &tmp);
+                    if (!LMMC_REAL_IS_FINITE(&tmp) ||
+                        !LMMC_REAL_IS_FINITE(&a->data[i * a->stride + j])) {
+                        LMMC_REAL_CLEAR(&tmp);
+                        LMMC_REAL_CLEAR(&akk);
+                        return LMMC_STATUS_NUMERICAL_FAILURE;
+                    }
                     LMMC_REAL_CLEAR(&tmp);
                 }
             }
@@ -106,15 +120,17 @@ lmmc_status_t lmmc_lu_decompose_inplace(lmmc_mat_t* a, size_t* pivots, size_t* o
     if (out_swap_count != NULL) {
         *out_swap_count = swap_count;
     }
-    LMMC_REAL_CLEAR(&eps);
     return LMMC_STATUS_OK;
 }
 
-static void lmmc_lu_forward(const lmmc_mat_t* lu, const size_t* pivots,
+static lmmc_status_t lmmc_lu_forward(const lmmc_mat_t* lu, const size_t* pivots,
     const lmmc_vec_t* b, lmmc_vec_t* x) {
     size_t n = lu->rows;
     size_t i;
     for (i = 0; i < n; ++i) {
+        if (!LMMC_REAL_IS_FINITE(&b->data[i])) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
         LMMC_REAL_SET(&x->data[i], &b->data[i]);
     }
 
@@ -137,9 +153,14 @@ static void lmmc_lu_forward(const lmmc_mat_t* lu, const size_t* pivots,
             LMMC_REAL_INIT(&tmp);
             LMMC_REAL_MUL(&tmp, &lu->data[i * lu->stride + j], &x->data[j]);
             LMMC_REAL_SUB(&x->data[i], &x->data[i], &tmp);
+            if (!LMMC_REAL_IS_FINITE(&tmp) || !LMMC_REAL_IS_FINITE(&x->data[i])) {
+                LMMC_REAL_CLEAR(&tmp);
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
             LMMC_REAL_CLEAR(&tmp);
         }
     }
+    return LMMC_STATUS_OK;
 }
 
 lmmc_status_t lmmc_lu_solve(const lmmc_mat_t* lu, const size_t* pivots, const lmmc_vec_t* b, lmmc_vec_t* x) {
@@ -154,13 +175,10 @@ lmmc_status_t lmmc_lu_solve(const lmmc_mat_t* lu, const size_t* pivots, const lm
     }
 
     n = lu->rows;
-    lmmc_lu_forward(lu, pivots, b, x);
-
-    lmmc_real_t eps;
-    lmmc_real_t abs_lu;
-    LMMC_REAL_INIT(&eps);
-    LMMC_REAL_SET_D(&eps, 1e-15);
-    LMMC_REAL_INIT(&abs_lu);
+    lmmc_status_t status = lmmc_lu_forward(lu, pivots, b, x);
+    if (status != LMMC_STATUS_OK) {
+        return status;
+    }
 
     for (i = n; i-- > 0;) {
         size_t j = 0;
@@ -169,22 +187,25 @@ lmmc_status_t lmmc_lu_solve(const lmmc_mat_t* lu, const size_t* pivots, const lm
             LMMC_REAL_INIT(&tmp);
             LMMC_REAL_MUL(&tmp, &lu->data[i * lu->stride + j], &x->data[j]);
             LMMC_REAL_SUB(&x->data[i], &x->data[i], &tmp);
+            if (!LMMC_REAL_IS_FINITE(&tmp) || !LMMC_REAL_IS_FINITE(&x->data[i])) {
+                LMMC_REAL_CLEAR(&tmp);
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
             LMMC_REAL_CLEAR(&tmp);
         }
 
-        lmmc_abs_to(&abs_lu, &lu->data[i * lu->stride + i]);
-
-        if (LMMC_REAL_CMP(&abs_lu, &eps) <= 0) {
-            LMMC_REAL_CLEAR(&abs_lu);
-            LMMC_REAL_CLEAR(&eps);
+        if (!LMMC_REAL_IS_FINITE(&lu->data[i * lu->stride + i])) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+        if (lu->data[i * lu->stride + i] == 0.0) {
             return LMMC_STATUS_SINGULAR_MATRIX;
         }
 
         LMMC_REAL_DIV(&x->data[i], &x->data[i], &lu->data[i * lu->stride + i]);
+        if (!LMMC_REAL_IS_FINITE(&x->data[i])) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
     }
-
-    LMMC_REAL_CLEAR(&abs_lu);
-    LMMC_REAL_CLEAR(&eps);
 
     return LMMC_STATUS_OK;
 }
@@ -439,12 +460,23 @@ lmmc_status_t lmmc_qr_decompose_inplace(lmmc_mat_t* a, lmmc_real_t* tau, size_t 
     return LMMC_STATUS_OK;
 }
 
-static void lmmc_qr_apply_transpose(const lmmc_mat_t* qr,
+static lmmc_status_t lmmc_qr_apply_transpose(const lmmc_mat_t* qr,
     const lmmc_real_t* tau, lmmc_real_t* y) {
     size_t m = qr->rows;
     size_t n = qr->cols;
     size_t k;
+    for (k = 0; k < m; ++k) {
+        if (!LMMC_REAL_IS_FINITE(&y[k])) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+    }
     for (k = 0; k < n; ++k) {
+        if (!LMMC_REAL_IS_FINITE(&tau[k])) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+        if (tau[k] == 0.0) {
+            continue;
+        }
         size_t i = 0;
         lmmc_real_t dot;
         LMMC_REAL_INIT(&dot);
@@ -454,30 +486,40 @@ static void lmmc_qr_apply_transpose(const lmmc_mat_t* qr,
             LMMC_REAL_INIT(&tmp);
             LMMC_REAL_MUL(&tmp, &qr->data[i * qr->stride + k], &y[i]);
             LMMC_REAL_ADD(&dot, &dot, &tmp);
+            if (!LMMC_REAL_IS_FINITE(&tmp) || !LMMC_REAL_IS_FINITE(&dot)) {
+                LMMC_REAL_CLEAR(&tmp);
+                LMMC_REAL_CLEAR(&dot);
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
             LMMC_REAL_CLEAR(&tmp);
         }
         LMMC_REAL_MUL(&dot, &dot, &tau[k]);
         LMMC_REAL_SUB(&y[k], &y[k], &dot);
+        if (!LMMC_REAL_IS_FINITE(&dot) || !LMMC_REAL_IS_FINITE(&y[k])) {
+            LMMC_REAL_CLEAR(&dot);
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
         for (i = k + 1; i < m; ++i) {
             lmmc_real_t tmp;
             LMMC_REAL_INIT(&tmp);
             LMMC_REAL_MUL(&tmp, &qr->data[i * qr->stride + k], &dot);
             LMMC_REAL_SUB(&y[i], &y[i], &tmp);
+            if (!LMMC_REAL_IS_FINITE(&tmp) || !LMMC_REAL_IS_FINITE(&y[i])) {
+                LMMC_REAL_CLEAR(&tmp);
+                LMMC_REAL_CLEAR(&dot);
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
             LMMC_REAL_CLEAR(&tmp);
         }
         LMMC_REAL_CLEAR(&dot);
     }
+    return LMMC_STATUS_OK;
 }
 
 static lmmc_status_t lmmc_qr_back_substitute(const lmmc_mat_t* qr,
     const lmmc_real_t* y, lmmc_vec_t* x) {
     size_t n = qr->cols;
     size_t k;
-    lmmc_real_t eps;
-    lmmc_real_t abs_qr;
-    LMMC_REAL_INIT(&eps);
-    LMMC_REAL_SET_D(&eps, 1e-15);
-    LMMC_REAL_INIT(&abs_qr);
 
     for (k = n; k-- > 0;) {
         size_t j = 0;
@@ -490,24 +532,30 @@ static lmmc_status_t lmmc_qr_back_substitute(const lmmc_mat_t* qr,
             LMMC_REAL_INIT(&tmp);
             LMMC_REAL_MUL(&tmp, &qr->data[k * qr->stride + j], &x->data[j]);
             LMMC_REAL_SUB(&rhs, &rhs, &tmp);
+            if (!LMMC_REAL_IS_FINITE(&tmp) || !LMMC_REAL_IS_FINITE(&rhs)) {
+                LMMC_REAL_CLEAR(&tmp);
+                LMMC_REAL_CLEAR(&rhs);
+                return LMMC_STATUS_NUMERICAL_FAILURE;
+            }
             LMMC_REAL_CLEAR(&tmp);
         }
 
-        lmmc_abs_to(&abs_qr, &qr->data[k * qr->stride + k]);
-
-        if (LMMC_REAL_CMP(&abs_qr, &eps) <= 0) {
-            LMMC_REAL_CLEAR(&abs_qr);
-            LMMC_REAL_CLEAR(&eps);
+        if (!LMMC_REAL_IS_FINITE(&qr->data[k * qr->stride + k])) {
+            LMMC_REAL_CLEAR(&rhs);
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+        if (qr->data[k * qr->stride + k] == 0.0) {
             LMMC_REAL_CLEAR(&rhs);
             return LMMC_STATUS_SINGULAR_MATRIX;
         }
 
         LMMC_REAL_DIV(&x->data[k], &rhs, &qr->data[k * qr->stride + k]);
         LMMC_REAL_CLEAR(&rhs);
+        if (!LMMC_REAL_IS_FINITE(&x->data[k])) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
     }
 
-    LMMC_REAL_CLEAR(&abs_qr);
-    LMMC_REAL_CLEAR(&eps);
     return LMMC_STATUS_OK;
 }
 
@@ -535,8 +583,10 @@ lmmc_status_t lmmc_qr_solve(const lmmc_mat_t* qr, const lmmc_real_t* tau, const 
         LMMC_REAL_INIT(&y[k]);
         LMMC_REAL_SET(&y[k], &b->data[k]);
     }
-    lmmc_qr_apply_transpose(qr, tau, y);
-    lmmc_status_t status = lmmc_qr_back_substitute(qr, y, x);
+    lmmc_status_t status = lmmc_qr_apply_transpose(qr, tau, y);
+    if (status == LMMC_STATUS_OK) {
+        status = lmmc_qr_back_substitute(qr, y, x);
+    }
     for (k = 0; k < m; ++k) {
         LMMC_REAL_CLEAR(&y[k]);
     }

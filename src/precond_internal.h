@@ -30,6 +30,7 @@ typedef struct {
     size_t count;
 } lmmc_ilu_row_t;
 
+lmmc_status_t lmmc_precond_validate_spd(const lmmc_precond_t* precond, size_t size);
 int lmmc_find_col_pos(const size_t* cols, size_t start, size_t end,
     size_t col, size_t* pos);
 void lmmc_ilu_impl_destroy(lmmc_precond_ilu_impl_t* impl);

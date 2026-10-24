@@ -12,6 +12,28 @@
 #include "lmmc/eigen.h"
 #include "lmmc/stdlib.h"
 
+static inline int lmmc_std_vec_is_empty(const lmmc_vec_t* out)
+{
+    return out && out->size == 0 && out->data == NULL && out->owns_data == 0;
+}
+
+static inline int lmmc_std_mat_is_empty(const lmmc_mat_t* out)
+{
+    return out && out->rows == 0 && out->cols == 0 && out->stride == 0 &&
+           out->data == NULL && out->owns_data == 0;
+}
+
+static inline int lmmc_std_bool_vec_is_empty(const lmmc_std_bool_vec_t* out)
+{
+    return out && out->size == 0 && out->data == NULL && out->owns_data == 0;
+}
+
+static inline int lmmc_std_bool_mat_is_empty(const lmmc_std_bool_mat_t* out)
+{
+    return out && out->rows == 0 && out->cols == 0 && out->stride == 0 &&
+           out->data == NULL && out->owns_data == 0;
+}
+
 static inline lmmc_status_t lmmc_std_store_real(lmmc_real_t value, lmmc_real_t* out)
 {
     if (!out) { return LMMC_STATUS_INVALID_ARGUMENT; }
@@ -263,24 +285,7 @@ static inline lmmc_status_t lmmc_std_pow_finite(lmmc_real_t base,
     return LMMC_STATUS_OK;
 }
 
-static inline lmmc_status_t lmmc_std_vec_to_column(const lmmc_vec_t* src,
-                                            lmmc_mat_t* out)
-{
-    lmmc_status_t status;
-    if (!src || !src->data || src->size == 0 || !out) {
-        return LMMC_STATUS_INVALID_ARGUMENT;
-    }
-    if (!lmmc_std_real_array_is_finite(src->data, src->size)) {
-        return LMMC_STATUS_NUMERICAL_FAILURE;
-    }
-    status = lmmc_mat_create(src->size, 1, out);
-    if (status != LMMC_STATUS_OK) { return status; }
-    for (size_t i = 0; i < src->size; ++i) {
-        LMMC_REAL_SET(&out->data[i * out->stride], &src->data[i]);
-    }
-    return LMMC_STATUS_OK;
-}
-
+/* Allocating entrypoints validate the finite source before construction. */
 static inline lmmc_status_t lmmc_std_vec_to_diag(const lmmc_vec_t* src,
                                           size_t rows,
                                           size_t cols,
@@ -292,9 +297,6 @@ static inline lmmc_status_t lmmc_std_vec_to_diag(const lmmc_vec_t* src,
         return LMMC_STATUS_INVALID_ARGUMENT;
     }
     if (src->size > rows || src->size > cols) { return LMMC_STATUS_INVALID_ARGUMENT; }
-    if (!lmmc_std_real_array_is_finite(src->data, src->size)) {
-        return LMMC_STATUS_NUMERICAL_FAILURE;
-    }
     status = lmmc_mat_create(rows, cols, out);
     if (status != LMMC_STATUS_OK) { return status; }
     for (size_t i = 0; i < src->size; ++i) {

@@ -4,6 +4,7 @@
  */
 #include <stdlib.h>
 #include <math.h>
+#include <float.h>
 #include "lmmc/lmmc.h"
 #include "test_common.h"
 
@@ -257,8 +258,131 @@ static void test_unit_lower_triangular(void **state) {
         assert_true(lmmc_test_nearly_equal(x->data[i], expected_x[i], 1e-12));
 }
 
+static void test_triangular_small_scalar(void **state) {
+    solve_fixture *fixture = *state;
+    assert_int_equal(lmmc_mat_create(1, 1, &fixture->T), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(1, &fixture->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(1, &fixture->x), LMMC_STATUS_OK);
+    fixture->T.data[0] = 1e-16;
+    fixture->b.data[0] = 1e-16;
+    for (int upper = 0; upper <= 1; ++upper) {
+        assert_int_equal(lmmc_solve_triangular(&fixture->T, upper, 0, &fixture->b, &fixture->x),
+                         LMMC_STATUS_OK);
+        assert_true(lmmc_test_nearly_equal(fixture->x.data[0], 1.0, 1e-14));
+    }
+}
+
+static void test_triangular_scaled_system(void **state) {
+    solve_fixture *fixture = *state;
+    const double scales[] = {1e-16, 1.0, 1e16, 0x1p-100, 0x1p100};
+    assert_int_equal(lmmc_mat_create(2, 2, &fixture->T), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(2, &fixture->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(2, &fixture->x), LMMC_STATUS_OK);
+    for (int upper = 0; upper <= 1; ++upper) {
+        for (size_t k = 0; k < sizeof(scales) / sizeof(scales[0]); ++k) {
+            double scale = scales[k];
+            fixture->T.data[0] = 3.0 * scale;
+            fixture->T.data[1] = upper ? scale : 0.0;
+            fixture->T.data[2] = upper ? 0.0 : scale;
+            fixture->T.data[3] = 2.0 * scale;
+            fixture->b.data[0] = (upper ? 1.0 : 3.0) * scale;
+            fixture->b.data[1] = (upper ? -4.0 : -3.0) * scale;
+            assert_int_equal(lmmc_solve_triangular(&fixture->T, upper, 0, &fixture->b, &fixture->x),
+                             LMMC_STATUS_OK);
+            assert_true(lmmc_test_nearly_equal(fixture->x.data[0], 1.0, 1e-13));
+            assert_true(lmmc_test_nearly_equal(fixture->x.data[1], -2.0, 1e-13));
+            for (size_t i = 0; i < 2; ++i) {
+                double ax = fixture->T.data[2 * i] * fixture->x.data[0] +
+                            fixture->T.data[2 * i + 1] * fixture->x.data[1];
+                double bound = fabs(fixture->T.data[2 * i] * fixture->x.data[0]) +
+                               fabs(fixture->T.data[2 * i + 1] * fixture->x.data[1]) +
+                               fabs(fixture->b.data[i]);
+                assert_true(fabs(ax - fixture->b.data[i]) <= 1e-13 * bound);
+            }
+        }
+    }
+}
+
+static void test_triangular_nonfinite(void **state) {
+    solve_fixture *fixture = *state;
+    const double bad[] = {NAN, INFINITY, -INFINITY};
+    assert_int_equal(lmmc_mat_create(2, 2, &fixture->T), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(2, &fixture->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(2, &fixture->x), LMMC_STATUS_OK);
+    for (int upper = 0; upper <= 1; ++upper) {
+        for (size_t k = 0; k < sizeof(bad) / sizeof(bad[0]); ++k) {
+            for (size_t i = 0; i < 5; ++i) {
+                fixture->T.data[0] = 1.0;
+                fixture->T.data[1] = 0.0;
+                fixture->T.data[2] = 0.0;
+                fixture->T.data[3] = 1.0;
+                fixture->b.data[0] = 1.0;
+                fixture->b.data[1] = 1.0;
+                if (i < 2)
+                    fixture->T.data[3 * i] = bad[k];
+                else if (i == 2)
+                    fixture->T.data[upper ? 1 : 2] = bad[k];
+                else
+                    fixture->b.data[i - 3] = bad[k];
+                assert_int_equal(lmmc_solve_triangular(&fixture->T, upper, 0, &fixture->b, &fixture->x),
+                                 LMMC_STATUS_NUMERICAL_FAILURE);
+            }
+        }
+    }
+}
+
+static void test_triangular_overflow_and_zero(void **state) {
+    solve_fixture *fixture = *state;
+    assert_int_equal(lmmc_mat_create(2, 2, &fixture->T), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(2, &fixture->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(2, &fixture->x), LMMC_STATUS_OK);
+    for (int upper = 0; upper <= 1; ++upper) {
+        size_t first = upper ? 1 : 0;
+        size_t last = 1 - first;
+        for (int mode = 0; mode < 3; ++mode) {
+            fixture->T.data[0] = 1.0;
+            fixture->T.data[1] = 0.0;
+            fixture->T.data[2] = 0.0;
+            fixture->T.data[3] = 1.0;
+            fixture->T.data[upper ? 1 : 2] = mode == 1 ? -DBL_MAX : DBL_MAX;
+            fixture->b.data[first] = mode == 0 ? 2.0 : 1.0;
+            fixture->b.data[last] = mode == 0 ? 0.0 : DBL_MAX;
+            if (mode == 2) {
+                fixture->T.data[upper ? 1 : 2] = 0.0;
+                fixture->T.data[3 * last] = 0.5;
+            }
+            assert_int_equal(lmmc_solve_triangular(&fixture->T, upper, 0, &fixture->b, &fixture->x),
+                             LMMC_STATUS_NUMERICAL_FAILURE);
+        }
+        fixture->T.data[3 * last] = -0.0;
+        assert_int_equal(lmmc_solve_triangular(&fixture->T, upper, 0, &fixture->b, &fixture->x),
+                         LMMC_STATUS_SINGULAR_MATRIX);
+    }
+}
+
+static void test_triangular_unused_entries(void **state) {
+    solve_fixture *fixture = *state;
+    assert_int_equal(lmmc_mat_create(2, 2, &fixture->T), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(2, &fixture->b), LMMC_STATUS_OK);
+    assert_int_equal(lmmc_vec_create(2, &fixture->x), LMMC_STATUS_OK);
+    for (int upper = 0; upper <= 1; ++upper) {
+        for (int diag_unit = 0; diag_unit <= 1; ++diag_unit) {
+            fixture->T.data[0] = diag_unit ? NAN : 1.0;
+            fixture->T.data[1] = upper ? 2.0 : NAN;
+            fixture->T.data[2] = upper ? NAN : 2.0;
+            fixture->T.data[3] = diag_unit ? NAN : 1.0;
+            fixture->b.data[0] = upper ? -3.0 : 1.0;
+            fixture->b.data[1] = upper ? -2.0 : 0.0;
+            assert_int_equal(lmmc_solve_triangular(&fixture->T, upper, diag_unit, &fixture->b, &fixture->x),
+                             LMMC_STATUS_OK);
+            assert_true(lmmc_test_nearly_equal(fixture->x.data[0], 1.0, 1e-14));
+            assert_true(lmmc_test_nearly_equal(fixture->x.data[1], -2.0, 1e-14));
+        }
+    }
+}
+
 int main(void) {
-    struct CMUnitTest tests[NUM_INV_TRIALS + NUM_TRI_TRIALS + 3];
+    struct CMUnitTest tests[NUM_INV_TRIALS + NUM_TRI_TRIALS + 8];
     for (size_t i = 0; i < NUM_INV_TRIALS; i++)
         tests[i] = (struct CMUnitTest)cmocka_unit_test_teardown(test_inverse_trial, teardown_trial);
     for (size_t i = 0; i < NUM_TRI_TRIALS; i++)
@@ -269,5 +393,15 @@ int main(void) {
         (struct CMUnitTest)cmocka_unit_test_teardown(test_unit_upper_triangular, teardown_trial);
     tests[NUM_INV_TRIALS + NUM_TRI_TRIALS + 2] =
         (struct CMUnitTest)cmocka_unit_test_teardown(test_unit_lower_triangular, teardown_trial);
+    tests[NUM_INV_TRIALS + NUM_TRI_TRIALS + 3] =
+        (struct CMUnitTest)cmocka_unit_test_teardown(test_triangular_small_scalar, teardown_trial);
+    tests[NUM_INV_TRIALS + NUM_TRI_TRIALS + 4] =
+        (struct CMUnitTest)cmocka_unit_test_teardown(test_triangular_scaled_system, teardown_trial);
+    tests[NUM_INV_TRIALS + NUM_TRI_TRIALS + 5] =
+        (struct CMUnitTest)cmocka_unit_test_teardown(test_triangular_nonfinite, teardown_trial);
+    tests[NUM_INV_TRIALS + NUM_TRI_TRIALS + 6] =
+        (struct CMUnitTest)cmocka_unit_test_teardown(test_triangular_overflow_and_zero, teardown_trial);
+    tests[NUM_INV_TRIALS + NUM_TRI_TRIALS + 7] =
+        (struct CMUnitTest)cmocka_unit_test_teardown(test_triangular_unused_entries, teardown_trial);
     return cmocka_run_group_tests(tests, setup_group, teardown_group);
 }

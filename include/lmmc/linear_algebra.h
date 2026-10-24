@@ -20,6 +20,7 @@ extern "C" {
  *
  * 分解后 a 同时存储 L（严格下三角，单位对角线隐含）和 U（上三角含对角线）。
  * 行交换记录在 pivots 数组中：pivots[k] 表示第 k 步与第 pivots[k] 行交换。
+ * 仅精确零主元判为奇异；有限非零的小主元正常参与运算，不作数值秩判定。
  *
  * @param[in,out] a              输入方阵 A，输出为 LU 因子（就地覆写）。
  * @param[out]    pivots         置换数组，长度至少为 a->rows。
@@ -27,8 +28,10 @@ extern "C" {
  *
  * @return
  * - ::LMMC_STATUS_OK — 成功。
- * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL 或矩阵非方阵。
- * - ::LMMC_STATUS_SINGULAR_MATRIX — 主元绝对值 <= 1e-15，矩阵奇异。
+ * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL。
+ * - ::LMMC_STATUS_DIMENSION_MISMATCH — 矩阵非方阵。
+ * - ::LMMC_STATUS_SINGULAR_MATRIX — 主元为精确零。
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE — 实际使用的数据或运算结果非有限。
  *
  * @par 副作用
  * - 就地覆写 a->data（原始矩阵内容丢失）。
@@ -47,6 +50,7 @@ lmmc_status_t lmmc_lu_decompose_inplace(lmmc_mat_t* a, size_t* pivots, size_t* o
  *
  * lu 和 pivots 须来自同一次 ::lmmc_lu_decompose_inplace 调用。
  * 内部执行前代（L）+ 回代（U）+ 行置换应用。
+ * 有限非零的 U 对角元正常相除，不使用绝对奇异阈值。
  *
  * @param[in]  lu     LU 因子矩阵（来自 decompose_inplace，不被修改）。
  * @param[in]  pivots 置换数组（来自 decompose_inplace）。
@@ -57,7 +61,8 @@ lmmc_status_t lmmc_lu_decompose_inplace(lmmc_mat_t* a, size_t* pivots, size_t* o
  * - ::LMMC_STATUS_OK — 成功。
  * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL。
  * - ::LMMC_STATUS_DIMENSION_MISMATCH — 维度不匹配。
- * - ::LMMC_STATUS_SINGULAR_MATRIX — U 对角线为零。
+ * - ::LMMC_STATUS_SINGULAR_MATRIX — U 对角线为精确零。
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE — 实际使用的因子、右端或运算结果非有限。
  *
  * @par 副作用
  * - 覆写 x->data。无内存分配。lu 和 b 不被修改。
@@ -125,6 +130,8 @@ lmmc_status_t lmmc_qr_decompose_inplace(lmmc_mat_t* a, lmmc_real_t* tau, size_t 
  *
  * 对 m×n 矩阵（m>=n）：求解 min||Ax-b||_2，即 R*x = Q^T*b 的前 n 行。
  * qr 和 tau 须来自同一次 ::lmmc_qr_decompose_inplace 调用。
+ * 有限非零的 R 对角元正常相除，不使用绝对奇异阈值或数值秩截断。
+ * tau[k] 为零时跳过该反射子，不读取其存储在严格下三角的分量。
  *
  * @param[in]  qr  QR 紧凑表示矩阵（不被修改）。
  * @param[in]  tau Householder 标量数组。
@@ -135,7 +142,8 @@ lmmc_status_t lmmc_qr_decompose_inplace(lmmc_mat_t* a, lmmc_real_t* tau, size_t 
  * - ::LMMC_STATUS_OK — 成功。
  * - ::LMMC_STATUS_INVALID_ARGUMENT — 指针为 NULL。
  * - ::LMMC_STATUS_DIMENSION_MISMATCH — m < n 或向量长度不匹配。
- * - ::LMMC_STATUS_SINGULAR_MATRIX — R 对角线为零。
+ * - ::LMMC_STATUS_SINGULAR_MATRIX — R 对角线为精确零。
+ * - ::LMMC_STATUS_NUMERICAL_FAILURE — 实际使用的因子、tau、右端或运算结果非有限。
  * - ::LMMC_STATUS_ALLOCATION_FAILED — 临时工作内存分配失败。
  *
  * @par 副作用

@@ -1,5 +1,30 @@
 #include "precond_internal.h"
 
+lmmc_status_t lmmc_precond_validate_spd(const lmmc_precond_t* precond, size_t size) {
+    if (precond == NULL) {
+        return LMMC_STATUS_OK;
+    }
+    if (precond->size != size) {
+        return LMMC_STATUS_DIMENSION_MISMATCH;
+    }
+    if (precond->type == LMMC_PRECOND_NONE) {
+        return LMMC_STATUS_OK;
+    }
+    if (precond->type != LMMC_PRECOND_JACOBI || precond->impl == NULL) {
+        return LMMC_STATUS_INVALID_ARGUMENT;
+    }
+    const lmmc_real_t* inverse = precond->impl;
+    for (size_t i = 0; i < size; ++i) {
+        if (!isfinite(inverse[i])) {
+            return LMMC_STATUS_NUMERICAL_FAILURE;
+        }
+        if (inverse[i] <= 0.0) {
+            return LMMC_STATUS_NOT_POSITIVE_DEFINITE;
+        }
+    }
+    return LMMC_STATUS_OK;
+}
+
 lmmc_status_t lmmc_precond_create_none(size_t size, lmmc_precond_t* out_precond) {
     if (out_precond == NULL || size == 0) {
         return LMMC_STATUS_INVALID_ARGUMENT;

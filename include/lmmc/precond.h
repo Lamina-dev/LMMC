@@ -29,6 +29,9 @@ typedef enum {
  *
  * 内部 @c impl 指向具体类型相关的数据结构，调用方仅通过
  * ::lmmc_precond_apply / ::lmmc_precond_destroy 操作。
+ *
+ * ::lmmc_minres_solve 仅接受 NONE 或有限严格正的 Jacobi，以保证 M 对称正定。
+ * 其他求解器仍按各自合同接受 ILU0 / ILUT。
  */
 typedef struct {
     lmmc_precond_type_t type;  /**< 预处理子类型。 */
