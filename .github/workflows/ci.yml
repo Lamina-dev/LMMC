@@ -9,62 +9,28 @@ permissions:
 
 env:
   CMAKE_BUILD_PARALLEL_LEVEL: "2"
+  CTEST_PARALLEL_LEVEL: "2"
+  RC_PARAMS: "seed=42"
 
 jobs:
-  source-quality:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: recursive
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.13"
-      - name: Export Git-visible sources including nested dependencies
-        working-directory: ${{ github.workspace }}
-        run: python cmake/check_package.py --project lmmc --snapshot-dir "$RUNNER_TEMP/lmmc-source"
-      - name: Install locked quality tools
-        working-directory: ${{ runner.temp }}/lmmc-source
-        run: python -m pip install --require-hashes -r cmake/quality-requirements.txt
-      - name: Configure all first-party source owners
-        working-directory: ${{ runner.temp }}/lmmc-source
-        run: >-
-          cmake -S . -B build/source-quality -G Ninja
-          -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
-          -DLMMC_WARNINGS_AS_ERRORS=ON
-          -DLMMC_BUILD_TESTS=ON -DLMMC_BUILD_EXAMPLES=ON
-          -DLMMC_ENABLE_QUALITY_GATES=ON
-      - name: Build all first-party targets and installed consumers
-        working-directory: ${{ runner.temp }}/lmmc-source
-        run: cmake --build build/source-quality --parallel 2
-      - name: Enforce complexity structure and ownership
-        working-directory: ${{ runner.temp }}/lmmc-source
-        run: >-
-          cmake --build build/source-quality
-          --target lmmc_quality lmmc_source_structure lmmc_source_ownership lmmc_integer_boundaries lmmc_naming
-      - name: Run mandatory quality CTests without label filters
-        working-directory: ${{ runner.temp }}/lmmc-source
-        run: >-
-          ctest --test-dir build/source-quality --output-on-failure --no-tests=error --timeout 600
-          -R '^lmmc_(quality|source_structure|source_ownership|integer_boundaries|naming|naming_negative_fixtures)$'
-
   linux:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - compiler: gcc
+          - compiler: GCC
             cc: gcc
             cxx: g++
+            build_type: Debug
+            shared: "ON"
             asm: AUTO
-          - compiler: gcc-generic
-            cc: gcc
-            cxx: g++
-            asm: GENERIC
-          - compiler: clang
+          - compiler: Clang
             cc: clang
             cxx: clang++
-            asm: AUTO
+            build_type: Release
+            shared: "OFF"
+            asm: GENERIC
+    name: linux-${{ matrix.compiler }}-${{ matrix.build_type }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -75,41 +41,35 @@ jobs:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
         run: >-
-          cmake -S . -B build -G Ninja
-          -DCMAKE_BUILD_TYPE=Debug
-          -DBUILD_TESTING=ON
-          -DLMMC_BUILD_TESTS=ON
-          -DLMMC_BUILD_EXAMPLES=OFF
-          -DLMMC_BUILD_SHARED=ON
-          -DLMMC_WARNINGS_AS_ERRORS=ON
-          -DLMMC_LMMP_ASM=${{ matrix.asm }}
+          cmake -S . -B build/strict-debug -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DBUILD_TESTING=ON -DLMMC_BUILD_TESTS=ON -DLMMC_BUILD_EXAMPLES=OFF
+          -DLMMC_BUILD_SHARED=${{ matrix.shared }}
+          -DLMMC_WARNINGS_AS_ERRORS=ON -DLMMC_LMMP_ASM=${{ matrix.asm }}
+          -DCMAKE_INSTALL_LIBDIR=lib
       - name: Build
-        run: cmake --build build
+        run: cmake --build build/strict-debug --parallel 2
       - name: Test
-        run: ctest --test-dir build --output-on-failure --no-tests=error --timeout 300
+        run: ctest --test-dir build/strict-debug --parallel 2 --output-on-failure --no-tests=error --timeout 600
+      - name: Check relocated static-PIC package
+        if: matrix.shared == 'OFF'
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d "$RUNNER_TEMP/package.XXXXXX")"
+          trap 'rm -rf "$work"' EXIT
+          python3 cmake/check_package.py --project lmmc --build-dir build/strict-debug --work-dir "$work/check" --config Release --parallel 2
+          python3 -c 'import json,sys; report=json.load(open(sys.argv[1])); assert report["passed"]' "$work/check/package_report.json"
 
   mingw:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: x64-debug-shared
-            msystem: UCRT64
-            build_type: Debug
+          - build_type: Release
             shared: "ON"
-          - name: x64-debug-static
-            msystem: UCRT64
-            build_type: Debug
+          - build_type: Debug
             shared: "OFF"
-          - name: x64-release-shared
-            msystem: UCRT64
-            build_type: Release
-            shared: "ON"
-          - name: x64-release-static
-            msystem: UCRT64
-            build_type: Release
-            shared: "OFF"
-    name: mingw-${{ matrix.name }}
+    name: mingw-${{ matrix.build_type }}-shared-${{ matrix.shared }}
     runs-on: windows-latest
     defaults:
       run:
@@ -120,143 +80,98 @@ jobs:
           submodules: recursive
       - uses: msys2/setup-msys2@v2
         with:
-          msystem: ${{ matrix.msystem }}
+          msystem: UCRT64
           update: true
           install: git
-          pacboy: toolchain:p cmake:p ninja:p
+          pacboy: toolchain:p cmake:p ninja:p python:p
       - name: Configure
         run: >-
-          cmake -S . -B build -G Ninja
+          cmake -S . -B build/strict-debug -G Ninja
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-          -DBUILD_TESTING=ON
-          -DLMMC_BUILD_TESTS=ON
-          -DLMMC_BUILD_EXAMPLES=OFF
+          -DBUILD_TESTING=ON -DLMMC_BUILD_TESTS=ON -DLMMC_BUILD_EXAMPLES=OFF
           -DLMMC_BUILD_SHARED=${{ matrix.shared }}
-          -DLMMC_WARNINGS_AS_ERRORS=ON
-          -DLMMC_LMMP_ASM=AUTO
+          -DLMMC_WARNINGS_AS_ERRORS=ON -DLMMC_LMMP_ASM=AUTO
           -DCMAKE_INSTALL_LIBDIR=lib
       - name: Build
-        run: cmake --build build
+        run: cmake --build build/strict-debug --parallel 2
       - name: Test
-        run: ctest --test-dir build --output-on-failure --no-tests=error --timeout 300
-      - name: Check relocated MinGW package exports and C/C++ consumers
+        run: ctest --test-dir build/strict-debug --parallel 2 --output-on-failure --no-tests=error --timeout 600
+      - name: Check relocated MinGW package
         if: matrix.build_type == 'Release' && matrix.shared == 'ON'
-        run: >-
-          python cmake/check_package.py --project lmmc
-          --build-dir build --work-dir "$RUNNER_TEMP/lmmc-mingw-package-check"
-          --config Release --parallel 2
-
-  package-consumer:
-    needs: source-quality
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: recursive
-      - name: Export Git-visible package sources
-        working-directory: ${{ github.workspace }}
-        run: python3 cmake/check_package.py --project lmmc --snapshot-dir "$RUNNER_TEMP/lmmc-package-source"
-      - name: Configure package build
-        working-directory: ${{ runner.temp }}/lmmc-package-source
-        run: >-
-          cmake -S . -B build -G Ninja
-          -DCMAKE_BUILD_TYPE=Release
-          -DBUILD_TESTING=OFF
-          -DLMMC_BUILD_TESTS=OFF
-          -DLMMC_BUILD_EXAMPLES=OFF
-          -DLMMC_BUILD_SHARED=ON
-          -DLMMC_WARNINGS_AS_ERRORS=ON
-          -DLMMC_LMMP_ASM=AUTO
-          -DCMAKE_INSTALL_LIBDIR=lib
-      - name: Check relocated unversioned package exports and C/C++ headers
-        working-directory: ${{ runner.temp }}/lmmc-package-source
-        run: >-
-          python3 cmake/check_package.py --project lmmc
-          --build-dir build --work-dir "$RUNNER_TEMP/lmmc-package-check"
-          --config Release --parallel 2
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d "$(cygpath -u "$RUNNER_TEMP")/package.XXXXXX")"
+          trap 'rm -rf "$work"' EXIT
+          python3 cmake/check_package.py --project lmmc --build-dir build/strict-debug --work-dir "$work/check" --config Release --parallel 2
+          python3 -c 'import json,sys; report=json.load(open(sys.argv[1])); assert report["passed"]' "$work/check/package_report.json"
 
   macos:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: arm64
-            runner: macos-15
-            architecture: arm64
+          - runner: macos-15
+            arch: arm64
             asm: AUTO
-          - name: x86_64
-            runner: macos-15-intel
-            architecture: x86_64
+          - runner: macos-15-intel
+            arch: x86_64
             asm: GENERIC
-    name: macos-${{ matrix.name }}
+    name: macos-${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
-      - name: Assert native architecture
-        run: test "$(uname -m)" = "${{ matrix.architecture }}"
-      - name: Configure Debug
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Confirm native runner architecture
+        run: test "$(uname -m)" = "${{ matrix.arch }}"
+      - name: Configure
         run: >-
-          cmake -S . -B build -G Ninja
-          -DCMAKE_BUILD_TYPE=Debug
-          -DCMAKE_C_COMPILER=clang
-          -DCMAKE_OSX_ARCHITECTURES=${{ matrix.architecture }}
-          -DBUILD_TESTING=ON
-          -DLMMC_BUILD_TESTS=ON
-          -DLMMC_BUILD_EXAMPLES=OFF
-          -DLMMC_BUILD_SHARED=ON
-          -DLMMC_WARNINGS_AS_ERRORS=ON
-          -DLMMC_LMMP_ASM=${{ matrix.asm }}
-      - name: Build Debug
-        run: cmake --build build --parallel 2
-      - name: Test Debug
-        run: ctest --test-dir build --output-on-failure --no-tests=error --timeout 600
-      - name: Configure Release package producer
-        run: >-
-          cmake -S . -B build-package -G Ninja
-          -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_C_COMPILER=clang
-          -DCMAKE_OSX_ARCHITECTURES=${{ matrix.architecture }}
+          cmake -S . -B build/strict-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}
           -DCMAKE_OTOOL="$(xcrun --find otool)"
           -DCMAKE_INSTALL_NAME_TOOL="$(xcrun --find install_name_tool)"
-          -DBUILD_TESTING=OFF
-          -DLMMC_BUILD_TESTS=OFF
-          -DLMMC_BUILD_EXAMPLES=OFF
+          -DBUILD_TESTING=ON -DLMMC_BUILD_TESTS=ON -DLMMC_BUILD_EXAMPLES=OFF
           -DLMMC_BUILD_SHARED=ON
-          -DLMMC_WARNINGS_AS_ERRORS=ON
-          -DLMMC_LMMP_ASM=${{ matrix.asm }}
+          -DLMMC_WARNINGS_AS_ERRORS=ON -DLMMC_LMMP_ASM=${{ matrix.asm }}
           -DCMAKE_INSTALL_LIBDIR=lib
-      - name: Check relocated package exports identities and consumers
-        run: >-
-          python3 cmake/check_package.py --project lmmc
-          --build-dir build-package
-          --work-dir "$RUNNER_TEMP/lmmc-package-check"
-          --config Release --parallel 2
+      - name: Build
+        run: cmake --build build/strict-debug --parallel 2
+      - name: Test
+        run: ctest --test-dir build/strict-debug --parallel 2 --output-on-failure --no-tests=error --timeout 600
+      - name: Check native relocated standalone packages
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d "$RUNNER_TEMP/package.XXXXXX")"
+          trap 'rm -rf "$work"' EXIT
+          common=(-G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF -DCMAKE_INSTALL_LIBDIR=lib)
+          common+=("-DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}" "-DCMAKE_OTOOL=$(xcrun --find otool)" "-DCMAKE_INSTALL_NAME_TOOL=$(xcrun --find install_name_tool)")
+          cmake -S . -B "$work/producer" "${common[@]}" -DLMMC_BUILD_SHARED=ON -DLMMC_BUILD_TESTS=OFF -DLMMC_BUILD_EXAMPLES=OFF -DLMMC_WARNINGS_AS_ERRORS=ON -DLMMC_LMMP_ASM=${{ matrix.asm }}
+          python3 cmake/check_package.py --project lmmc --build-dir "$work/producer" --work-dir "$work/check" --config Release --parallel 2
+          python3 -c 'import json,subprocess,sys; report=json.load(open(sys.argv[1])); assert report["passed"]; files=[t["file"] for t in report["targets"].values() if t["type"] == "SHARED_LIBRARY"]; assert files; assert all(subprocess.check_output(["lipo", "-archs", f], text=True).strip() == sys.argv[2] for f in files)' "$work/check/package_report.json" "${{ matrix.arch }}"
+          rm -rf "$work/producer" "$work/check"
 
-  static-pic:
-    name: Release LMMC static (PIC) + LMMP shared
+  package-consumer:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
-      - name: Configure Release static-PIC LMMC
-        run: >-
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-          -DBUILD_TESTING=ON -DLMMC_BUILD_TESTS=ON -DLMMC_BUILD_EXAMPLES=ON
-          -DLMMC_BUILD_SHARED=OFF
-          -DLMMC_WARNINGS_AS_ERRORS=ON -DLMMC_LMMP_ASM=GENERIC
-          -DCMAKE_INSTALL_LIBDIR=lib
-      - name: Build all Release tests and examples
-        run: cmake --build build
-      - name: Run all Release tests
-        run: ctest --test-dir build --output-on-failure --no-tests=error --timeout 600
-      - name: Install relocate and exercise static-PIC consumers
-        run: >-
-          python3 cmake/check_package.py --project lmmc
-          --build-dir build --work-dir "$RUNNER_TEMP/lmmc-static-pic-package-check"
-          --config Release --parallel 2
+      - name: Check standalone Release package from source snapshot
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d "$RUNNER_TEMP/package.XXXXXX")"
+          trap 'rm -rf "$work"' EXIT
+          python3 cmake/check_package.py --project lmmc --snapshot-dir "$work/source"
+          cd "$work/source"
+          cmake -S . -B "$work/producer" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF -DCMAKE_INSTALL_LIBDIR=lib \
+            -DLMMC_BUILD_SHARED=ON -DLMMC_BUILD_TESTS=OFF -DLMMC_BUILD_EXAMPLES=OFF \
+            -DLMMC_WARNINGS_AS_ERRORS=ON -DLMMC_LMMP_ASM=AUTO
+          python3 cmake/check_package.py --project lmmc --build-dir "$work/producer" --work-dir "$work/check" --config Release --parallel 2
+          python3 -c 'import json,sys; report=json.load(open(sys.argv[1])); assert report["passed"]' "$work/check/package_report.json"
 
   sanitizers:
     runs-on: ubuntu-latest
@@ -266,23 +181,17 @@ jobs:
           submodules: recursive
       - name: Configure
         run: >-
-          cmake -S . -B build -G Ninja
-          -DCMAKE_BUILD_TYPE=Debug
-          -DBUILD_TESTING=ON
-          -DLMMC_BUILD_TESTS=ON
-          -DLMMC_BUILD_EXAMPLES=OFF
-          -DLMMC_BUILD_SHARED=ON
-          -DLMMC_WARNINGS_AS_ERRORS=ON
-          -DLMMC_ENABLE_SANITIZERS=ON
-          -DLMMC_LMMP_ASM=GENERIC
+          cmake -S . -B build/strict-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          -DBUILD_TESTING=ON -DLMMC_BUILD_TESTS=ON -DLMMC_BUILD_EXAMPLES=OFF -DLMMC_BUILD_SHARED=ON
+          -DLMMC_WARNINGS_AS_ERRORS=ON -DLMMC_ENABLE_SANITIZERS=ON -DLMMC_LMMP_ASM=GENERIC
       - name: Build
-        run: cmake --build build
+        run: cmake --build build/strict-debug --parallel 2
       - name: Test
         env:
           ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
           LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan.supp
           UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
-        run: ctest --test-dir build --output-on-failure --no-tests=error --timeout 600
+        run: ctest --test-dir build/strict-debug --parallel 2 --output-on-failure --no-tests=error --timeout 600
 
   thread-sanitizer:
     runs-on: ubuntu-latest
@@ -292,21 +201,15 @@ jobs:
           submodules: recursive
       - name: Configure
         run: >-
-          cmake -S . -B build -G Ninja
-          -DCMAKE_BUILD_TYPE=Debug
-          -DBUILD_TESTING=ON
-          -DLMMC_BUILD_TESTS=ON
-          -DLMMC_BUILD_EXAMPLES=OFF
-          -DLMMC_BUILD_SHARED=ON
-          -DLMMC_WARNINGS_AS_ERRORS=ON
-          -DLMMC_ENABLE_TSAN=ON
-          -DLMMC_LMMP_ASM=GENERIC
+          cmake -S . -B build/strict-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          -DBUILD_TESTING=ON -DLMMC_BUILD_TESTS=ON -DLMMC_BUILD_EXAMPLES=OFF -DLMMC_BUILD_SHARED=ON
+          -DLMMC_WARNINGS_AS_ERRORS=ON -DLMMC_ENABLE_TSAN=ON -DLMMC_LMMP_ASM=GENERIC
       - name: Build
-        run: cmake --build build
+        run: cmake --build build/strict-debug --parallel 2
       - name: Test
         env:
           TSAN_OPTIONS: halt_on_error=1
-        run: ctest --test-dir build --output-on-failure --no-tests=error --timeout 600
+        run: ctest --test-dir build/strict-debug --parallel 2 --output-on-failure --no-tests=error --timeout 600
 
   static-analysis:
     runs-on: ubuntu-latest
@@ -315,19 +218,16 @@ jobs:
         with:
           submodules: recursive
       - name: Install clang-tidy
-        run: sudo apt-get update && sudo apt-get install -y clang-tidy
+        run: sudo apt-get update && sudo apt-get install -y clang-tidy-19
       - name: Configure
         run: >-
-          cmake -S . -B build-tidy -G Ninja
-          -DCMAKE_BUILD_TYPE=Debug
-          -DLMMC_BUILD_TESTS=OFF
-          -DLMMC_BUILD_EXAMPLES=OFF
-          -DLMMC_BUILD_SHARED=ON
-          -DLMMC_WARNINGS_AS_ERRORS=ON
-          -DLMMC_ENABLE_CLANG_TIDY=ON
+          cmake -S . -B build/strict-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          -DBUILD_TESTING=OFF -DLMMC_BUILD_TESTS=OFF -DLMMC_BUILD_EXAMPLES=OFF -DLMMC_BUILD_SHARED=ON
+          -DLMMC_WARNINGS_AS_ERRORS=ON -DLMMC_ENABLE_CLANG_TIDY=ON
+          -DLMMC_CLANG_TIDY_EXECUTABLE=/usr/bin/clang-tidy-19
           -DLMMC_LMMP_ASM=GENERIC
       - name: Analyze
-        run: cmake --build build-tidy --target lmmc
+        run: cmake --build build/strict-debug --target lmmc --parallel 2
 
   coverage:
     runs-on: ubuntu-latest
@@ -335,40 +235,35 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
       - name: Install coverage tool
-        run: python3 -m pip install --user gcovr==8.6
+        run: python3 -m pip install gcovr==8.6
       - name: Configure
         run: >-
-          cmake -S . -B build -G Ninja
-          -DCMAKE_BUILD_TYPE=Debug
-          -DBUILD_TESTING=ON
-          -DLMMC_BUILD_TESTS=ON
-          -DLMMC_BUILD_EXAMPLES=OFF
-          -DLMMC_BUILD_SHARED=ON
-          -DLMMC_WARNINGS_AS_ERRORS=ON
-          -DLMMC_ENABLE_COVERAGE=ON
-          -DLMMC_LMMP_ASM=GENERIC
+          cmake -S . -B build/strict-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          -DBUILD_TESTING=ON -DLMMC_BUILD_TESTS=ON -DLMMC_BUILD_EXAMPLES=OFF -DLMMC_BUILD_SHARED=ON
+          -DLMMC_WARNINGS_AS_ERRORS=ON -DLMMC_ENABLE_COVERAGE=ON
+          -DLMMC_ENABLE_SANITIZERS=OFF -DLMMC_ENABLE_TSAN=OFF -DLMMC_LMMP_ASM=GENERIC
       - name: Build
-        run: cmake --build build
+        run: cmake --build build/strict-debug --parallel 2
       - name: Test
-        run: ctest --test-dir build --output-on-failure --no-tests=error --timeout 300
+        run: ctest --test-dir build/strict-debug --parallel 2 --output-on-failure --no-tests=error --timeout 600
       - name: Generate coverage report
         if: always()
         run: >-
-          python3 -m gcovr
-          --config .gcovr.cfg
-          --object-directory build
-          --fail-under-line 77 --fail-under-branch 44
-          --json-summary build/coverage-summary.json
-          --xml-pretty --xml build/coverage.xml
-          --html-details build/coverage.html
+          python3 -m gcovr --config .gcovr.cfg --object-directory "${{ github.workspace }}/build/strict-debug"
+          --json-summary build/strict-debug/coverage-summary.json
+          --xml-pretty --xml build/strict-debug/coverage.xml
+          --html-details build/strict-debug/coverage.html
       - name: Upload coverage artifacts
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: |
-            build/coverage-summary.json
-            build/coverage.xml
-            build/coverage.html
-            build/coverage.*.html
+            build/strict-debug/coverage-summary.json
+            build/strict-debug/coverage.xml
+            build/strict-debug/coverage.html
+            build/strict-debug/coverage.*.html

@@ -129,7 +129,7 @@ static void test_allocation_failure(void **state) {
     lmmc_quad_result_t result = {123.0, 456.0, 789};
     lmmc_status_t status;
 #ifdef LMMC_DEBUG_LEAKS
-    const size_t live_before = lmmc_debug_leaks_get_count();
+    const long long live_before = lmmc_debug_leaks_get_count();
 #endif
     lmmc_memory_fail_after_for_test(successful_allocations);
     status = lmmc_quad_adaptive(

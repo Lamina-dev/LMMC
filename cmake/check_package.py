@@ -10,14 +10,10 @@ import shlex
 import shutil
 import subprocess
 import sys
-import tempfile
 
 
 REQUIRED_TOOLING = (
-    "check_quality.py", "check_package.py", "check_naming.py", "check_integers.py",
-    "naming_negative_fixtures.py", "QualityGates.cmake", "PackageConsumerChecks.cmake",
-    "quality-requirements.txt", "integer_semantics.json", "lmmc_public_symbols.txt",
-    "prepare_quality_consumers.py",
+    "check_package.py", "PackageConsumerChecks.cmake", "lmmc_public_symbols.txt",
 )
 BUILD_FILES = frozenset((
     "CMakeCache.txt", "cmake_install.cmake", "CTestTestfile.cmake",
@@ -306,26 +302,19 @@ def configure_consumer(args, source, cache, prefix, consumer):
     return json.loads((consumer / ("package_check_" + args.config + ".json")).read_text(encoding="utf-8"))
 
 
-def verify(args, *, build_producer=True, configuration=None, work=None):
+def verify(args):
     lmmc = Path(__file__).resolve().parent.parent
     source = lmmc.parent if args.project == "lmcas" else lmmc
     cache = cache_values(args.build_dir)
     if Path(cache["CMAKE_HOME_DIRECTORY"]).resolve() != source:
         raise ValueError("--project must match the producer's top-level source directory")
-    if configuration is not None:
-        cache.update(configuration)
     args.work_dir.mkdir(parents=True, exist_ok=True)
-    if work is None:
-        work = Path(tempfile.mkdtemp(prefix=args.project + "-", dir=args.work_dir))
-    else:
-        work.mkdir(parents=True, exist_ok=True)
-        for name in ("original", "relocated"):
-            prefix = work / name
-            if prefix.exists():
-                shutil.rmtree(prefix)
+    work = args.work_dir / "verification"
+    if work.exists():
+        shutil.rmtree(work)
+    work.mkdir()
     original, relocated, consumer = (work / name for name in ("original", "relocated", "consumer"))
-    if build_producer:
-        run(["cmake", "--build", args.build_dir, "--config", args.config, "--parallel", args.parallel])
+    run(["cmake", "--build", args.build_dir, "--config", args.config, "--parallel", args.parallel])
     run(["cmake", "--install", args.build_dir, "--config", args.config, "--prefix", original])
     shutil.move(str(original), relocated)
     if original.exists():
@@ -357,8 +346,7 @@ def verify(args, *, build_producer=True, configuration=None, work=None):
         env["LD_LIBRARY_PATH"] = os.pathsep.join(
             [*directories, env.get("LD_LIBRARY_PATH", "")])
     run([report["executable"]], env=env)
-    report.update(passed=True, relocated_prefix=str(relocated), consumer_build=str(consumer),
-                  source_ownership=str(consumer / "source_ownership.json"))
+    report.update(passed=True, relocated_prefix=str(relocated), consumer_build=str(consumer))
     destination = args.work_dir / "package_report.json"
     destination.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print("Package verification passed:", destination, flush=True)

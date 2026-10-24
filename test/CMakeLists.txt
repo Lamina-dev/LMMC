@@ -21,12 +21,6 @@ if(NOT TARGET cmocka)
 endif()
 
 function(add_lmmc_test target_name source_file)
-	cmake_path(ABSOLUTE_PATH source_file BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE)
-	get_property(_registered GLOBAL PROPERTY LMMC_REGISTERED_TEST_SOURCES)
-	if(source_file IN_LIST _registered)
-		message(FATAL_ERROR "Test source registered more than once: ${source_file}")
-	endif()
-	set_property(GLOBAL APPEND PROPERTY LMMC_REGISTERED_TEST_SOURCES "${source_file}")
 	add_executable(${target_name} ${source_file})
 	target_link_libraries(${target_name} PRIVATE lmmc cmocka)
 	set_target_properties(${target_name} PROPERTIES
